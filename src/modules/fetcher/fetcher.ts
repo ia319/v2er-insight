@@ -18,7 +18,8 @@ export class SequentialStrategy implements IFetchStrategy {
       try {
         const response = await axios.get(url, {
           timeout: options?.timeout ?? 30000,
-          validateStatus: () => true, // 即使 404/500 也返回，让上层处理
+          ...(options?.headers && { headers: options.headers }),
+          validateStatus: () => true, // 即使 404/500 也返回,让上层处理
         });
 
         const result: FetchResult = {
