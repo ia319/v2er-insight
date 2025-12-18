@@ -7,7 +7,7 @@
     "module": "commonjs",
     "target": "es2020",
     "lib": ["es2020"],
-    "types": ["node"],
+    "types": ["node", "vitest/globals"],
     // Module Resolution
     "moduleResolution": "node",
     "esModuleInterop": true,
@@ -24,6 +24,6 @@
     "skipLibCheck": true,
     "isolatedModules": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "vitest-env.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

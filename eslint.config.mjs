@@ -5,28 +5,28 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 import eslintPluginPrettier from 'eslint-plugin-prettier';
 
 export default defineConfig([
-    {
-        files: ['**/*.ts'],
-        languageOptions: {
-            parser: tseslintParser,
-            parserOptions: {
-                ecmaVersion: 2020,
-                sourceType: 'module',
-            },
-        },
-        plugins: {
-            '@typescript-eslint': tseslintPlugin,
-            prettier: eslintPluginPrettier,
-        },
-        rules: {
-            ...tseslintPlugin.configs.recommended.rules,
-            '@typescript-eslint/explicit-module-boundary-types': 'off',
-            '@typescript-eslint/no-explicit-any': 'warn',
-            'prettier/prettier': 'error',
-        },
+  {
+    files: ['**/*.ts'],
+    languageOptions: {
+      parser: tseslintParser,
+      parserOptions: {
+        ecmaVersion: 2020,
+        sourceType: 'module',
+      },
     },
-    eslintConfigPrettier,
-    {
-        ignores: ['node_modules/**', 'dist/**', 'coverage/**', '.husky/**'],
+    plugins: {
+      '@typescript-eslint': tseslintPlugin,
+      prettier: eslintPluginPrettier,
     },
+    rules: {
+      ...tseslintPlugin.configs.recommended.rules,
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'prettier/prettier': 'error',
+    },
+  },
+  eslintConfigPrettier,
+  {
+    ignores: ['node_modules/**', 'dist/**', 'coverage/**', '.husky/**'],
+  },
 ]);
