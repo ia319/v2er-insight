@@ -17,16 +17,22 @@ export class SequentialStrategy implements IFetchStrategy {
 
       try {
         const response = await axios.get(url, {
-          timeout: 30000, // 默认 30 秒超时
-          ...(options?.headers && { headers: options.headers }),
-          ...(options?.timeout && { timeout: options.timeout }),
+          timeout: options?.timeout ?? 30000,
           validateStatus: () => true, // 即使 404/500 也返回，让上层处理
         });
 
         const result: FetchResult = {
           url,
           content:
-            typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
+            typeof response.data === 'string'
+              ? response.data
+              : (() => {
+                  try {
+                    return JSON.stringify(response.data);
+                  } catch {
+                    return String(response.data);
+                  }
+                })(),
           success: response.status >= 200 && response.status < 300,
           statusCode: response.status,
         };
