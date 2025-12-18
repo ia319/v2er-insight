@@ -90,6 +90,7 @@ describe('SequentialStrategy', () => {
     // 500 Case
     expect(results[1]?.success).toBe(false);
     expect(results[1]?.statusCode).toBe(500);
+    expect(results[1]?.content).toBe('Server Error');
   });
 
   it('should handle network exceptions', async () => {
