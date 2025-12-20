@@ -36,4 +36,22 @@ describe('parsePagination', () => {
     expect(result.currentPage).toBe(1);
     expect(result.totalPages).toBe(1);
   });
+
+  it('should fallback to 1 when page text is not a number', () => {
+    const html = '<a class="page_current">abc</a>';
+    const $ = cheerio.load(html);
+    const result = parsePagination($);
+
+    expect(result.currentPage).toBe(1);
+    expect(result.totalPages).toBe(1);
+  });
+
+  it('should fallback to 1 when page number is negative', () => {
+    const html = '<a class="page_current">-5</a>';
+    const $ = cheerio.load(html);
+    const result = parsePagination($);
+
+    expect(result.currentPage).toBe(1);
+    expect(result.totalPages).toBe(1);
+  });
 });

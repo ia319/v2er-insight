@@ -20,7 +20,8 @@ export interface PaginationInfo {
  */
 export function parsePagination($: CheerioAPI): PaginationInfo {
   const currentPageEl = $('a.page_current');
-  const currentPage = currentPageEl.length > 0 ? parseInt(currentPageEl.text(), 10) : 1;
+  const parsedPage = parseInt(currentPageEl.text(), 10);
+  const currentPage = !isNaN(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
   const pageLinks = $('a.page_normal');
   let totalPages = currentPage;
