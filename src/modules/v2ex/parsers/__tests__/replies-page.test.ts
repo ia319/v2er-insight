@@ -1,0 +1,41 @@
+import { describe, it, expect, beforeAll } from 'vitest';
+
+import { parseRepliesPage } from '../replies-page';
+import type { RepliesPageParseResult } from '../../types';
+import { loadFixture } from '../utils';
+
+const fixturesDir = __dirname;
+
+describe('parseRepliesPage', () => {
+  let result: RepliesPageParseResult;
+
+  beforeAll(() => {
+    const html = loadFixture(fixturesDir, 'replies-page.html');
+    result = parseRepliesPage(html);
+  });
+
+  it('should parse replies list with pagination', () => {
+    expect(result.totalReplies).toBe(1234);
+    expect(result.currentPage).toBe(1);
+    expect(result.totalPages).toBe(10);
+    expect(result.replies).toHaveLength(2);
+  });
+
+  it('should parse direct reply correctly', () => {
+    const directReply = result.replies[0];
+    expect(directReply?.topicTitle).toBe('示例主题标题一');
+    expect(directReply?.nodeName).toBe('程序员');
+    expect(directReply?.replyTime).toBe('2 小时前');
+    expect(directReply?.isDirectReply).toBe(true);
+    expect(directReply?.replyTo).toBeNull();
+    expect(directReply?.content).toBe('这是一条直接回复主帖的内容。');
+  });
+
+  it('should parse reply to another user correctly', () => {
+    const mentionReply = result.replies[1];
+    expect(mentionReply?.topicTitle).toBe('示例主题标题二');
+    expect(mentionReply?.isDirectReply).toBe(false);
+    expect(mentionReply?.replyTo).toBe('otheruser');
+    expect(mentionReply?.content).toBe('这是一条回复他人的内容。');
+  });
+});
