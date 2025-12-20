@@ -5,6 +5,9 @@
 import * as cheerio from 'cheerio';
 
 import type { UserProfileParseResult } from '../types/parse-result';
+import { USER_PROFILE_SELECTORS } from './selectors';
+
+const { dailyRanking: DAU_SELECTOR, grayText: GRAY_SELECTOR } = USER_PROFILE_SELECTORS;
 
 /**
  * 解析用户主页
@@ -15,12 +18,12 @@ export function parseUserProfile(html: string): UserProfileParseResult {
   const $ = cheerio.load(html);
 
   // 今日活跃度排名
-  const dauLink = $('a[href="/top/dau"]');
+  const dauLink = $(DAU_SELECTOR);
   const dailyRanking = dauLink.length > 0 ? parseInt(dauLink.text().trim(), 10) : null;
 
   // 加入时间
   let joinDate = '';
-  $('.gray').each((_, el) => {
+  $(GRAY_SELECTOR).each((_, el) => {
     const text = $(el).text();
     if (text.includes('加入于')) {
       // 匹配日期格式：YYYY-MM-DD HH:MM:SS +HH:MM

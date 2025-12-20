@@ -1,16 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
 import { parseTopicsListPage } from '../topics-list-page';
+import { loadFixture } from '../utils';
 
-const loadFixture = (filename: string): string => {
-  return readFileSync(join(__dirname, 'fixtures', filename), 'utf-8');
-};
+const fixturesDir = __dirname;
 
 describe('parseTopicsListPage', () => {
   it('should parse topics list with pagination', () => {
-    const html = loadFixture('topics-list-page.html');
+    const html = loadFixture(fixturesDir, 'topics-list-page.html');
     const result = parseTopicsListPage(html);
 
     expect(result.isHidden).toBe(false);
@@ -21,7 +18,7 @@ describe('parseTopicsListPage', () => {
   });
 
   it('should detect hidden topics list', () => {
-    const html = loadFixture('topics-hidden.html');
+    const html = loadFixture(fixturesDir, 'topics-hidden.html');
     const result = parseTopicsListPage(html);
 
     expect(result.isHidden).toBe(true);

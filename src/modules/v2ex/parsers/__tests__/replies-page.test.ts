@@ -1,18 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 import { parseRepliesPage } from '../replies-page';
+import type { RepliesPageParseResult } from '../../types';
+import { loadFixture } from '../utils';
 
-const loadFixture = (filename: string): string => {
-  return readFileSync(join(__dirname, 'fixtures', filename), 'utf-8');
-};
+const fixturesDir = __dirname;
 
 describe('parseRepliesPage', () => {
-  it('should parse replies list with pagination', () => {
-    const html = loadFixture('replies-page.html');
-    const result = parseRepliesPage(html);
+  let result: RepliesPageParseResult;
 
+  beforeAll(() => {
+    const html = loadFixture(fixturesDir, 'replies-page.html');
+    result = parseRepliesPage(html);
+  });
+
+  it('should parse replies list with pagination', () => {
     expect(result.totalReplies).toBe(1234);
     expect(result.currentPage).toBe(1);
     expect(result.totalPages).toBe(10);
@@ -20,9 +22,6 @@ describe('parseRepliesPage', () => {
   });
 
   it('should parse direct reply correctly', () => {
-    const html = loadFixture('replies-page.html');
-    const result = parseRepliesPage(html);
-
     const directReply = result.replies[0];
     expect(directReply?.topicTitle).toBe('示例主题标题一');
     expect(directReply?.nodeName).toBe('程序员');
@@ -33,9 +32,6 @@ describe('parseRepliesPage', () => {
   });
 
   it('should parse reply to another user correctly', () => {
-    const html = loadFixture('replies-page.html');
-    const result = parseRepliesPage(html);
-
     const mentionReply = result.replies[1];
     expect(mentionReply?.topicTitle).toBe('示例主题标题二');
     expect(mentionReply?.isDirectReply).toBe(false);

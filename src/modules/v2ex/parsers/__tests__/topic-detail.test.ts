@@ -1,16 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
 import { parseTopicDetail } from '../topic-detail';
+import { loadFixture } from '../utils';
 
-const loadFixture = (filename: string): string => {
-  return readFileSync(join(__dirname, 'fixtures', filename), 'utf-8');
-};
+const fixturesDir = __dirname;
 
 describe('parseTopicDetail', () => {
   it('should parse topic detail correctly', () => {
-    const html = loadFixture('topic-detail.html');
+    const html = loadFixture(fixturesDir, 'topic-detail.html');
     const result = parseTopicDetail(html);
 
     expect(result.title).toBe('示例主题标题');

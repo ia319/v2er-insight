@@ -5,6 +5,11 @@
 import * as cheerio from 'cheerio';
 
 import type { TopicsPageParseResult } from '../types/parse-result';
+import { parsePagination } from './utils';
+import { TOPICS_LIST_PAGE_SELECTORS, COMMON_SELECTORS } from './selectors';
+
+const { hiddenIndicator: HIDDEN_INDICATOR } = TOPICS_LIST_PAGE_SELECTORS;
+const { topicLink: TOPIC_LINK } = COMMON_SELECTORS;
 
 /**
  * 解析发帖列表页
@@ -16,9 +21,10 @@ export function parseTopicsListPage(html: string): TopicsPageParseResult {
 
   // 检测是否隐藏
   let isHidden = false;
-  $('.gray').each((_, el) => {
+  $(HIDDEN_INDICATOR).each((_, el) => {
     if ($(el).text().includes('主题列表被隐藏')) {
       isHidden = true;
+      return false; // 提前退出循环
     }
   });
 
@@ -32,31 +38,22 @@ export function parseTopicsListPage(html: string): TopicsPageParseResult {
     };
   }
 
-  // 提取主题 URL
-  const topicUrls: string[] = [];
-  $('a[href^="/t/"]').each((_, el) => {
+  // 提取主题 URL（使用 Set 去重，O(n) 复杂度）
+  const topicUrlSet = new Set<string>();
+  $(TOPIC_LINK).each((_, el) => {
     const href = $(el).attr('href');
     if (href) {
       // 提取纯 URL（去掉 #reply 部分）
       const cleanUrl = href.split('#')[0] ?? '';
-      if (cleanUrl && !topicUrls.includes(cleanUrl)) {
-        topicUrls.push(cleanUrl);
+      if (cleanUrl) {
+        topicUrlSet.add(cleanUrl);
       }
     }
   });
+  const topicUrls = Array.from(topicUrlSet);
 
   // 分页信息
-  const currentPageEl = $('a.page_current');
-  const currentPage = currentPageEl.length > 0 ? parseInt(currentPageEl.text(), 10) : 1;
-
-  const pageLinks = $('a.page_normal');
-  let totalPages = currentPage;
-  pageLinks.each((_, el) => {
-    const pageNum = parseInt($(el).text(), 10);
-    if (!isNaN(pageNum) && pageNum > totalPages) {
-      totalPages = pageNum;
-    }
-  });
+  const { currentPage, totalPages } = parsePagination($);
 
   return {
     isHidden: false,
