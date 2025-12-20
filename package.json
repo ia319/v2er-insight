@@ -5,14 +5,14 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "test": "vitest",
-    "test:run": "vitest run",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "validate": "pnpm typecheck && pnpm lint && pnpm test:run",
+    "validate": "pnpm typecheck && pnpm lint && pnpm test",
     "prepare": "husky"
   },
   "keywords": [],
