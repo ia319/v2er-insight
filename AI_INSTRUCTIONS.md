@@ -49,9 +49,9 @@ root
 │   │       └── parsers/      # HTML parsers (using Cheerio)
 │   │           ├── __tests__/        # Parser unit tests
 │   │           │   └── fixtures/     # HTML snapshots
-│   │           ├── selectors/        # DOM selectors (centralized)
+│   │           ├── selectors/        # DOM selectors (one per parser)
 │   │           │   ├── index.ts
-│   │           │   ├── common.ts     # Shared selectors
+│   │           │   ├── pagination.ts # Pagination selectors
 │   │           │   └── *.ts          # Page-specific selectors
 │   │           ├── utils/            # Shared utilities
 │   │           │   ├── __tests__/
@@ -102,7 +102,7 @@ root
 - **Structure**: Co-located tests in `__tests__/` folders within each module.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: Use `vi.mock('axios')`, NOT `nock`.
-- **Coverage**: 15 tests covering parsers and URL generators.
+- **Coverage**: 26 tests covering parsers and URL generators.
 
 ## Reference
 
