@@ -6,10 +6,9 @@ import * as cheerio from 'cheerio';
 
 import type { TopicsPageParseResult } from '../types/parse-result';
 import { parsePagination } from './utils';
-import { TOPICS_LIST_PAGE_SELECTORS, COMMON_SELECTORS } from './selectors';
+import { TOPICS_LIST_PAGE_SELECTORS } from './selectors';
 
-const { hiddenIndicator: HIDDEN_INDICATOR } = TOPICS_LIST_PAGE_SELECTORS;
-const { topicLink: TOPIC_LINK } = COMMON_SELECTORS;
+const { hiddenIndicator: HIDDEN_INDICATOR, topicLink: TOPIC_LINK } = TOPICS_LIST_PAGE_SELECTORS;
 
 /**
  * 解析发帖列表页

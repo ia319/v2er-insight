@@ -7,16 +7,17 @@ import * as cheerio from 'cheerio';
 import type { V2exReply } from '../types/entities';
 import type { RepliesPageParseResult } from '../types/parse-result';
 import { parsePagination } from './utils';
-import { REPLIES_PAGE_SELECTORS, COMMON_SELECTORS } from './selectors';
+import { REPLIES_PAGE_SELECTORS } from './selectors';
 
 const {
   totalRepliesContainer: TOTAL_CONTAINER,
   replyItem: REPLY_ITEM,
   replyContent: REPLY_CONTENT,
   replyTime: REPLY_TIME,
+  topicLink: TOPIC_LINK,
+  nodeLink: NODE_LINK,
+  memberLink: MEMBER_LINK,
 } = REPLIES_PAGE_SELECTORS;
-
-const { topicLink: TOPIC_LINK, nodeLink: NODE_LINK, memberLink: MEMBER_LINK } = COMMON_SELECTORS;
 
 /**
  * 解析回复列表页

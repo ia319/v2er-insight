@@ -5,6 +5,10 @@
 
 import type { CheerioAPI } from 'cheerio';
 
+import { PAGINATION_SELECTORS } from '../selectors/pagination';
+
+const { currentPage: CURRENT_PAGE, pageLinks: PAGE_LINKS } = PAGINATION_SELECTORS;
+
 /**
  * 分页信息
  */
@@ -19,11 +23,11 @@ export interface PaginationInfo {
  * @returns 分页信息（当前页和总页数）
  */
 export function parsePagination($: CheerioAPI): PaginationInfo {
-  const currentPageEl = $('a.page_current');
+  const currentPageEl = $(CURRENT_PAGE);
   const parsedPage = parseInt(currentPageEl.text(), 10);
   const currentPage = !isNaN(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
-  const pageLinks = $('a.page_normal');
+  const pageLinks = $(PAGE_LINKS);
   let totalPages = currentPage;
   pageLinks.each((_, el) => {
     const pageNum = parseInt($(el).text(), 10);
