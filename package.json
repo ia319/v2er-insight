@@ -16,7 +16,7 @@
     "prepare": "husky"
   },
   "keywords": [],
-  "author": "",
+  "author": "ia319",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
