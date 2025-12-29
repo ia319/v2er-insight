@@ -29,3 +29,17 @@ export {
   parseTopicsListPage,
   parseTopicDetail,
 } from './parsers';
+
+// 服务层导出
+export {
+  getUserProfile,
+  getAllUserReplies,
+  getAllUserTopicUrls,
+  getAllUserTopicsDetail,
+} from './services';
+export type {
+  ServiceOptions,
+  PagedResult,
+  UserTopicUrlsResult,
+  UserTopicsDetailResult,
+} from './services';
