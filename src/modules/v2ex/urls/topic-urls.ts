@@ -18,23 +18,24 @@ export function getTopicUrl(topicIdOrPath: string | number): string {
     return `${V2EX_BASE}/t/${topicIdOrPath}`;
   }
 
-  // 空字符串验证
-  if (!topicIdOrPath.trim()) {
+  // 修剪空白并验证
+  const trimmed = topicIdOrPath.trim();
+  if (!trimmed) {
     throw new Error('Invalid topic ID: empty string provided');
   }
 
   // 路径格式（包含 /t/），提取 ID
-  if (topicIdOrPath.includes('/t/')) {
-    const topicId = extractTopicIdFromPath(topicIdOrPath);
+  if (trimmed.includes('/t/')) {
+    const topicId = extractTopicIdFromPath(trimmed);
     if (topicId) {
       return `${V2EX_BASE}/t/${topicId}`;
     }
     // 包含 /t/ 但提取失败，抛出错误使问题更早暴露
-    throw new Error(`Invalid topic path: cannot extract topic ID from "${topicIdOrPath}"`);
+    throw new Error(`Invalid topic path: cannot extract topic ID from "${trimmed}"`);
   }
 
   // 纯 ID 字符串
-  return `${V2EX_BASE}/t/${topicIdOrPath}`;
+  return `${V2EX_BASE}/t/${trimmed}`;
 }
 
 /**

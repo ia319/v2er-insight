@@ -28,6 +28,10 @@ describe('getTopicUrl', () => {
     expect(() => getTopicUrl('')).toThrow('Invalid topic ID: empty string');
     expect(() => getTopicUrl('   ')).toThrow('Invalid topic ID: empty string');
   });
+
+  it('should trim whitespace from ID', () => {
+    expect(getTopicUrl('  123456  ')).toBe('https://www.v2ex.com/t/123456');
+  });
 });
 
 describe('extractTopicIdFromPath', () => {
