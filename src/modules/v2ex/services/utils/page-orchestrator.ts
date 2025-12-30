@@ -43,18 +43,19 @@ export async function fetchPagedData<TParseResult extends PaginatedParseResult, 
   let failedPages = 0;
 
   // 抓取第一页，获取分页信息
+  // total 参数使用 -1 表示尚未确定总页数
   const firstPageUrl = urlGenerator(1);
-  options?.events?.onStart?.(firstPageUrl, 0, 1);
+  options?.events?.onStart?.(firstPageUrl, 0, -1);
 
   const firstPageGen = fetcher.fetch([firstPageUrl], fetchOptions);
   const firstPageResult = await firstPageGen.next();
 
   if (!firstPageResult.value?.success || !firstPageResult.value.content) {
-    options?.events?.onError?.(firstPageResult.value!, 0, 1);
+    options?.events?.onError?.(firstPageResult.value!, 0, -1);
     return { data: [], totalPages: 1, fetchedPages: 0, failedPages: 1 };
   }
 
-  options?.events?.onSuccess?.(firstPageResult.value, 0, 1);
+  options?.events?.onSuccess?.(firstPageResult.value, 0, -1);
 
   // 解析第一页数据
   try {
@@ -62,8 +63,19 @@ export async function fetchPagedData<TParseResult extends PaginatedParseResult, 
     totalPages = firstParsed.totalPages;
     allData.push(...extractor(firstParsed));
     fetchedPages = 1;
-  } catch {
-    // 第一页解析失败，无法获取分页信息，返回空结果
+  } catch (error) {
+    // 第一页解析失败，通知错误并返回空结果
+    options?.events?.onError?.(
+      {
+        url: firstPageUrl,
+        success: false,
+        content: null,
+        error: error instanceof Error ? error : new Error(String(error)),
+        statusCode: 0,
+      },
+      0,
+      -1,
+    );
     return { data: [], totalPages: 1, fetchedPages: 0, failedPages: 1 };
   }
 
@@ -78,19 +90,32 @@ export async function fetchPagedData<TParseResult extends PaginatedParseResult, 
     remainingUrls.push(urlGenerator(page));
   }
 
+  let pageIndex = 1; // 从第2页开始，index=1
   for await (const result of fetcher.fetch(remainingUrls, fetchOptions, options?.events)) {
     if (result.success && result.content) {
       try {
         const parsed = parser(result.content);
         allData.push(...extractor(parsed));
         fetchedPages++;
-      } catch {
-        // 单页解析失败，记录并继续
+      } catch (error) {
+        // 单页解析失败，通知错误并继续
+        options?.events?.onError?.(
+          {
+            url: result.url,
+            success: false,
+            content: null,
+            error: error instanceof Error ? error : new Error(String(error)),
+            statusCode: 0,
+          },
+          pageIndex,
+          totalPages,
+        );
         failedPages++;
       }
     } else {
       failedPages++;
     }
+    pageIndex++;
   }
 
   return { data: allData, totalPages, fetchedPages, failedPages };

@@ -18,6 +18,11 @@ describe('getTopicUrl', () => {
   it('should generate topic URL from path with anchor', () => {
     expect(getTopicUrl('/t/123456#reply50')).toBe('https://www.v2ex.com/t/123456');
   });
+
+  it('should throw error for invalid path containing /t/', () => {
+    expect(() => getTopicUrl('/t/abc')).toThrow('Invalid topic path');
+    expect(() => getTopicUrl('/t/')).toThrow('Invalid topic path');
+  });
 });
 
 describe('extractTopicIdFromPath', () => {

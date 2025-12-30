@@ -10,6 +10,7 @@ import { V2EX_BASE } from './constants';
  *
  * @param topicIdOrPath - 帖子 ID（如 123456）或相对路径（如 /t/123456）
  * @returns 完整 URL，如 https://www.v2ex.com/t/123456
+ * @throws 当输入的路径格式无效时（包含 /t/ 但无法提取有效 ID）
  */
 export function getTopicUrl(topicIdOrPath: string | number): string {
   // 数字直接使用
@@ -23,6 +24,8 @@ export function getTopicUrl(topicIdOrPath: string | number): string {
     if (topicId) {
       return `${V2EX_BASE}/t/${topicId}`;
     }
+    // 包含 /t/ 但提取失败，抛出错误使问题更早暴露
+    throw new Error(`Invalid topic path: cannot extract topic ID from "${topicIdOrPath}"`);
   }
 
   // 纯 ID 字符串

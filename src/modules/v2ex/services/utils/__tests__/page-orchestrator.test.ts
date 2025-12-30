@@ -179,16 +179,30 @@ describe('fetchPagedData', () => {
 
       mockFetch.mockReturnValue(mockGenerator([page1]));
 
+      const onError = vi.fn();
+
       const result = await fetchPagedData(
         (page) => `https://example.com?p=${page}`,
         (): TestParseResult => {
           throw new Error('Parse error');
         },
         (r) => r.items,
+        { events: { onError } },
       );
 
       expect(result.data).toEqual([]);
       expect(result.failedPages).toBe(1);
+      // 验证 onError 被调用，total 参数为 -1（未知）
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://example.com?p=1',
+          success: false,
+          error: expect.any(Error),
+        }),
+        0,
+        -1,
+      );
     });
   });
 
@@ -268,15 +282,29 @@ describe('fetchPagedData', () => {
         };
       };
 
+      const onError = vi.fn();
+
       const result = await fetchPagedData(
         (page) => `https://example.com?p=${page}`,
         parser,
         (r) => r.items,
+        { events: { onError } },
       );
 
       expect(result.data).toEqual(['item1']);
       expect(result.fetchedPages).toBe(1);
       expect(result.failedPages).toBe(1);
+      // 验证 onError 被调用，total 参数为已知的 totalPages
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://example.com?p=2',
+          success: false,
+          error: expect.any(Error),
+        }),
+        1,
+        2,
+      );
     });
   });
 
@@ -301,7 +329,7 @@ describe('fetchPagedData', () => {
         { events: { onStart, onSuccess } },
       );
 
-      expect(onStart).toHaveBeenCalledWith('https://example.com?p=1', 0, 1);
+      expect(onStart).toHaveBeenCalledWith('https://example.com?p=1', 0, -1);
       expect(onSuccess).toHaveBeenCalledTimes(1);
     });
 

@@ -41,7 +41,19 @@ export async function getUserProfile(
 
   try {
     return parseUserProfile(result.value.content);
-  } catch {
+  } catch (error) {
+    // 解析失败时也触发错误事件，保持与获取失败的一致性
+    options?.events?.onError?.(
+      {
+        url,
+        success: false,
+        content: null,
+        error: error instanceof Error ? error : new Error(String(error)),
+        statusCode: 0,
+      },
+      0,
+      1,
+    );
     return null;
   }
 }

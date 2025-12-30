@@ -140,7 +140,7 @@ describe('getAllUserTopicsDetail', () => {
 
     expect(result.topics).toEqual([]);
     expect(result.totalTopics).toBe(0);
-    // isHidden is true when empty (based on implementation)
+    // 当主题列表为空且只有单页时，isHidden 为 true（基于 topic-urls.ts 的实现逻辑）
     expect(result.isHidden).toBe(true);
   });
 
