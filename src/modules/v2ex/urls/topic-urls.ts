@@ -18,6 +18,11 @@ export function getTopicUrl(topicIdOrPath: string | number): string {
     return `${V2EX_BASE}/t/${topicIdOrPath}`;
   }
 
+  // 空字符串验证
+  if (!topicIdOrPath.trim()) {
+    throw new Error('Invalid topic ID: empty string provided');
+  }
+
   // 路径格式（包含 /t/），提取 ID
   if (topicIdOrPath.includes('/t/')) {
     const topicId = extractTopicIdFromPath(topicIdOrPath);

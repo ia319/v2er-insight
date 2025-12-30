@@ -20,6 +20,11 @@ export async function getUserProfile(
   username: string,
   options?: ServiceOptions,
 ): Promise<UserProfileParseResult | null> {
+  // 空用户名验证
+  if (!username.trim()) {
+    throw new Error('Invalid username: empty string provided');
+  }
+
   const fetcher = new Fetcher(new SequentialStrategy());
   const fetchOptions: FetchOptions = {
     timeout: options?.timeout,

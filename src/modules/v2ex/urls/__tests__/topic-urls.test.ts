@@ -23,6 +23,11 @@ describe('getTopicUrl', () => {
     expect(() => getTopicUrl('/t/abc')).toThrow('Invalid topic path');
     expect(() => getTopicUrl('/t/')).toThrow('Invalid topic path');
   });
+
+  it('should throw error for empty string', () => {
+    expect(() => getTopicUrl('')).toThrow('Invalid topic ID: empty string');
+    expect(() => getTopicUrl('   ')).toThrow('Invalid topic ID: empty string');
+  });
 });
 
 describe('extractTopicIdFromPath', () => {

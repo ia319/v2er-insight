@@ -34,6 +34,11 @@ describe('getUserProfile', () => {
     vi.clearAllMocks();
   });
 
+  it('should throw error for empty username', async () => {
+    await expect(getUserProfile('')).rejects.toThrow('Invalid username: empty string');
+    await expect(getUserProfile('   ')).rejects.toThrow('Invalid username: empty string');
+  });
+
   it('should return parsed profile on successful fetch', async () => {
     const fetchResult: FetchResult = {
       url: 'https://www.v2ex.com/member/testuser',
