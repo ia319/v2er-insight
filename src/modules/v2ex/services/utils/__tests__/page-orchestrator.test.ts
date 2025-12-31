@@ -6,7 +6,7 @@ import type { PaginatedParseResult } from '../page-orchestrator';
 // Mock Fetcher module
 const mockFetch = vi.fn();
 
-vi.mock('../../../../fetcher', () => ({
+vi.mock('@/modules/fetcher', () => ({
   Fetcher: class {
     fetch = mockFetch;
   },

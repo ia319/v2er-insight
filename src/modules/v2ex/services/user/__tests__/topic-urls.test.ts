@@ -5,7 +5,7 @@ import type { FetchResult } from '@/modules/fetcher';
 // Mock Fetcher module
 const mockFetch = vi.fn();
 
-vi.mock('../../../../fetcher', () => ({
+vi.mock('@/modules/fetcher', () => ({
   Fetcher: class {
     fetch = mockFetch;
   },
