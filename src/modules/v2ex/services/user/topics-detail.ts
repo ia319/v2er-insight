@@ -3,8 +3,8 @@
  * 获取用户所有发帖的完整内容
  */
 
-import { Fetcher, SequentialStrategy } from '../../../fetcher';
-import type { FetchOptions } from '../../../fetcher';
+import { Fetcher, SequentialStrategy } from '@/modules/fetcher';
+import type { FetchOptions } from '@/modules/fetcher';
 import { parseTopicDetail } from '../../parsers';
 import type { TopicDetailParseResult } from '../../types';
 import type { ServiceOptions } from '../types';

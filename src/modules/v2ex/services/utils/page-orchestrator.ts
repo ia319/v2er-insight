@@ -3,8 +3,8 @@
  * 提供通用的多页数据获取逻辑
  */
 
-import { Fetcher, SequentialStrategy } from '../../../fetcher';
-import type { FetchOptions } from '../../../fetcher';
+import { Fetcher, SequentialStrategy } from '@/modules/fetcher';
+import type { FetchOptions } from '@/modules/fetcher';
 import type { PagedResult, ServiceOptions } from '../types';
 
 /**
