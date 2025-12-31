@@ -11,8 +11,10 @@ It uses a modular architecture separating generic logic (Fetcher) from business 
 
 - **Language**: TypeScript (Node.js)
 - **Module System**: CommonJS (target ES2020)
+- **Path Aliases**: `@/` → `src/` (via `tsconfig.json` paths + `tsc-alias`)
+- **Build**: `tsc && tsc-alias` (converts aliases to relative paths)
 - **Linting**: ESLint (Flat Config) + Prettier + Husky
-- **Testing**: Vitest (`vi.mock` for network calls)
+- **Testing**: Vitest (`vi.mock` for network calls, `@/` alias in `vitest.config.ts`)
 - **HTTP**: Axios
 - **HTML Parsing**: Cheerio
 
