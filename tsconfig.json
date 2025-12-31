@@ -10,6 +10,10 @@
     "types": ["node", "vitest/globals"],
     // Module Resolution
     "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "esModuleInterop": true,
     "resolveJsonModule": true,
     // Output

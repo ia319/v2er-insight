@@ -3,7 +3,7 @@
  * 定义服务层的配置选项和返回结果类型
  */
 
-import type { FetchEvents } from '../../fetcher';
+import type { FetchEvents } from '@/modules/fetcher';
 
 /**
  * Service 调用配置选项

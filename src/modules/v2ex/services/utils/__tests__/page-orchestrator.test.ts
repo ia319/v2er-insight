@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import type { FetchResult } from '../../../../fetcher';
+import type { FetchResult } from '@/modules/fetcher';
 import type { PaginatedParseResult } from '../page-orchestrator';
 
 // Mock Fetcher module

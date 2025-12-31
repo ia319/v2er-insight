@@ -2,8 +2,8 @@
  * 用户资料获取服务
  */
 
-import { Fetcher, SequentialStrategy } from '../../../fetcher';
-import type { FetchOptions } from '../../../fetcher';
+import { Fetcher, SequentialStrategy } from '@/modules/fetcher';
+import type { FetchOptions } from '@/modules/fetcher';
 import { getUserProfileUrl } from '../../urls';
 import { parseUserProfile } from '../../parsers';
 import type { UserProfileParseResult } from '../../types';
