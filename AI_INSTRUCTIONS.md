@@ -70,8 +70,23 @@ root
 │   │               ├── index.ts      # Re-exports utilities
 │   │               └── page-orchestrator.ts # Generic pagination logic
 │   │
-│   └── ui/                   # [Planned] CLI presentation layer
-│       └── cli.ts            # Commander.js setup
+│   ├── cli/                  # [Complete] Command-line interface
+│   │   ├── index.ts          # CLI entry point (commander setup)
+│   │   ├── types.ts          # CLI option types
+│   │   ├── commands/         # Command handlers
+│   │   │   ├── index.ts      # Re-exports commands
+│   │   │   ├── fetch-user.ts # User data fetch command
+│   │   │   └── config.ts     # Config management command
+│   │   └── output/           # Output utilities
+│   │       ├── index.ts      # Re-exports
+│   │       └── logger.ts     # Formatted console output
+│   │
+│   └── config/               # [Complete] Configuration management
+│       ├── index.ts          # Public exports
+│       ├── types.ts          # V2erConfig interface
+│       ├── path.ts           # Config file path (~/.v2errc.json)
+│       ├── storage.ts        # Read/write config file
+│       └── proxy.ts          # Proxy URL resolution
 ```
 
 ## Modules
@@ -129,12 +144,54 @@ root
   - First page events use `total=-1` (unknown until parsed)
   - Triggers `onError` callback for both fetch and parse failures
 
+### 4. CLI Module (Complete)
+
+- **Role**: Command-line interface for user interaction.
+
+**Commands**:
+
+- `v2er <username>` → Fetch all user data
+- `v2er <username> --topics` → Fetch topics only
+- `v2er <username> --replies` → Fetch replies only
+- `v2er config proxy <url>` → Set proxy
+- `v2er config proxy --clear` → Clear proxy
+
+**Output** (`output/`):
+
+- `logger.ts` → Formatted console output (info, success, error, progress)
+
+### 5. Config Module (Complete)
+
+- **Role**: Persistent configuration management.
+
+**Structure**:
+
+- `path.ts` → Config file path resolution (`~/.v2errc.json`)
+- `storage.ts` → Read/write JSON config
+- `proxy.ts` → Get proxy URL (priority: config > HTTPS_PROXY > HTTP_PROXY)
+
+## Proxy Configuration
+
+**Priority Order**:
+
+1. Config file (`~/.v2errc.json`)
+2. Environment variable `HTTPS_PROXY`
+3. Environment variable `HTTP_PROXY`
+
+If none are set, no proxy is used.
+
+**Technical Details**:
+
+- Uses `https-proxy-agent` library to create proxy Agent
+- Axios built-in proxy handling is disabled (`proxy: false`) to avoid conflicts
+- Proxy URL format: `http://host:port` (e.g., `http://127.0.0.1:10808`)
+
 ## Testing Strategy
 
 - **Structure**: Co-located tests in `__tests__/` folders within each module.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: Use `vi.mock` for modules (Fetcher, parsers).
-- **Coverage**: 63 tests covering parsers, URL generators, services, and utilities.
+- **Coverage**: 70+ tests covering parsers, URL generators, services, CLI, and config.
 
 ## Reference
 
