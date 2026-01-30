@@ -85,12 +85,14 @@ describe('SequentialStrategy', () => {
     // 404 Case
     expect(results[0]?.success).toBe(false);
     expect(results[0]?.statusCode).toBe(404);
-    expect(results[0]?.content).toBe('Not Found');
+    expect(results[0]?.content).toBeNull();
+    expect(results[0]?.errorBody).toBe('Not Found');
 
     // 500 Case
     expect(results[1]?.success).toBe(false);
     expect(results[1]?.statusCode).toBe(500);
-    expect(results[1]?.content).toBe('Server Error');
+    expect(results[1]?.content).toBeNull();
+    expect(results[1]?.errorBody).toBe('Server Error');
   });
 
   it('should handle network exceptions', async () => {
