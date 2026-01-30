@@ -1,5 +1,20 @@
 import axios from 'axios';
 import type { IFetchStrategy, FetchResult, FetchOptions, FetchEvents } from './types';
+import { getHttpsAgent } from './agent';
+
+/**
+ * 将响应数据转换为字符串
+ */
+function responseToString(data: unknown): string {
+  if (typeof data === 'string') {
+    return data;
+  }
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return String(data);
+  }
+}
 
 export class SequentialStrategy implements IFetchStrategy {
   async *fetch(
@@ -8,6 +23,7 @@ export class SequentialStrategy implements IFetchStrategy {
     events?: FetchEvents,
   ): AsyncGenerator<FetchResult> {
     const total = urls.length;
+    const httpsAgent = getHttpsAgent();
 
     for (let i = 0; i < total; i++) {
       const url = urls[i]!;
@@ -19,23 +35,20 @@ export class SequentialStrategy implements IFetchStrategy {
         const response = await axios.get(url, {
           timeout: options?.timeout ?? 30000,
           ...(options?.headers && { headers: options.headers }),
-          validateStatus: () => true, // 即使 404/500 也返回,让上层处理
+          ...(httpsAgent && { httpsAgent }),
+          proxy: false,
+          validateStatus: () => true,
         });
+
+        const isSuccess = response.status >= 200 && response.status < 300;
+        const responseBody = responseToString(response.data);
 
         const result: FetchResult = {
           url,
-          content:
-            typeof response.data === 'string'
-              ? response.data
-              : (() => {
-                  try {
-                    return JSON.stringify(response.data);
-                  } catch {
-                    return String(response.data);
-                  }
-                })(),
-          success: response.status >= 200 && response.status < 300,
+          content: isSuccess ? responseBody : null,
+          success: isSuccess,
           statusCode: response.status,
+          ...(isSuccess ? {} : { errorBody: responseBody }),
         };
 
         // 触发成功/失败事件
