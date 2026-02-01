@@ -23,8 +23,12 @@ export function readConfig(): V2erConfig {
 
 /**
  * 将配置写入文件
+ * 使用 0600 权限，仅文件所有者可读写（Linux/Mac）
  */
 export function writeConfig(config: V2erConfig): void {
   const configPath = getConfigPath();
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
 }

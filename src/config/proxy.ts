@@ -6,5 +6,5 @@ import { readConfig } from './storage';
  */
 export function getProxyUrl(): string | undefined {
   const config = readConfig();
-  return config.proxy || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || undefined;
+  return config.proxy || process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
 }

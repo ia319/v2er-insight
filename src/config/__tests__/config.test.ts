@@ -70,7 +70,7 @@ describe('config/storage', () => {
   });
 
   describe('writeConfig', () => {
-    it('should write formatted JSON to file', async () => {
+    it('should write formatted JSON to file with secure permissions', async () => {
       mockedFs.writeFileSync.mockImplementation(() => {});
       const { writeConfig } = await import('../storage');
 
@@ -79,7 +79,7 @@ describe('config/storage', () => {
       expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
         mockConfigPath,
         JSON.stringify({ proxy: 'http://test:1234' }, null, 2),
-        'utf-8',
+        { encoding: 'utf-8', mode: 0o600 },
       );
     });
   });

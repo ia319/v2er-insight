@@ -37,6 +37,12 @@ describe('agent', () => {
         getProxyUrl: () => undefined,
       }));
 
+      vi.doMock('https-proxy-agent', () => ({
+        HttpsProxyAgent: class {
+          constructor() {}
+        },
+      }));
+
       const { getHttpsAgent } = await import('../agent');
       const agent = getHttpsAgent();
 
