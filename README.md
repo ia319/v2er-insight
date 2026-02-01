@@ -59,3 +59,9 @@ v2er config proxy http://127.0.0.1:10808
 
 - 使用 `https-proxy-agent` 库创建代理 Agent
 - Axios 的内置代理处理已禁用 (`proxy: false`)，避免与自定义 Agent 冲突
+
+#### 安全提醒
+
+- 配置文件在 Linux/Mac 上使用 `0600` 权限，仅文件所有者可读写
+- Windows 用户：手动检查 `~/.v2errc.json` 的访问权限，确保其他用户无法读取
+- 避免在配置文件中存储包含凭证的代理 URL（如 `http://user:pass@proxy:8080`），改用环境变量

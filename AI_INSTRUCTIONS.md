@@ -186,6 +186,12 @@ If none are set, no proxy is used.
 - Axios built-in proxy handling is disabled (`proxy: false`) to avoid conflicts
 - Proxy URL format: `http://host:port` (e.g., `http://127.0.0.1:10808`)
 
+**Security**:
+
+- Config file uses `0600` permission (owner read/write only, Linux/Mac)
+- Windows users should manually verify config file permissions
+- Avoid storing proxy credentials in config file; use environment variables instead
+
 ## Testing Strategy
 
 - **Structure**: Co-located tests in `__tests__/` folders within each module.
