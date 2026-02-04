@@ -25,7 +25,8 @@ describe('parseAbsoluteDate', () => {
 });
 
 describe('parseRelativeTime', () => {
-  const reference = new Date('2024-01-16T12:00:00');
+  // 使用数值构造器以避免时区问题
+  const reference = new Date(2024, 0, 16, 12, 0, 0);
 
   it('should parse minutes ago', () => {
     const result = parseRelativeTime('30 分钟前', reference);
@@ -55,22 +56,23 @@ describe('parseRelativeTime', () => {
 
 describe('formatTimeRange', () => {
   it('should format date range', () => {
-    const start = new Date('2015-04-01');
-    const end = new Date('2017-08-15');
+    // 使用数值构造器：new Date(year, monthIndex, day)
+    const start = new Date(2015, 3, 1); // 4月1日
+    const end = new Date(2017, 7, 15); // 8月15日
     expect(formatTimeRange(start, end)).toBe('2015-04-01 to 2017-08-15');
   });
 });
 
 describe('getWeekday', () => {
   it('should return weekday name', () => {
-    const monday = new Date('2024-01-15'); // Monday
+    const monday = new Date(2024, 0, 15); // 2024-01-15 is Monday
     expect(getWeekday(monday)).toBe('周一');
   });
 });
 
 describe('getHour', () => {
   it('should return hour', () => {
-    const date = new Date('2024-01-16T14:30:00');
+    const date = new Date(2024, 0, 16, 14, 30, 0);
     expect(getHour(date)).toBe(14);
   });
 });
