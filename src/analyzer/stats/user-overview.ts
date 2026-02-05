@@ -17,8 +17,8 @@ export function calculateUserOverview(
   // 计算最后活动时间
   const lastActiveTime = getLastActiveTime(topics, replies, referenceDate);
 
-  // 计算发帖/回复比率
-  const topicReplyRatio = replies.length > 0 ? topics.length / replies.length : topics.length;
+  // 计算发帖/回复比率，无回复时为 null
+  const topicReplyRatio = replies.length > 0 ? topics.length / replies.length : null;
 
   return {
     joinDate: profile.joinDate,

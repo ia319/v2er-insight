@@ -70,4 +70,59 @@ describe('splitByPeriods', () => {
     expect(result[0]?.topics).toHaveLength(0);
     expect(result[0]?.replies).toHaveLength(0);
   });
+
+  it('should exclude topics outside all period boundaries', () => {
+    const topics = [
+      {
+        title: 'Outside Topic',
+        nodeName: 'test',
+        createdAt: '2024-02-15 10:00:00 +08:00', // 在两个周期之间
+        content: '',
+        replyCount: 0,
+        lastReplyTime: null,
+        clickCount: 0,
+      },
+    ];
+
+    const result = splitByPeriods(boundaries, topics, []);
+
+    // 不属于任何周期的数据被排除
+    expect(result[0]?.topics).toHaveLength(0);
+    expect(result[1]?.topics).toHaveLength(0);
+  });
+
+  it('should include topics exactly on boundary dates', () => {
+    const topics = [
+      {
+        title: 'Boundary Start',
+        nodeName: 'test',
+        createdAt: '2024-01-01 10:00:00 +08:00', // 边界起点当天
+        content: '',
+        replyCount: 0,
+        lastReplyTime: null,
+        clickCount: 0,
+      },
+      {
+        title: 'Boundary End',
+        nodeName: 'test',
+        createdAt: '2024-01-31 10:00:00 +08:00', // 边界终点当天
+        content: '',
+        replyCount: 0,
+        lastReplyTime: null,
+        clickCount: 0,
+      },
+    ];
+
+    // 使用包含完整当天的边界
+    const fullDayBoundaries = [
+      {
+        startDate: new Date(2024, 0, 1, 0, 0, 0),
+        endDate: new Date(2024, 0, 31, 23, 59, 59),
+      },
+    ];
+
+    const result = splitByPeriods(fullDayBoundaries, topics, []);
+
+    expect(result[0]?.topics).toHaveLength(2);
+  });
 });

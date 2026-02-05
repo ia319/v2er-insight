@@ -71,7 +71,7 @@ describe('calculateUserOverview', () => {
 
     expect(result.totalTopics).toBe(0);
     expect(result.totalReplies).toBe(0);
-    expect(result.topicReplyRatio).toBe(0);
+    expect(result.topicReplyRatio).toBeNull();
     expect(result.lastActiveTime).toBe('unknown');
   });
 });
