@@ -7,7 +7,7 @@ export interface UserOverview {
   joinDate: string;
   lastActiveTime: string;
   topicReplyRatio: number | null;
-  totalTopics: number;
+  totalTopics: number | null;
   totalReplies: number;
   isTopicsHidden: boolean;
   dailyRanking: number | null;

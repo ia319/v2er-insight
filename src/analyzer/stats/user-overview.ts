@@ -24,7 +24,7 @@ export function calculateUserOverview(
     joinDate: profile.joinDate,
     lastActiveTime,
     topicReplyRatio,
-    totalTopics: topics.length,
+    totalTopics: isTopicsHidden ? null : topics.length,
     totalReplies: replies.length,
     isTopicsHidden,
     dailyRanking: profile.dailyRanking,

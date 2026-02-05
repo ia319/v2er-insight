@@ -69,7 +69,7 @@ describe('calculateUserOverview', () => {
 
     const result = calculateUserOverview(data);
 
-    expect(result.totalTopics).toBe(0);
+    expect(result.totalTopics).toBeNull();
     expect(result.totalReplies).toBe(0);
     expect(result.topicReplyRatio).toBeNull();
     expect(result.lastActiveTime).toBe('unknown');
