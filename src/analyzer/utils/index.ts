@@ -10,3 +10,5 @@ export {
   getHour,
   type ParsedDate,
 } from './date-parser';
+
+export { average, topN, hourDistribution, weekdayDistribution } from './stats';
