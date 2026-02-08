@@ -59,14 +59,14 @@
 
 ### 回复统计
 
-| 字段                       | 类型                             | 说明                                                                                 |
-| -------------------------- | -------------------------------- | ------------------------------------------------------------------------------------ |
-| `replyCount`               | `number`                         | 本活跃期内回复数量                                                                   |
-| `avgReplyLength`           | `number`                         | 平均回复长度（字符数）                                                               |
-| `directReplyRatio`         | `number`                         | 直接回复率 = 直接回复主帖数 / 总回复数<br>高 = 主动发起讨论；低 = 倾向于跟帖互动     |
-| `avgRepliedTopicHeat`      | `number`                         | 参与话题的平均热度 = Avg(topicReplyCount)<br>高 = 追热点；低 = 关注小众话题          |
-| `replyWeekdayDistribution` | `Record<string, number> \| null` | 回复星期分布（百分比），如 `{ "周一": 0.20 }`<br>通过相对时间计算，无法计算则为 null |
-| `replyNodeDistribution`    | `Record<string, number>`         | 回复节点分布（前 3 个），按数量降序                                                  |
+| 字段                       | 类型                             | 说明                                                                                                               |
+| -------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `replyCount`               | `number`                         | 本活跃期内回复数量                                                                                                 |
+| `avgReplyLength`           | `number`                         | 平均回复长度（字符数）                                                                                             |
+| `directReplyRatio`         | `number`                         | 直接回复率 = 直接回复主帖数 / 总回复数<br>高 = 主动发起讨论；低 = 倾向于跟帖互动                                   |
+| `avgRepliedTopicHeat`      | `number`                         | 参与话题的平均热度 = Avg(topicReplyCount)<br>高 = 追热点；低 = 关注小众话题                                        |
+| `replyWeekdayDistribution` | `Record<string, number> \| null` | 回复星期分布（全部 7 天，百分比），如 `{ "周一": 0.20, "周二": 0.15, ... }`<br>无活动的天返回 0，无法计算则为 null |
+| `replyNodeDistribution`    | `Record<string, number>`         | 回复节点分布（前 3 个），按数量降序                                                                                |
 
 ---
 
