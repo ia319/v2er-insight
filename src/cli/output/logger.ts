@@ -2,7 +2,7 @@
  * CLI 控制台输出工具
  */
 
-import type { FetchResult } from '@/modules/fetcher';
+import type { FetchResult } from '@/infra/fetcher';
 
 /** 响应体预览最大长度 */
 const ERROR_BODY_PREVIEW_LENGTH = 200;
