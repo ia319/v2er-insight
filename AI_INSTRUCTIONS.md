@@ -52,7 +52,9 @@ root
 │   │       │   ├── __tests__/        # Parser unit tests
 │   │       │   │   └── fixtures/     # HTML snapshots
 │   │       │   ├── selectors/        # DOM selectors (one per parser)
-│   │       │   ├── utils/            # Shared utilities (pagination, test-helpers)
+│   │       │   ├── utils/            # Shared utilities
+│   │       │   │   ├── index.ts      # Re-exports
+│   │       │   │   └── pagination.ts # Robust pagination parser
 │   │       │   ├── index.ts
 │   │       │   └── *.ts              # Parser implementations
 │   │       └── services/     # [Complete] Service layer (orchestration)
@@ -81,12 +83,36 @@ root
 │   │       ├── index.ts      # Re-exports
 │   │       └── logger.ts     # Formatted console output
 │   │
-│   └── config/               # [Complete] Configuration management
-│       ├── index.ts          # Public exports
-│       ├── types.ts          # V2erConfig interface
-│       ├── path.ts           # Config file path (~/.v2errc.json)
-│       ├── storage.ts        # Read/write config file
-│       └── proxy.ts          # Proxy URL resolution
+│   ├── config/               # [Complete] Configuration management
+│   │   ├── index.ts          # Public exports
+│   │   ├── types.ts          # V2erConfig interface
+│   │   ├── path.ts           # Config file path (~/.v2errc.json)
+│   │   ├── storage.ts        # Read/write config file
+│   │   └── proxy.ts          # Proxy URL resolution
+│   │
+│   └── analyzer/             # [Complete] Data analysis for AI input
+│       ├── index.ts          # Public API (buildAnalyzerOutput)
+│       ├── builder.ts        # Output builder (orchestrates all modules)
+│       ├── config.ts         # Analyzer configuration constants
+│       ├── ai-input-types.ts # AI input type definitions
+│       ├── AI_INPUT_SCHEMA.md # Schema documentation
+│       ├── types/            # Type definitions
+│       │   ├── input.ts      # RawUserData input type
+│       │   ├── output.ts     # AnalyzerOutput output type
+│       │   └── internal.ts   # ActivePeriod, PeriodBoundary types
+│       ├── utils/            # Utility functions
+│       │   ├── date-parser.ts # Date parsing (absolute/relative/Chinese)
+│       │   └── stats.ts      # Statistics (average, distribution)
+│       ├── periods/          # Active period detection
+│       │   ├── detector.ts   # Inactivity-based period detection
+│       │   └── splitter.ts   # Data splitting by periods
+│       ├── stats/            # Statistics calculation
+│       │   ├── user-overview.ts  # User overview stats
+│       │   ├── topic-stats.ts    # Topic stats
+│       │   └── reply-stats.ts    # Reply stats
+│       └── content/          # Content processing
+│           ├── transformer.ts # Transform to AI format
+│           └── chunker.ts    # Content chunking logic
 ```
 
 ## Modules
@@ -121,6 +147,14 @@ root
 - `parseRepliesPage(html)` → Replies list, pagination
 - `parseTopicsListPage(html)` → Topic URLs, hidden detection
 - `parseTopicDetail(html)` → Topic content, stats
+
+**Implementation Specifics**:
+
+- **Parsers Breakdown**:
+  - `parsers/replies-page.ts`: Handles nested reply content (traverses `.inner` wrappers).
+  - `parsers/utils/pagination.ts`: Robust pagination parser using `.first()` to handle dual pagination bars.
+- **Date Handling**:
+  - `analyzer/utils/date-parser.ts`: Supports V2EX's legacy Chinese date formats (YYYY年M月D日) alongside standard formats.
 
 ### 3. Service Layer (Complete)
 
@@ -169,6 +203,36 @@ root
 - `path.ts` → Config file path resolution (`~/.v2errc.json`)
 - `storage.ts` → Read/write JSON config
 - `proxy.ts` → Get proxy URL (priority: config > HTTPS_PROXY > HTTP_PROXY)
+
+### 6. Analyzer Module (Complete)
+
+- **Role**: Process raw user data into structured AI input.
+
+**Public API**:
+
+- `buildAnalyzerOutput(rawData)` → Returns `AnalyzerOutput`
+  - `userOverview` → User overview statistics
+  - `summary` → All periods statistics summary
+  - `contents` → Chunked content for AI consumption
+
+**Sub-modules Hierarchy**:
+
+- **Content Processing** (`content/`):
+  - `transformer.ts`: Converts raw V2EX entities to `ContentTopic`/`ContentReply`.
+  - `chunker.ts`: Implements smart content splitting based on token/item counts.
+- **Statistics** (`stats/`):
+  - `user-overview.ts`: Aggregates global user metrics.
+  - `topic-stats.ts`: Analyzes topic engagement and lifecycle.
+  - `reply-stats.ts`: Calculates reply frequency and node distribution.
+- **Period Detection** (`periods/`):
+  - `detector.ts`: Identifies active periods based on 60-day inactivity threshold.
+  - `splitter.ts`: Segments data into identified periods.
+
+**Configuration** (`config.ts`):
+
+- `INACTIVITY_THRESHOLD_DAYS: 60` → Period split threshold
+- `CHUNK_MAX_TOPICS: 20` → Max topics per chunk
+- `CHUNK_MAX_REPLIES: 100` → Max replies per chunk
 
 ## Proxy Configuration
 
