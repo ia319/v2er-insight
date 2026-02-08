@@ -27,9 +27,16 @@ root
 ├── tsconfig.json             # TypeScript compiler config
 ├── vitest.config.ts          # Vitest test runner config
 ├── task2.md                  # V2EX page structure analysis doc
+├── vitest-env.d.ts           # Vitest global type declarations
+├── docs/                     # Documentation & Specifications
+│   └── specs/
+│       ├── ai-input/         # [Source -> AI] Input data schema for AI
+│       │   ├── input-schema.md # Data structure specification
+│       │   └── input-types.ts  # Reference type definitions
+│       │
+│       └── ai-output/        # [AI -> App] Expected response from AI
+│           └── ...
 ├── src/
-│   ├── vitest-env.d.ts       # Vitest global type declarations
-│   │
 │   ├── modules/
 │   │   ├── fetcher/          # [Complete] Generic HTTP fetcher
 │   │   │   ├── __tests__/    # Unit tests for fetcher
@@ -94,8 +101,6 @@ root
 │       ├── index.ts          # Public API (buildAnalyzerOutput)
 │       ├── builder.ts        # Output builder (orchestrates all modules)
 │       ├── config.ts         # Analyzer configuration constants
-│       ├── ai-input-types.ts # AI input type definitions
-│       ├── AI_INPUT_SCHEMA.md # Schema documentation
 │       ├── types/            # Type definitions
 │       │   ├── input.ts      # RawUserData input type
 │       │   ├── output.ts     # AnalyzerOutput output type
