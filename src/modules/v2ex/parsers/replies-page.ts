@@ -42,7 +42,9 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
   // 解析每条回复
   $(REPLY_ITEM).each((_, dockEl) => {
     const dockArea = $(dockEl);
-    const replyContent = dockArea.next(REPLY_CONTENT);
+    // .reply_content 在 .dock_area 的下一个兄弟元素 (.inner 或 .cell) 内部
+    const replyContentWrapper = dockArea.next();
+    const replyContent = replyContentWrapper.find(REPLY_CONTENT);
 
     // 主题标题和回复总数
     const topicLink = dockArea.find(TOPIC_LINK);
