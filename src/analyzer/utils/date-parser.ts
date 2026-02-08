@@ -62,6 +62,50 @@ export function parseRelativeTime(
     }
   }
 
+  // 尝试解析中文日期格式
+  const chineseDateResult = parseChineseDate(relativeStr, referenceDate);
+  if (chineseDateResult) {
+    return chineseDateResult;
+  }
+
+  return null;
+}
+
+/**
+ * 解析中文日期格式
+ * 格式: "2025 年 4 月 21 日", "4 月 21 日", "1 月 7 日"
+ * @param dateStr 日期字符串
+ * @param referenceDate 参考时间，用于补充年份
+ */
+export function parseChineseDate(
+  dateStr: string,
+  referenceDate: Date = new Date(),
+): ParsedDate | null {
+  // "2025 年 4 月 21 日" 格式
+  const fullMatch = dateStr.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+  if (fullMatch) {
+    const year = parseInt(fullMatch[1]!, 10);
+    const month = parseInt(fullMatch[2]!, 10) - 1; // JS 月份从 0 开始
+    const day = parseInt(fullMatch[3]!, 10);
+    return { date: new Date(year, month, day), hasTime: false };
+  }
+
+  // "4 月 21 日" 格式（使用参考年份）
+  const shortMatch = dateStr.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+  if (shortMatch) {
+    const month = parseInt(shortMatch[1]!, 10) - 1;
+    const day = parseInt(shortMatch[2]!, 10);
+    const year = referenceDate.getFullYear();
+    const date = new Date(year, month, day);
+
+    // 如果日期在未来，则为去年
+    if (date > referenceDate) {
+      date.setFullYear(year - 1);
+    }
+
+    return { date, hasTime: false };
+  }
+
   return null;
 }
 
