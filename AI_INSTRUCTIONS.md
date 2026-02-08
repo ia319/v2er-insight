@@ -155,6 +155,7 @@ root
   - `parsers/utils/pagination.ts`: Robust pagination parser using `.first()` to handle dual pagination bars.
 - **Date Handling**:
   - `analyzer/utils/date-parser.ts`: Supports V2EX's legacy Chinese date formats (YYYY年M月D日) alongside standard formats.
+  - `analyzer/utils/stats.ts`: Implements `weekdayDistribution` returning full 7-day stats (sorted by frequency).
 
 ### 3. Service Layer (Complete)
 
@@ -223,7 +224,7 @@ root
 - **Statistics** (`stats/`):
   - `user-overview.ts`: Aggregates global user metrics.
   - `topic-stats.ts`: Analyzes topic engagement and lifecycle.
-  - `reply-stats.ts`: Calculates reply frequency and node distribution.
+  - `reply-stats.ts`: Calculates reply frequency, node distribution, and full 7-day weekday distribution.
 - **Period Detection** (`periods/`):
   - `detector.ts`: Identifies active periods based on 60-day inactivity threshold.
   - `splitter.ts`: Segments data into identified periods.
