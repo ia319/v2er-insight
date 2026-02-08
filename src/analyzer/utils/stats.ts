@@ -49,6 +49,11 @@ export function weekdayDistribution(dates: Date[]): Record<string, number> {
   const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   const counts: Record<string, number> = {};
 
+  // 初始化所有天数为 0
+  weekdays.forEach((day) => {
+    counts[day] = 0;
+  });
+
   for (const date of dates) {
     const day = weekdays[date.getDay()] ?? '未知';
     counts[day] = (counts[day] ?? 0) + 1;
@@ -57,9 +62,14 @@ export function weekdayDistribution(dates: Date[]): Record<string, number> {
   // 转换为百分比
   const total = dates.length;
   const result: Record<string, number> = {};
-  for (const [day, count] of Object.entries(counts)) {
-    result[day] = count / total;
+
+  for (const day of weekdays) {
+    // 即使无活动也要返回 0
+    result[day] = total === 0 ? 0 : (counts[day] ?? 0) / total;
   }
 
-  return result;
+  // 按占比降序排序
+  const sortedEntries = Object.entries(result).sort(([, a], [, b]) => b - a);
+
+  return Object.fromEntries(sortedEntries);
 }

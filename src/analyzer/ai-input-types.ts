@@ -117,10 +117,10 @@ export interface SinglePeriodStats {
    */
   avgRepliedTopicHeat: number;
   /**
-   * 回复星期分布（百分比）
+   * 回复星期分布（全部 7 天，百分比）
    * 通过相对时间（如"3天前"）计算星期几
-   * 示例：{ "周一": 0.20, "周五": 0.15, ... }
-   * 如果无法计算则为 null
+   * 示例：{ "周一": 0.20, "周二": 0.15, ... }
+   * 无活动的天返回 0，如果无法计算则为 null
    */
   replyWeekdayDistribution: Record<string, number> | null;
   /**

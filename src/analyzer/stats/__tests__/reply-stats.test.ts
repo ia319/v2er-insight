@@ -46,6 +46,27 @@ describe('calculateReplyStats', () => {
     expect(result.directReplyRatio).toBeCloseTo(0.67, 1);
     expect(result.avgRepliedTopicHeat).toBeCloseTo(58.33, 1);
     expect(result.replyNodeDistribution).toEqual({ go: 2, python: 1 });
+
+    // 验证星期分布：
+    // Total: 3
+    // 2024-01-10 是周三
+    // 1天前 (Jan 9): 周二
+    // 2天前 (Jan 8): 周一
+    // 3天前 (Jan 7): 周日
+    // 分布: 周二 1 (33%), 周一 1 (33%), 周日 1 (33%), 其他 0
+    // 排序后应该是满的7天，且有数据的在前（顺序可能因排序稳定性略有不同，但非0在前）
+    const dist = result.replyWeekdayDistribution!;
+    expect(Object.keys(dist)).toHaveLength(7);
+    expect(dist['周二']).toBeCloseTo(0.33, 1);
+    expect(dist['周一']).toBeCloseTo(0.33, 1);
+    expect(dist['周日']).toBeCloseTo(0.33, 1);
+    expect(dist['周三']).toBe(0);
+    // 验证排序：非0的值应该在前面
+    const values = Object.values(dist);
+    expect(values[0]).toBeGreaterThan(0);
+    expect(values[1]).toBeGreaterThan(0);
+    expect(values[2]).toBeGreaterThan(0);
+    expect(values[values.length - 1]).toBe(0);
   });
 
   it('should handle empty replies', () => {
