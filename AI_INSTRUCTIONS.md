@@ -37,48 +37,6 @@ root
 │       └── ai-output/        # [AI -> App] Expected response from AI
 │           └── ...
 ├── src/
-│   ├── modules/
-│   │   ├── fetcher/          # [Complete] Generic HTTP fetcher
-│   │   │   ├── __tests__/    # Unit tests for fetcher
-│   │   │   ├── fetcher.ts    # SequentialStrategy & Fetcher class
-│   │   │   ├── types.ts      # FetchOptions, FetchResult, IFetchStrategy
-│   │   │   └── index.ts      # Public API exports
-│   │   │
-│   │   └── v2ex/             # [Complete] V2EX business logic
-│   │       ├── index.ts      # Public API exports (types, urls, parsers)
-│   │       ├── types/        # Type definitions
-│   │       │   ├── index.ts      # Re-exports all types
-│   │       │   ├── entities.ts   # V2exReply, V2exTopicDetail
-│   │       │   └── parse-result.ts # Page parse result types
-│   │       ├── urls/         # URL generators
-│   │       │   ├── index.ts      # Re-exports all URL functions
-│   │       │   ├── constants.ts  # V2EX_BASE constant
-│   │       │   ├── user-urls.ts  # User page URL generators
-│   │       │   └── topic-urls.ts # Topic page URL generators
-│   │       ├── parsers/      # HTML parsers (using Cheerio)
-│   │       │   ├── __tests__/        # Parser unit tests
-│   │       │   │   └── fixtures/     # HTML snapshots
-│   │       │   ├── selectors/        # DOM selectors (one per parser)
-│   │       │   ├── utils/            # Shared utilities
-│   │       │   │   ├── index.ts      # Re-exports
-│   │       │   │   └── pagination.ts # Robust pagination parser
-│   │       │   ├── index.ts
-│   │       │   └── *.ts              # Parser implementations
-│   │       └── services/     # [Complete] Service layer (orchestration)
-│   │           ├── index.ts      # Public API exports
-│   │           ├── types.ts      # ServiceOptions, PagedResult types
-│   │           ├── user/         # User-related services
-│   │           │   ├── __tests__/    # User service unit tests
-│   │           │   ├── index.ts      # Re-exports user services
-│   │           │   ├── profile.ts    # User profile fetcher
-│   │           │   ├── replies.ts    # User replies fetcher (paginated)
-│   │           │   ├── topic-urls.ts # User topic URLs fetcher (paginated)
-│   │           │   └── topics-detail.ts # User topics content fetcher
-│   │           └── utils/        # Shared utilities
-│   │               ├── __tests__/    # Utility unit tests
-│   │               ├── index.ts      # Re-exports utilities
-│   │               └── page-orchestrator.ts # Generic pagination logic
-│   │
 │   ├── cli/                  # [Complete] Command-line interface
 │   │   ├── index.ts          # CLI entry point (commander setup)
 │   │   ├── types.ts          # CLI option types
@@ -90,34 +48,53 @@ root
 │   │       ├── index.ts      # Re-exports
 │   │       └── logger.ts     # Formatted console output
 │   │
-│   ├── config/               # [Complete] Configuration management
+│   ├── config/               # [Shared] Configuration management
 │   │   ├── index.ts          # Public exports
 │   │   ├── types.ts          # V2erConfig interface
 │   │   ├── path.ts           # Config file path (~/.v2errc.json)
 │   │   ├── storage.ts        # Read/write config file
 │   │   └── proxy.ts          # Proxy URL resolution
 │   │
-│   └── analyzer/             # [Complete] Data analysis for AI input
-│       ├── index.ts          # Public API (buildAnalyzerOutput)
-│       ├── builder.ts        # Output builder (orchestrates all modules)
-│       ├── config.ts         # Analyzer configuration constants
-│       ├── types/            # Type definitions
-│       │   ├── input.ts      # RawUserData input type
-│       │   ├── output.ts     # AnalyzerOutput output type
-│       │   └── internal.ts   # ActivePeriod, PeriodBoundary types
-│       ├── utils/            # Utility functions
-│       │   ├── date-parser.ts # Date parsing (absolute/relative/Chinese)
-│       │   └── stats.ts      # Statistics (average, distribution)
-│       ├── periods/          # Active period detection
-│       │   ├── detector.ts   # Inactivity-based period detection
-│       │   └── splitter.ts   # Data splitting by periods
-│       ├── stats/            # Statistics calculation
-│       │   ├── user-overview.ts  # User overview stats
-│       │   ├── topic-stats.ts    # Topic stats
-│       │   └── reply-stats.ts    # Reply stats
-│       └── content/          # Content processing
-│           ├── transformer.ts # Transform to AI format
-│           └── chunker.ts    # Content chunking logic
+│   ├── core/                 # [Domain Layer] Business logic
+│   │   ├── v2ex/             # [Complete] V2EX domain logic
+│   │   │   ├── index.ts      # Public API exports (types, urls, parsers)
+│   │   │   ├── types/        # Type definitions
+│   │   │   │   ├── index.ts      # Re-exports all types
+│   │   │   │   ├── entities.ts   # V2exReply, V2exTopicDetail
+│   │   │   │   └── parse-result.ts # Page parse result types
+│   │   │   ├── urls/         # URL generators
+│   │   │   ├── parsers/      # HTML parsers (using Cheerio)
+│   │   │   │   ├── __tests__/        # Parser unit tests
+│   │   │   │   ├── selectors/        # DOM selectors
+│   │   │   │   ├── utils/            # Shared utilities
+│   │   │   │   └── index.ts
+│   │   │   └── use-cases/    # [Complete] Use case layer (orchestration)
+│   │   │       ├── index.ts      # Public API exports
+│   │   │       ├── types.ts      # ServiceOptions, PagedResult types
+│   │   │       ├── user/         # User-related use cases
+│   │   │       │   ├── profile.ts    # User profile fetcher
+│   │   │       │   ├── replies.ts    # User replies fetcher (paginated)
+│   │   │       │   ├── topic-urls.ts # User topic URLs fetcher (paginated)
+│   │   │       │   └── topics-detail.ts # User topics content fetcher
+│   │   │       └── utils/        # Shared utilities
+│   │   │           └── page-orchestrator.ts # Generic pagination logic
+│   │   │
+│   │   └── analyzer/         # [Complete] Data analysis for AI input
+│   │       ├── index.ts          # Public API (buildAnalyzerOutput)
+│   │       ├── builder.ts        # Output builder
+│   │       ├── config.ts         # Analyzer constants
+│   │       ├── types/            # Type definitions
+│   │       ├── utils/            # Utility functions (date-parser, stats)
+│   │       ├── periods/          # Active period detection
+│   │       ├── stats/            # Statistics calculation
+│   │       └── content/          # Content processing
+│   │
+│   └── infra/                # [Infrastructure Layer] External adapters
+│       └── fetcher/          # [Complete] Generic HTTP fetcher
+│           ├── index.ts      # Public API exports
+│           ├── fetcher.ts    # SequentialStrategy & Fetcher class
+│           ├── types.ts      # FetchOptions, FetchResult
+│           └── agent.ts      # Proxy agent creation
 ```
 
 ## Modules
@@ -156,22 +133,22 @@ root
 **Implementation Specifics**:
 
 - **Parsers Breakdown**:
-  - `parsers/replies-page.ts`: Handles nested reply content (traverses `.inner` wrappers).
-  - `parsers/utils/pagination.ts`: Robust pagination parser using `.first()` to handle dual pagination bars.
+  - `src/core/v2ex/parsers/replies-page.ts`: Handles nested reply content (traverses `.inner` wrappers).
+  - `src/core/v2ex/parsers/utils/pagination.ts`: Robust pagination parser using `.first()` to handle dual pagination bars.
 - **Date Handling**:
-  - `analyzer/utils/date-parser.ts`: Supports V2EX's legacy Chinese date formats (YYYY年M月D日) alongside standard formats.
-  - `analyzer/utils/stats.ts`: Implements `weekdayDistribution` returning full 7-day stats (sorted by frequency).
+  - `src/core/analyzer/utils/date-parser.ts`: Supports V2EX's legacy Chinese date formats (YYYY年M月D日) alongside standard formats.
+  - `src/core/analyzer/utils/stats.ts`: Implements `weekdayDistribution` returning full 7-day stats (sorted by frequency).
 
-### 3. Service Layer (Complete)
+### 3. Use Case Layer (Complete)
 
-- **Role**: Orchestration layer combining Fetcher + Parsers with auto-pagination.
+- **Role**: Orchestration layer combining Fetcher + Parsers with auto-pagination (formerly Service Layer).
 
 **Shared Types** (`types.ts`):
 
 - `ServiceOptions`: timeout, headers, event callbacks
 - `PagedResult<T>`: data, totalPages, fetchedPages, failedPages
 
-**User Services** (`user/`):
+**User Use Cases** (`user/`):
 
 - `getUserProfile(username, options?)` → User profile or null
 - `getAllUserReplies(username, options?)` → PagedResult<V2exReply>
@@ -212,7 +189,7 @@ root
 
 ### 6. Analyzer Module (Complete)
 
-- **Role**: Process raw user data into structured AI input.
+- **Role**: Process raw user data into structured AI input (located in `src/core/analyzer`).
 
 **Public API**:
 

@@ -2,9 +2,9 @@
  * fetch-user 命令
  */
 
-import { getUserProfile, getAllUserReplies, getAllUserTopicUrls } from '@/modules/v2ex';
-import type { UserTopicUrlsResult, PagedResult, V2exReply } from '@/modules/v2ex';
-import type { FetchResult, FetchEvents } from '@/modules/fetcher';
+import { getUserProfile, getAllUserReplies, getAllUserTopicUrls } from '@/core/v2ex';
+import type { UserTopicUrlsResult, PagedResult, V2exReply } from '@/core/v2ex';
+import type { FetchResult, FetchEvents } from '@/infra/fetcher';
 import { logger } from '../output';
 import type { FetchUserOptions } from '../types';
 
