@@ -25,7 +25,7 @@ describe('parseRepliesPage', () => {
     const directReply = result.replies[0];
     expect(directReply?.topicTitle).toBe('示例主题标题一');
     expect(directReply?.nodeName).toBe('程序员');
-    expect(directReply?.replyTime).toBe('2 小时前');
+    expect(directReply?.replyTime).toBe('2023 年 5 月 12 日');
     expect(directReply?.isDirectReply).toBe(true);
     expect(directReply?.replyTo).toBeNull();
     expect(directReply?.content).toBe('这是一条直接回复主帖的内容。');

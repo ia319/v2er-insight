@@ -23,7 +23,7 @@ export interface PaginationInfo {
  * @returns 分页信息（当前页和总页数）
  */
 export function parsePagination($: CheerioAPI): PaginationInfo {
-  const currentPageEl = $(CURRENT_PAGE);
+  const currentPageEl = $(CURRENT_PAGE).first();
   const parsedPage = parseInt(currentPageEl.text(), 10);
   const currentPage = !isNaN(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
