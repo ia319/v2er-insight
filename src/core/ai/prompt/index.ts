@@ -30,6 +30,9 @@ export function buildMessageSequence(input: AIAnalysisInput): MessageSequence {
   messages.push(JSON.stringify({ summary: input.summary }, null, 2));
 
   // 3. Each content chunk
+  if (input.contents.length === 0) {
+    console.warn('Warning: contents is empty');
+  }
   for (const content of input.contents) {
     messages.push(JSON.stringify(content, null, 2));
   }

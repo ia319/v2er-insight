@@ -34,7 +34,7 @@ interface UserOverview {
 /** Statistics for a single activity period */
 interface SinglePeriodStats {
   timeRange: string;          // e.g., "2023-01-01 to 2023-06-01"
-  
+
   // Topic Metrics
   topicCount: number;
   avgTopicReplyCount: number; // Influence: How many people reply to their topics
@@ -43,7 +43,7 @@ interface SinglePeriodStats {
   topicInteractionRatio: number; // Conversion: Replies per click
   topicHourDistribution: Record<number, number>; // 0-23 hour distribution
   topicNodeDistribution: Record<string, number>; // Top nodes for topics
-  
+
   // Reply Metrics
   replyCount: number;
   avgReplyLength: number;     // Effort/Depth of replies
@@ -103,7 +103,7 @@ Map the provided metrics to the following psychological and behavioral dimension
 *   **Openness**: Diversity of \`nodeName\` in both topics and replies.
 *   **Conscientiousness**: \`avgReplyLength\`, structure of content, consistency of activity.
 *   **Extraversion**: \`totalReplies\`, tone of interactions.
-*   **Agreeableness**: Tone of replies (polite vs argumentative), helpfullness.
+*   **Agreeableness**: Tone of replies (polite vs argumentative), helpfulness.
 *   **Neuroticism**: Emotional stability in content, reaction to conflicts.
 
 ### 2. Professional Implementation
@@ -127,8 +127,8 @@ Map the provided metrics to the following psychological and behavioral dimension
 interface AIAnalysisResult {
   summary: string;
   professional: {
-    techStack: string[];
-    careerPath: string;
+    tech_stack: string[];
+    career_path: string;
     level: string;
     focus_coherence: string;
     evolution: {
@@ -153,7 +153,7 @@ interface AIAnalysisResult {
   };
   behavioral: {
     role: string;
-    interactionStyle: string;
+    interaction_style: string;
     active_pattern: string;
     heat_sensitivity: string;
   };

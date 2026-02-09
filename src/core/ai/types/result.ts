@@ -10,8 +10,8 @@ export interface EvolutionTimelineEntry {
 
 /** Professional profile */
 export interface ProfessionalProfile {
-  techStack: string[];
-  careerPath: string;
+  tech_stack: string[];
+  career_path: string;
   level: string;
   focus_coherence: string;
   evolution: {
@@ -42,7 +42,7 @@ export interface PsychologicalProfile {
 /** Behavioral profile */
 export interface BehavioralProfile {
   role: string;
-  interactionStyle: string;
+  interaction_style: string;
   active_pattern: string;
   heat_sensitivity: string;
 }

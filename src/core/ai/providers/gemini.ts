@@ -3,13 +3,9 @@
  */
 
 import { GoogleGenAI, Chat } from '@google/genai';
+import type { IAIProvider } from '../types';
 
-/** Provider interface for future extensibility */
-export interface IAIProvider {
-  readonly name: string;
-  createSession(systemPrompt: string): void;
-  sendMessage(content: string): Promise<string>;
-}
+export type { IAIProvider };
 
 export class GeminiProvider implements IAIProvider {
   readonly name = 'gemini';
@@ -18,6 +14,9 @@ export class GeminiProvider implements IAIProvider {
   private chat: Chat | null = null;
 
   constructor(apiKey: string, model: string) {
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error('Gemini API key is required');
+    }
     this.model = model;
     this.ai = new GoogleGenAI({ apiKey });
   }
@@ -44,7 +43,7 @@ export class GeminiProvider implements IAIProvider {
 
     const response = await this.chat.sendMessage({ message: content });
 
-    if (!response.text) {
+    if (response.text === undefined || response.text === null) {
       throw new Error('Empty response from Gemini API');
     }
 
