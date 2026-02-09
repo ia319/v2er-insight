@@ -146,8 +146,7 @@ Map the provided metrics to the following psychological and behavioral dimension
 ## Output Rules
 
 1. **Language**: Simplified Chinese (简体中文).
-2. **Format**: strict JSON object. You may wrap it in a markdown code block (`json ... `), but the content must be
-   valid JSON.
+2. **Format**: strict JSON object. You may wrap it in a Markdown code block (`json`), but the content must be valid JSON.
 3. **Tone**: Professional, Objective, Analytical.
 
 ## Output Schema (Strict JSON)

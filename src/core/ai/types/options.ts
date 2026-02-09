@@ -11,5 +11,6 @@ export type AIAnalysisInput = AnalyzerOutput;
 export interface AnalysisOptions {
   apiKey?: string;
   model?: string;
+  /** 超时时间（毫秒） */
   timeout?: number;
 }

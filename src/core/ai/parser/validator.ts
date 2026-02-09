@@ -161,7 +161,7 @@ function validateScores(scores: unknown, warnings: string[]): typeof DEFAULT_SCO
   return result;
 }
 
-/** 合并对象，缺失字段用默认值 */
+/** 深度合并对象，缺失字段用默认值 */
 function mergeWithDefault<T extends object>(source: unknown, defaults: T): T {
   if (!source || typeof source !== 'object') {
     return defaults;
@@ -171,8 +171,24 @@ function mergeWithDefault<T extends object>(source: unknown, defaults: T): T {
   const result = { ...defaults } as Record<string, unknown>;
 
   for (const key of Object.keys(defaults)) {
-    if (src[key] !== undefined) {
-      result[key] = src[key];
+    const defaultValue = (defaults as Record<string, unknown>)[key];
+    const sourceValue = src[key];
+
+    if (sourceValue === undefined) {
+      continue;
+    }
+
+    if (
+      defaultValue !== null &&
+      typeof defaultValue === 'object' &&
+      !Array.isArray(defaultValue) &&
+      sourceValue !== null &&
+      typeof sourceValue === 'object' &&
+      !Array.isArray(sourceValue)
+    ) {
+      result[key] = mergeWithDefault(sourceValue, defaultValue as object);
+    } else {
+      result[key] = sourceValue;
     }
   }
 
