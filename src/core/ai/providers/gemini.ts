@@ -1,5 +1,5 @@
 /**
- * Gemini Provider Implementation - Multi-turn Chat
+ * Gemini Provider 实现 - 多轮对话
  */
 
 import { GoogleGenAI, Chat } from '@google/genai';
@@ -22,7 +22,7 @@ export class GeminiProvider implements IAIProvider {
   }
 
   /**
-   * Create a new chat session with system prompt
+   * 创建带有系统提示词的新聊天会话
    */
   createSession(systemPrompt: string): void {
     this.chat = this.ai.chats.create({
@@ -34,7 +34,7 @@ export class GeminiProvider implements IAIProvider {
   }
 
   /**
-   * Send a message and get response
+   * 发送消息并获取响应
    */
   async sendMessage(content: string): Promise<string> {
     if (!this.chat) {

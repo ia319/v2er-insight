@@ -1,5 +1,5 @@
 /**
- * AI Module Configuration
+ * AI 模块配置
  */
 
 export const DEFAULT_MODEL = 'gemini-2.0-flash';

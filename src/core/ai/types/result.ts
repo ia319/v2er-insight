@@ -1,14 +1,14 @@
 /**
- * AI Analysis Result Types
+ * AI 分析结果类型
  */
 
-/** Professional evolution timeline entry */
+/** 职业发展时间线 */
 export interface EvolutionTimelineEntry {
   period: string;
   focus: string;
 }
 
-/** Professional profile */
+/** 职业画像 */
 export interface ProfessionalProfile {
   tech_stack: string[];
   career_path: string;
@@ -20,14 +20,14 @@ export interface ProfessionalProfile {
   };
 }
 
-/** Personal profile */
+/** 个人生活画像 */
 export interface PersonalProfile {
   hobbies: string[];
   life_stage: string;
   values: string[];
 }
 
-/** Psychological profile (OCEAN) */
+/** 心理画像 (五大性格特质 OCEAN) */
 export interface PsychologicalProfile {
   scores: {
     openness: number;
@@ -39,7 +39,7 @@ export interface PsychologicalProfile {
   keywords: string[];
 }
 
-/** Behavioral profile */
+/** 行为画像 */
 export interface BehavioralProfile {
   role: string;
   interaction_style: string;
@@ -47,19 +47,19 @@ export interface BehavioralProfile {
   heat_sensitivity: string;
 }
 
-/** Social profile */
+/** 社交画像 */
 export interface SocialProfile {
   content_appeal: string;
   discussion_depth: string;
 }
 
-/** Risk assessment */
+/** 风险评估 */
 export interface RiskAssessment {
   level: 'safe' | 'suspicious' | 'high_risk';
   reason: string;
 }
 
-/** AI analysis result */
+/** AI 分析结果总览 */
 export interface AIAnalysisResult {
   summary: string;
   professional: ProfessionalProfile;

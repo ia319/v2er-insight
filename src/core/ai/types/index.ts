@@ -1,5 +1,5 @@
 /**
- * Types Module Exports
+ * Types 模块导出
  */
 
 export type { AIAnalysisInput, AnalysisOptions } from './options';

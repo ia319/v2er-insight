@@ -1,13 +1,13 @@
 /**
- * Analysis Options
+ * 分析选项
  */
 
 import type { AnalyzerOutput } from '@/core/analyzer';
 
-/** AI analysis input = Analyzer output */
+/** AI 分析输入 = Analyzer 输出 */
 export type AIAnalysisInput = AnalyzerOutput;
 
-/** Analysis options */
+/** 分析配置选项 */
 export interface AnalysisOptions {
   apiKey?: string;
   model?: string;

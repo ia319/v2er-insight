@@ -1,5 +1,5 @@
 /**
- * Provider Exports
+ * Provider 导出
  */
 
 export { GeminiProvider } from './gemini';

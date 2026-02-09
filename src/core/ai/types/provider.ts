@@ -1,10 +1,11 @@
 /**
- * Provider Interface Definitions
+ * Provider 接口定义
  */
 
-/** Provider interface for future extensibility */
+/** AI Provider 接口 */
 export interface IAIProvider {
   readonly name: string;
-  createSession(systemPrompt: string): void;
+  /** 注意：为了支持异步初始化，返回 void | Promise<void> */
+  createSession(systemPrompt: string): void | Promise<void>;
   sendMessage(content: string): Promise<string>;
 }
