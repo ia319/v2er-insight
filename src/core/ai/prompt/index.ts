@@ -2,13 +2,21 @@
  * Prompt Builder - Multi-turn Message Sequence
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { AIAnalysisInput } from '../types';
-import { SYSTEM_PROMPT } from './system-prompt';
 
 export interface MessageSequence {
   systemPrompt: string;
   messages: string[];
   finalPrompt: string;
+}
+
+// Load system prompt from md file
+const SYSTEM_PROMPT_PATH = path.join(__dirname, 'system-prompt.md');
+
+function loadSystemPrompt(): string {
+  return fs.readFileSync(SYSTEM_PROMPT_PATH, 'utf-8');
 }
 
 /**
@@ -38,7 +46,7 @@ export function buildMessageSequence(input: AIAnalysisInput): MessageSequence {
   }
 
   return {
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: loadSystemPrompt(),
     messages,
     finalPrompt: '根据以上数据生成用户分析报告，严格按照 Output Schema 输出 JSON。',
   };
