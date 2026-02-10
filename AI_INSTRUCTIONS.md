@@ -89,6 +89,28 @@ root
 │   │       ├── stats/            # Statistics calculation
 │   │       └── content/          # Content processing
 │   │
+│   │   └── ai/              # [Complete] AI integration module
+│   │       ├── index.ts         # Public API exports
+│   │       ├── config.ts        # AI model constants
+│   │       ├── types/           # Type definitions
+│   │       │   ├── index.ts         # Re-exports all types
+│   │       │   ├── options.ts       # AIAnalysisInput, AnalysisOptions
+│   │       │   ├── result.ts        # AIAnalysisResult
+│   │       │   └── provider.ts      # IAIProvider interface
+│   │       ├── prompt/          # System prompt & message builder
+│   │       │   ├── index.ts         # buildMessageSequence()
+│   │       │   └── system-prompt.md # AI system prompt template
+│   │       ├── providers/       # AI provider adapters
+│   │       │   ├── index.ts         # Re-exports providers
+│   │       │   └── gemini.ts        # Google Gemini provider
+│   │       ├── parser/          # Response parsing & validation
+│   │       │   ├── index.ts         # parseResponse()
+│   │       │   └── validator.ts     # Lenient response validator
+│   │       └── utils/           # Shared utilities
+│   │           ├── index.ts         # Re-exports utilities
+│   │           ├── api-key.ts       # API key resolution
+│   │           └── retry.ts         # Retry with exponential backoff
+│   │
 │   └── infra/                # [Infrastructure Layer] External adapters
 │       └── fetcher/          # [Complete] Generic HTTP fetcher
 │           ├── index.ts      # Public API exports
@@ -217,6 +239,33 @@ root
 - `CHUNK_MAX_TOPICS: 20` → Max topics per chunk
 - `CHUNK_MAX_REPLIES: 100` → Max replies per chunk
 
+### 7. AI Module (Complete)
+
+- **Role**: Integrate with Google Gemini to generate deep user insights from analyzer output.
+
+**Public API** (`index.ts`):
+
+- `analyzeUser(input, options?)` → `AIAnalysisResult`
+
+**Sub-modules**:
+
+- **Prompt** (`prompt/`):
+  - `buildMessageSequence(input)` → Constructs multi-turn message sequence from analyzer output.
+  - `system-prompt.md` → Markdown-based system prompt template.
+- **Providers** (`providers/`):
+  - `GeminiProvider` → Google Gemini API adapter with multi-turn chat support.
+- **Parser** (`parser/`):
+  - `parseResponse(text)` → Extracts JSON from AI response (prioritizes ```json blocks).
+  - `validateResponse(data)` → Lenient validator with deep merge, score clamping (0-100), and warnings.
+- **Utils** (`utils/`):
+  - `resolveApiKey()` → API key resolution (explicit > config > GOOGLE_API_KEY > GEMINI_API_KEY).
+  - `withRetry(fn, options)` → Retry with exponential backoff and jitter.
+
+**Configuration** (`config.ts`):
+
+- `DEFAULT_MODEL: 'gemini-2.5-flash-preview-05-20'`
+- `MAX_RETRIES: 3`, `BASE_DELAY: 1000`, `MAX_DELAY: 30000`
+
 ## Proxy Configuration
 
 **Priority Order**:
@@ -242,10 +291,7 @@ If none are set, no proxy is used.
 ## Testing Strategy
 
 - **Structure**: Co-located tests in `__tests__/` folders within each module.
+- **Language**: All test descriptions, data, and assertions in English; comments may be Chinese.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: Use `vi.mock` for modules (Fetcher, parsers).
-- **Coverage**: 70+ tests covering parsers, URL generators, services, CLI, and config.
-
-## Reference
-
-- V2EX page structure analysis: see `task2.md`
+- **Coverage**: 150+ tests covering parsers, URL generators, services, CLI, config, analyzer, and AI.

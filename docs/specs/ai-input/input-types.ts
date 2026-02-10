@@ -38,9 +38,9 @@ export interface UserOverview {
    * 计算方式：totalTopics / totalReplies
    * 高 = 偏向发起话题；低 = 偏向参与讨论
    */
-  topicReplyRatio: number;
-  /** 总发帖数 */
-  totalTopics: number;
+  topicReplyRatio: number | null;
+  /** 总发帖数，null = 隐藏主题列表 或发帖数为 0 */
+  totalTopics: number | null;
   /** 总回复数 */
   totalReplies: number;
   /**
@@ -215,6 +215,8 @@ export interface PeriodContentChunk {
  * Analyzer 模块的最终输出
  */
 export interface AnalyzerOutput {
+  /** 用户总览 */
+  userOverview: UserOverview;
   /** 所有活跃期的统计汇总（一次性发送） */
   summary: PeriodsSummary;
   /**
