@@ -55,6 +55,7 @@ describe('resolveApiKey', () => {
 
   it('environment variable GEMINI_API_KEY should be recognized', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
+    delete process.env.GOOGLE_API_KEY;
     process.env.GEMINI_API_KEY = 'gemini-env-key';
 
     const { resolveApiKey } = await import('../api-key');

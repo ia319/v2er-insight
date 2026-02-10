@@ -69,7 +69,7 @@ export function validateResponse(data: unknown): ValidationResult {
 
   if (!data || typeof data !== 'object') {
     warnings.push('响应不是有效对象，使用默认值');
-    return { data: DEFAULT_RESULT, warnings };
+    return { data: structuredClone(DEFAULT_RESULT), warnings };
   }
 
   const obj = data as Record<string, unknown>;
