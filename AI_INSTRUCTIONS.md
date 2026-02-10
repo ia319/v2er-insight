@@ -29,13 +29,13 @@ root
 ├── task2.md                  # V2EX page structure analysis doc
 ├── vitest-env.d.ts           # Vitest global type declarations
 ├── docs/                     # Documentation & Specifications
-│   └── specs/
-│       ├── ai-input/         # [Source -> AI] Input data schema for AI
-│       │   ├── input-schema.md # Data structure specification
-│       │   └── input-types.ts  # Reference type definitions
-│       │
-│       └── ai-output/        # [AI -> App] Expected response from AI
-│           └── ...
+│   ├── prompt.md             # AI system prompt template (copy)
+│   ├── analyzer-output/      # [Analyzer -> AI] Input data schema
+│   │   ├── output-schema.md      # Field-level specification
+│   │   └── output-types.ts      # Reference type definitions
+│   └── ai-result/            # [AI -> User] Analysis result schema
+│       ├── result-schema.md      # Field-level specification
+│       └── result-types.ts      # Final result type definition
 ├── src/
 │   ├── cli/                  # [Complete] Command-line interface
 │   │   ├── index.ts          # CLI entry point (commander setup)
