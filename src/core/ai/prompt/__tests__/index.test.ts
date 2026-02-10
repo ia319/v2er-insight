@@ -1,5 +1,5 @@
 /**
- * prompt/index.ts 单元测试
+ * Unit tests for prompt/index.ts
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -12,7 +12,7 @@ describe('buildMessageSequence', () => {
     vi.mocked(fs.readFileSync).mockReturnValue('# System Prompt\nTest prompt content');
   });
 
-  it('应该构建正确的消息序列结构', async () => {
+  it('should build correct message sequence structure', async () => {
     const { buildMessageSequence } = await import('../index');
 
     const input = {
@@ -39,7 +39,7 @@ describe('buildMessageSequence', () => {
     expect(result.finalPrompt).toContain('JSON');
   });
 
-  it('应该为每个活跃期内容生成消息', async () => {
+  it('should generate messages for each active period contents', async () => {
     const { buildMessageSequence } = await import('../index');
 
     const input = {
@@ -68,7 +68,7 @@ describe('buildMessageSequence', () => {
     expect(result.messages).toHaveLength(4);
   });
 
-  it('消息应该是有效的 JSON 字符串', async () => {
+  it('messages should be valid JSON strings', async () => {
     const { buildMessageSequence } = await import('../index');
 
     const input = {

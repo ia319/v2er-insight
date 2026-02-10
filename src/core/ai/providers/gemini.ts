@@ -43,7 +43,7 @@ export class GeminiProvider implements IAIProvider {
 
     const response = await this.chat.sendMessage({ message: content });
 
-    if (response.text === undefined || response.text === null) {
+    if (!response.text) {
       throw new Error('Empty response from Gemini API');
     }
 

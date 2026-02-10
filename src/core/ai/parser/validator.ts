@@ -73,7 +73,7 @@ export function validateResponse(data: unknown): ValidationResult {
   }
 
   const obj = data as Record<string, unknown>;
-  const result = { ...DEFAULT_RESULT };
+  const result = structuredClone(DEFAULT_RESULT);
 
   // summary
   if (typeof obj.summary === 'string') {
@@ -124,13 +124,12 @@ export function validateResponse(data: unknown): ValidationResult {
   // risk
   if (obj.risk && typeof obj.risk === 'object') {
     const risk = obj.risk as Record<string, unknown>;
+    const isValidLevel = RISK_LEVELS.includes(risk.level as (typeof RISK_LEVELS)[number]);
     result.risk = {
-      level: RISK_LEVELS.includes(risk.level as (typeof RISK_LEVELS)[number])
-        ? (risk.level as (typeof RISK_LEVELS)[number])
-        : 'safe',
+      level: isValidLevel ? (risk.level as (typeof RISK_LEVELS)[number]) : 'safe',
       reason: typeof risk.reason === 'string' ? risk.reason : '未知',
     };
-    if (!RISK_LEVELS.includes(risk.level as (typeof RISK_LEVELS)[number])) {
+    if (!isValidLevel) {
       warnings.push(`无效的 risk.level: ${risk.level}，使用默认值 safe`);
     }
   } else {
@@ -140,11 +139,11 @@ export function validateResponse(data: unknown): ValidationResult {
   return { data: result, warnings };
 }
 
-/** 验证心理评分 */
+/** 验证心理评分，值限制在 0-100 范围 */
 function validateScores(scores: unknown, warnings: string[]): typeof DEFAULT_SCORES {
   if (!scores || typeof scores !== 'object') {
     warnings.push('缺少 psychological.scores');
-    return DEFAULT_SCORES;
+    return { ...DEFAULT_SCORES };
   }
 
   const s = scores as Record<string, unknown>;
@@ -152,7 +151,12 @@ function validateScores(scores: unknown, warnings: string[]): typeof DEFAULT_SCO
 
   for (const key of Object.keys(DEFAULT_SCORES) as (keyof typeof DEFAULT_SCORES)[]) {
     if (typeof s[key] === 'number') {
-      result[key] = s[key] as number;
+      const raw = s[key] as number;
+      const clamped = Math.max(0, Math.min(100, raw));
+      if (raw !== clamped) {
+        warnings.push(`psychological.scores.${key} 值 ${raw} 超出范围，已限制为 ${clamped}`);
+      }
+      result[key] = clamped;
     } else {
       warnings.push(`缺少 psychological.scores.${key}，使用默认值 50`);
     }

@@ -22,15 +22,16 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
     maxDelay = RETRY_CONFIG.maxDelay,
   } = options;
 
+  const safeMaxRetries = Math.max(0, maxRetries);
   let lastError: Error | undefined;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= safeMaxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      if (attempt === maxRetries) {
+      if (attempt === safeMaxRetries) {
         break;
       }
 

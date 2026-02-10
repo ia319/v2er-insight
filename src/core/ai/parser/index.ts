@@ -7,14 +7,21 @@ import { validateResponse, type ValidationResult } from './validator';
 export type { ValidationResult };
 
 /**
- * 如果存在 markdown 代码块，从中提取 JSON
+ * 如果存在 Markdown 代码块，从中提取 JSON
+ *
+ * 优先匹配 ```json 标记的代码块，其次匹配无标记代码块
  */
 function extractJson(text: string): string {
-  // Try to extract from ```json ... ``` or ``` ... ```
-  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)```/);
+  if (jsonBlockMatch && jsonBlockMatch[1]) {
+    return jsonBlockMatch[1].trim();
+  }
+
+  const codeBlockMatch = text.match(/```\s*([\s\S]*?)```/);
   if (codeBlockMatch && codeBlockMatch[1]) {
     return codeBlockMatch[1].trim();
   }
+
   return text.trim();
 }
 

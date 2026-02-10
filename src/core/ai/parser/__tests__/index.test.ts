@@ -1,62 +1,75 @@
 /**
- * parser/index.ts 单元测试
+ * Unit tests for parser/index.ts
  */
 
 import { describe, it, expect } from 'vitest';
 import { parseResponse } from '../index';
 
 describe('parseResponse', () => {
-  describe('JSON 提取', () => {
-    it('应该从纯 JSON 文本中解析', () => {
-      const json = JSON.stringify({ summary: '测试摘要', risk: { level: 'safe', reason: '正常' } });
+  describe('JSON extraction', () => {
+    it('should parse from plain JSON text', () => {
+      const json = JSON.stringify({
+        summary: 'Test summary',
+        risk: { level: 'safe', reason: 'Normal' },
+      });
 
       const result = parseResponse(json);
 
-      expect(result.data.summary).toBe('测试摘要');
+      expect(result.data.summary).toBe('Test summary');
     });
 
-    it('应该从 markdown 代码块中提取 JSON', () => {
+    it('should extract JSON from markdown code blocks', () => {
       const text =
-        '```json\n{"summary": "代码块测试", "risk": {"level": "safe", "reason": "测试"}}\n```';
+        '```json\n{"summary": "Code block test", "risk": {"level": "safe", "reason": "Test"}}\n```';
 
       const result = parseResponse(text);
 
-      expect(result.data.summary).toBe('代码块测试');
+      expect(result.data.summary).toBe('Code block test');
     });
 
-    it('应该从无语言标识的代码块中提取 JSON', () => {
-      const text = '```\n{"summary": "无标识测试"}\n```';
+    it('should extract JSON from untagged code blocks', () => {
+      const text = '```\n{"summary": "Untagged test"}\n```';
 
       const result = parseResponse(text);
 
-      expect(result.data.summary).toBe('无标识测试');
+      expect(result.data.summary).toBe('Untagged test');
     });
 
-    it('应该处理代码块前后有文本的情况', () => {
-      const text = '以下是分析结果：\n```json\n{"summary": "前后文本测试"}\n```\n分析完成。';
+    it('should handle text before and after code blocks', () => {
+      const text =
+        'Here is the analysis result:\n```json\n{"summary": "Context text test"}\n```\nAnalysis finished.';
 
       const result = parseResponse(text);
 
-      expect(result.data.summary).toBe('前后文本测试');
+      expect(result.data.summary).toBe('Context text test');
+    });
+
+    it('should prefer json-tagged blocks when multiple blocks exist', () => {
+      const text =
+        '```text\nThis is not JSON\n```\n```json\n{"summary": "JSON tag preferred"}\n```';
+
+      const result = parseResponse(text);
+
+      expect(result.data.summary).toBe('JSON tag preferred');
     });
   });
 
-  describe('错误处理', () => {
-    it('无效 JSON 应该返回默认值和警告', () => {
-      const result = parseResponse('这不是有效的 JSON');
+  describe('error handling', () => {
+    it('should return default values and warnings for invalid JSON', () => {
+      const result = parseResponse('not valid JSON');
 
       expect(result.warnings.some((w) => w.includes('JSON 解析失败'))).toBe(true);
       expect(result.data.summary).toBe('数据缺失，无法生成摘要');
     });
 
-    it('空字符串应该返回默认值', () => {
+    it('should return default values for empty string', () => {
       const result = parseResponse('');
 
       expect(result.warnings.length).toBeGreaterThan(0);
     });
 
-    it('损坏的 JSON 应该返回警告', () => {
-      const result = parseResponse('{"summary": "未闭合');
+    it('should return warnings for corrupted JSON', () => {
+      const result = parseResponse('{"summary": "Unclosed');
 
       expect(result.warnings.some((w) => w.includes('JSON 解析失败'))).toBe(true);
     });

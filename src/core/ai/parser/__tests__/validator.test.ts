@@ -1,29 +1,29 @@
 /**
- * parser/validator.ts 单元测试
+ * Unit tests for parser/validator.ts
  */
 
 import { describe, it, expect } from 'vitest';
 import { validateResponse } from '../validator';
 
 describe('validateResponse', () => {
-  describe('完整有效数据', () => {
-    it('应该正确解析完整的有效响应', () => {
+  describe('complete valid data', () => {
+    it('should correctly parse complete valid response', () => {
       const validData = {
-        summary: '测试摘要',
+        summary: 'Test summary',
         professional: {
           tech_stack: ['TypeScript', 'React'],
-          career_path: '前端开发',
-          level: '中级',
-          focus_coherence: '高',
+          career_path: 'Frontend Developer',
+          level: 'Intermediate',
+          focus_coherence: 'High',
           evolution: {
-            summary: '持续成长',
+            summary: 'Continuous growth',
             timeline: [{ period: '2023', focus: 'React' }],
           },
         },
         personal: {
-          hobbies: ['编程', '阅读'],
-          life_stage: '职场新人',
-          values: ['效率', '创新'],
+          hobbies: ['Programming', 'Reading'],
+          life_stage: 'Career Starter',
+          values: ['Efficiency', 'Innovation'],
         },
         psychological: {
           scores: {
@@ -33,35 +33,35 @@ describe('validateResponse', () => {
             agreeableness: 75,
             neuroticism: 30,
           },
-          keywords: ['好奇', '理性'],
+          keywords: ['Curious', 'Rational'],
         },
         behavioral: {
-          role: '贡献者',
-          interaction_style: '友好',
-          active_pattern: '工作日活跃',
-          heat_sensitivity: '中等',
+          role: 'Contributor',
+          interaction_style: 'Friendly',
+          active_pattern: 'Weekday active',
+          heat_sensitivity: 'Medium',
         },
         social: {
-          content_appeal: '技术分享',
-          discussion_depth: '深入',
+          content_appeal: 'Tech sharing',
+          discussion_depth: 'Deep',
         },
         risk: {
           level: 'safe',
-          reason: '正常用户',
+          reason: 'Normal user',
         },
       };
 
       const result = validateResponse(validData);
 
       expect(result.warnings).toHaveLength(0);
-      expect(result.data.summary).toBe('测试摘要');
+      expect(result.data.summary).toBe('Test summary');
       expect(result.data.professional.tech_stack).toEqual(['TypeScript', 'React']);
       expect(result.data.risk.level).toBe('safe');
     });
   });
 
-  describe('缺失字段处理', () => {
-    it('空对象应该返回默认值和警告', () => {
+  describe('missing field handling', () => {
+    it('should return default values and warnings for empty object', () => {
       const result = validateResponse({});
 
       expect(result.warnings.length).toBeGreaterThan(0);
@@ -70,32 +70,32 @@ describe('validateResponse', () => {
       expect(result.data.risk.level).toBe('safe');
     });
 
-    it('非对象输入应该返回默认值', () => {
+    it('should return default values for non-object input', () => {
       const result = validateResponse(null);
 
       expect(result.warnings).toContain('响应不是有效对象，使用默认值');
       expect(result.data.summary).toBe('数据缺失，无法生成摘要');
     });
 
-    it('字符串输入应该返回默认值', () => {
+    it('should return default values for string input', () => {
       const result = validateResponse('invalid');
 
       expect(result.warnings).toContain('响应不是有效对象，使用默认值');
     });
   });
 
-  describe('嵌套对象深度合并', () => {
-    it('缺失 evolution 字段应该使用默认值', () => {
+  describe('deep merge of nested objects', () => {
+    it('should use default values for missing evolution field', () => {
       const data = {
-        summary: '测试',
+        summary: 'Test',
         professional: {
           tech_stack: ['Python'],
-          career_path: '后端开发',
-          level: '高级',
-          focus_coherence: '高',
+          career_path: 'Backend Developer',
+          level: 'Senior',
+          focus_coherence: 'High',
           // evolution 缺失
         },
-        personal: { hobbies: [], life_stage: '资深', values: [] },
+        personal: { hobbies: [], life_stage: 'Senior', values: [] },
         psychological: {
           scores: {
             openness: 70,
@@ -107,13 +107,13 @@ describe('validateResponse', () => {
           keywords: [],
         },
         behavioral: {
-          role: '专家',
-          interaction_style: '专业',
-          active_pattern: '持续',
-          heat_sensitivity: '低',
+          role: 'Expert',
+          interaction_style: 'Professional',
+          active_pattern: 'Continuous',
+          heat_sensitivity: 'Low',
         },
-        social: { content_appeal: '技术', discussion_depth: '深' },
-        risk: { level: 'safe', reason: '正常' },
+        social: { content_appeal: 'Tech', discussion_depth: 'Deep' },
+        risk: { level: 'safe', reason: 'Normal' },
       };
 
       const result = validateResponse(data);
@@ -125,21 +125,21 @@ describe('validateResponse', () => {
     });
   });
 
-  describe('风险等级验证', () => {
-    it('有效风险等级应该保留', () => {
+  describe('risk level validation', () => {
+    it('should retain valid risk levels', () => {
       const data = {
-        risk: { level: 'suspicious', reason: '可疑行为' },
+        risk: { level: 'suspicious', reason: 'Suspicious behavior' },
       };
 
       const result = validateResponse(data);
 
       expect(result.data.risk.level).toBe('suspicious');
-      expect(result.data.risk.reason).toBe('可疑行为');
+      expect(result.data.risk.reason).toBe('Suspicious behavior');
     });
 
-    it('无效风险等级应该使用默认值并警告', () => {
+    it('should use default value and warn for invalid risk levels', () => {
       const data = {
-        risk: { level: 'invalid_level', reason: '测试' },
+        risk: { level: 'invalid_level', reason: 'Test' },
       };
 
       const result = validateResponse(data);
@@ -149,8 +149,8 @@ describe('validateResponse', () => {
     });
   });
 
-  describe('心理评分验证', () => {
-    it('部分缺失的评分应该使用默认值 50', () => {
+  describe('psychological score validation', () => {
+    it('should use default value 50 for partially missing scores', () => {
       const data = {
         psychological: {
           scores: {
@@ -167,6 +167,32 @@ describe('validateResponse', () => {
       expect(result.data.psychological.scores.conscientiousness).toBe(50);
       expect(result.data.psychological.scores.extraversion).toBe(50);
       expect(result.warnings.some((w) => w.includes('conscientiousness'))).toBe(true);
+    });
+
+    it('should clamp out-of-range scores to 0-100 and add warnings', () => {
+      const data = {
+        psychological: {
+          scores: {
+            openness: 150,
+            conscientiousness: -10,
+            extraversion: 50,
+            agreeableness: 75,
+            neuroticism: 200,
+          },
+          keywords: [],
+        },
+      };
+
+      const result = validateResponse(data);
+
+      expect(result.data.psychological.scores.openness).toBe(100);
+      expect(result.data.psychological.scores.conscientiousness).toBe(0);
+      expect(result.data.psychological.scores.neuroticism).toBe(100);
+      expect(result.data.psychological.scores.extraversion).toBe(50);
+      expect(result.warnings.some((w) => w.includes('openness') && w.includes('150'))).toBe(true);
+      expect(
+        result.warnings.some((w) => w.includes('conscientiousness') && w.includes('-10')),
+      ).toBe(true);
     });
   });
 });

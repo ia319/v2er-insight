@@ -1,5 +1,5 @@
 /**
- * utils/api-key.ts 单元测试
+ * Unit tests for utils/api-key.ts
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -24,7 +24,7 @@ describe('resolveApiKey', () => {
     vi.clearAllMocks();
   });
 
-  it('显式参数优先级最高', async () => {
+  it('explicit parameter should have the highest priority', async () => {
     const { resolveApiKey } = await import('../api-key');
 
     const result = resolveApiKey('explicit-key');
@@ -32,7 +32,7 @@ describe('resolveApiKey', () => {
     expect(result).toBe('explicit-key');
   });
 
-  it('配置文件优先级高于环境变量', async () => {
+  it('config file should have higher priority than environment variables', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ geminiApiKey: 'config-key' }));
     process.env.GOOGLE_API_KEY = 'env-key';
@@ -43,7 +43,7 @@ describe('resolveApiKey', () => {
     expect(result).toBe('config-key');
   });
 
-  it('环境变量 GOOGLE_API_KEY 应该被识别', async () => {
+  it('environment variable GOOGLE_API_KEY should be recognized', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     process.env.GOOGLE_API_KEY = 'google-env-key';
 
@@ -53,7 +53,7 @@ describe('resolveApiKey', () => {
     expect(result).toBe('google-env-key');
   });
 
-  it('环境变量 GEMINI_API_KEY 应该被识别', async () => {
+  it('environment variable GEMINI_API_KEY should be recognized', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     process.env.GEMINI_API_KEY = 'gemini-env-key';
 
@@ -63,7 +63,7 @@ describe('resolveApiKey', () => {
     expect(result).toBe('gemini-env-key');
   });
 
-  it('所有来源都没有时返回 null', async () => {
+  it('should return null when no source is available', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GEMINI_API_KEY;
@@ -74,7 +74,7 @@ describe('resolveApiKey', () => {
     expect(result).toBeNull();
   });
 
-  it('空字符串参数应该被忽略', async () => {
+  it('empty string parameter should be ignored', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     process.env.GOOGLE_API_KEY = 'fallback-key';
 
@@ -84,10 +84,10 @@ describe('resolveApiKey', () => {
     expect(result).toBe('fallback-key');
   });
 
-  it('配置文件读取错误应该被忽略', async () => {
+  it('config file read error should be ignored', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation(() => {
-      throw new Error('读取失败');
+      throw new Error('Read failed');
     });
     process.env.GOOGLE_API_KEY = 'env-fallback';
 

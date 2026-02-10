@@ -46,7 +46,7 @@ export function resolveApiKey(explicit?: string): string | null {
 
   const config = loadUserConfig();
   if (config?.geminiApiKey) {
-    return config.geminiApiKey;
+    return config.geminiApiKey.trim();
   }
 
   for (const key of ENV_KEYS) {
