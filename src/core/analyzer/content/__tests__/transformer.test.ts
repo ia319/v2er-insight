@@ -1,5 +1,5 @@
 /**
- * transformer 单元测试
+ * Unit tests for transformer
  */
 
 import { describe, it, expect } from 'vitest';
@@ -7,12 +7,12 @@ import { transformTopics, transformReplies } from '../transformer';
 import type { V2exTopicDetail, V2exReply } from '@/core/v2ex/types/entities';
 
 describe('transformTopics', () => {
-  it('应将 V2exTopicDetail 转换为 ContentTopic', () => {
+  it('should transform V2exTopicDetail to ContentTopic', () => {
     const topics: V2exTopicDetail[] = [
       {
-        title: '测试标题',
-        nodeName: '技术',
-        content: '测试内容',
+        title: 'Test Title',
+        nodeName: 'Technology',
+        content: 'Test Content',
         createdAt: '2024-01-01',
         replyCount: 10,
         clickCount: 100,
@@ -24,25 +24,25 @@ describe('transformTopics', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual({
-      title: '测试标题',
-      nodeName: '技术',
-      content: '测试内容',
+      title: 'Test Title',
+      nodeName: 'Technology',
+      content: 'Test Content',
     });
   });
 
-  it('空数组应返回空数组', () => {
+  it('should return empty array for empty input', () => {
     expect(transformTopics([])).toEqual([]);
   });
 });
 
 describe('transformReplies', () => {
-  it('应将 V2exReply 转换为 ContentReply', () => {
+  it('should transform V2exReply to ContentReply', () => {
     const replies: V2exReply[] = [
       {
-        topicTitle: '回复的帖子标题',
-        nodeName: '问与答',
-        content: '回复内容',
-        replyTime: '1 天前',
+        topicTitle: 'Reply Topic Title',
+        nodeName: 'Q&A',
+        content: 'Reply Content',
+        replyTime: '1 day ago',
         topicReplyCount: 50,
         isDirectReply: true,
         replyTo: null,
@@ -53,13 +53,13 @@ describe('transformReplies', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual({
-      topicTitle: '回复的帖子标题',
-      nodeName: '问与答',
-      content: '回复内容',
+      topicTitle: 'Reply Topic Title',
+      nodeName: 'Q&A',
+      content: 'Reply Content',
     });
   });
 
-  it('空数组应返回空数组', () => {
+  it('should return empty array for empty input', () => {
     expect(transformReplies([])).toEqual([]);
   });
 });

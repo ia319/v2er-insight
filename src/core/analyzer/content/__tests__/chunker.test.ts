@@ -1,5 +1,5 @@
 /**
- * chunker 单元测试
+ * Unit tests for chunker
  */
 
 import { describe, it, expect } from 'vitest';
@@ -7,12 +7,12 @@ import { chunkPeriodContent } from '../chunker';
 import type { ActivePeriod } from '../../types';
 import type { V2exTopicDetail, V2exReply } from '@/core/v2ex/types/entities';
 
-// 创建测试用的帖子
+// Create topics for testing
 function createTopic(index: number): V2exTopicDetail {
   return {
-    title: `帖子 ${index}`,
-    nodeName: '技术',
-    content: `内容 ${index}`,
+    title: `Topic ${index}`,
+    nodeName: 'Technology',
+    content: `Content ${index}`,
     createdAt: '2024-01-01',
     replyCount: 10,
     clickCount: 100,
@@ -20,13 +20,13 @@ function createTopic(index: number): V2exTopicDetail {
   };
 }
 
-// 创建测试用的回复
+// Create replies for testing
 function createReply(index: number): V2exReply {
   return {
-    topicTitle: `回复帖子 ${index}`,
-    nodeName: '问与答',
-    content: `回复内容 ${index}`,
-    replyTime: '1 天前',
+    topicTitle: `Reply Topic ${index}`,
+    nodeName: 'Q&A',
+    content: `Reply Content ${index}`,
+    replyTime: '1 day ago',
     topicReplyCount: 50,
     isDirectReply: true,
     replyTo: null,
@@ -34,7 +34,7 @@ function createReply(index: number): V2exReply {
 }
 
 describe('chunkPeriodContent', () => {
-  it('内容量小于阈值时返回 PeriodContent', () => {
+  it('should return PeriodContent when content is below threshold', () => {
     const period: ActivePeriod = {
       index: 0,
       startDate: new Date('2024-01-01'),
@@ -45,7 +45,7 @@ describe('chunkPeriodContent', () => {
 
     const result = chunkPeriodContent(period);
 
-    // 应该是 PeriodContent（没有 chunkIndex）
+    // Should be PeriodContent (no chunkIndex)
     expect(result).not.toBeInstanceOf(Array);
     expect(result).toHaveProperty('periodIndex', 0);
     expect(result).toHaveProperty('topics');
@@ -53,8 +53,8 @@ describe('chunkPeriodContent', () => {
     expect(result).not.toHaveProperty('chunkIndex');
   });
 
-  it('帖子超过阈值时返回分片数组', () => {
-    // 创建 25 个帖子（超过 CHUNK_MAX_TOPICS=20）
+  it('should return chunk array when topics exceed threshold', () => {
+    // Create 25 topics (exceeds CHUNK_MAX_TOPICS=20)
     const topics = Array.from({ length: 25 }, (_, i) => createTopic(i));
 
     const period: ActivePeriod = {
@@ -76,8 +76,8 @@ describe('chunkPeriodContent', () => {
     expect(chunks[1]?.chunkIndex).toBe(1);
   });
 
-  it('回复超过阈值时返回分片数组', () => {
-    // 创建 150 个回复（超过 CHUNK_MAX_REPLIES=100）
+  it('should return chunk array when replies exceed threshold', () => {
+    // Create 150 replies (exceeds CHUNK_MAX_REPLIES=100)
     const replies = Array.from({ length: 150 }, (_, i) => createReply(i));
 
     const period: ActivePeriod = {
@@ -96,7 +96,7 @@ describe('chunkPeriodContent', () => {
     expect(chunks.length).toBe(2);
   });
 
-  it('分片应包含正确的 periodIndex', () => {
+  it('chunk should contain correct periodIndex', () => {
     const topics = Array.from({ length: 25 }, (_, i) => createTopic(i));
 
     const period: ActivePeriod = {
