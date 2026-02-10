@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
+import type { ContentTopic, ContentReply } from '@/core/analyzer/types';
 
 vi.mock('node:fs');
 
@@ -11,7 +12,7 @@ vi.mock('node:fs');
 function createInput(
   overrides: {
     totalPeriods?: number;
-    contents?: Array<{ periodIndex: number; topics: never[]; replies: never[] }>;
+    contents?: Array<{ periodIndex: number; topics: ContentTopic[]; replies: ContentReply[] }>;
   } = {},
 ) {
   return {
@@ -34,6 +35,7 @@ function createInput(
 
 describe('buildMessageSequence', () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.mocked(fs.readFileSync).mockReturnValue('# System Prompt\nTest prompt content');
   });
 
