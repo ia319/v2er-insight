@@ -25,14 +25,14 @@ describe('config/path', () => {
     it('should return config path in home directory', async () => {
       const { getConfigPath } = await import('../path');
       const result = getConfigPath();
-      expect(result).toBe(path.join(mockHomeDir, '.v2errc.json'));
+      expect(result).toBe(path.join(mockHomeDir, '.v2er-insight', 'config.json'));
     });
   });
 });
 
 describe('config/storage', () => {
   const mockHomeDir = '/mock/home';
-  const mockConfigPath = path.join(mockHomeDir, '.v2errc.json');
+  const mockConfigPath = path.join(mockHomeDir, '.v2er-insight', 'config.json');
 
   beforeEach(() => {
     vi.resetModules();
