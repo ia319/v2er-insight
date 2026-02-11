@@ -11,7 +11,11 @@
 
 import type { V2erConfig } from './types';
 
-/** 必填字段的完整配置类型（去除所有 optional） */
+/**
+ * 合并默认值后的配置类型
+ * - 对象类型的字段（如 ai、fetch）：所有子字段变为必填
+ * - 原始类型的字段（如 proxy）：key 必须存在，但值仍可能为 undefined
+ */
 export type ResolvedConfig = Required<{
   [K in keyof V2erConfig]: V2erConfig[K] extends object | undefined
     ? Required<NonNullable<V2erConfig[K]>>
