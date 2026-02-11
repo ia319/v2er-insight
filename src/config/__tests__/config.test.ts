@@ -25,14 +25,14 @@ describe('config/path', () => {
     it('should return config path in home directory', async () => {
       const { getConfigPath } = await import('../path');
       const result = getConfigPath();
-      expect(result).toBe(path.join(mockHomeDir, '.v2errc.json'));
+      expect(result).toBe(path.join(mockHomeDir, '.v2er-insight', 'config.json'));
     });
   });
 });
 
 describe('config/storage', () => {
   const mockHomeDir = '/mock/home';
-  const mockConfigPath = path.join(mockHomeDir, '.v2errc.json');
+  const mockConfigPath = path.join(mockHomeDir, '.v2er-insight', 'config.json');
 
   beforeEach(() => {
     vi.resetModules();
@@ -71,6 +71,7 @@ describe('config/storage', () => {
 
   describe('writeConfig', () => {
     it('should write formatted JSON to file with secure permissions', async () => {
+      mockedFs.existsSync.mockReturnValue(true);
       mockedFs.writeFileSync.mockImplementation(() => {});
       const { writeConfig } = await import('../storage');
 
@@ -81,6 +82,54 @@ describe('config/storage', () => {
         JSON.stringify({ proxy: 'http://test:1234' }, null, 2),
         { encoding: 'utf-8', mode: 0o600 },
       );
+    });
+
+    it('should create config directory if it does not exist', async () => {
+      mockedFs.existsSync.mockReturnValue(false);
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      const { writeConfig } = await import('../storage');
+
+      writeConfig({ proxy: 'http://test:1234' });
+
+      expect(mockedFs.mkdirSync).toHaveBeenCalledWith(path.join(mockHomeDir, '.v2er-insight'), {
+        recursive: true,
+      });
+    });
+  });
+
+  describe('getConfig', () => {
+    it('should return defaults when no user config exists', async () => {
+      mockedFs.existsSync.mockReturnValue(false);
+      const { getConfig } = await import('../storage');
+
+      const config = getConfig();
+
+      expect(config.ai?.provider).toBe('gemini');
+      expect(config.ai?.model).toBe('gemini-3-pro-preview');
+      expect(config.ai?.thinking).toBe('high');
+      expect(config.fetch?.timeout).toBe(30_000);
+      expect(config.analyzer?.inactivityThreshold).toBe(60);
+      expect(config.data?.keepRaw).toBe(false);
+      expect(config.log?.level).toBe('info');
+    });
+
+    it('should merge user config over defaults', async () => {
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readFileSync.mockReturnValue(
+        JSON.stringify({ ai: { model: 'custom-model' }, proxy: 'http://my-proxy' }),
+      );
+      const { getConfig } = await import('../storage');
+
+      const config = getConfig();
+
+      // 用户覆盖的值
+      expect(config.ai?.model).toBe('custom-model');
+      expect(config.proxy).toBe('http://my-proxy');
+      // 默认值保留
+      expect(config.ai?.provider).toBe('gemini');
+      expect(config.ai?.timeout).toBe(60_000);
+      expect(config.fetch?.timeout).toBe(30_000);
     });
   });
 });

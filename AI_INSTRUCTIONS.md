@@ -50,9 +50,16 @@ root
 │   │
 │   ├── config/               # [Shared] Configuration management
 │   │   ├── index.ts          # Public exports
-│   │   ├── types.ts          # V2erConfig interface
-│   │   ├── path.ts           # Config file path (~/.v2errc.json)
-│   │   ├── storage.ts        # Read/write config file
+│   │   ├── types/            # Modular config type definitions
+│   │   │   ├── index.ts          # Re-exports all types + V2erConfig
+│   │   │   ├── ai.ts             # AIConfig, ThinkingLevel
+│   │   │   ├── fetch.ts          # FetchConfig
+│   │   │   ├── analyzer.ts       # AnalyzerConfig
+│   │   │   ├── data.ts           # DataConfig
+│   │   │   └── log.ts            # LogConfig
+│   │   ├── defaults.ts       # DEFAULT_CONFIG + ResolvedConfig type
+│   │   ├── path.ts           # Config dir/file path (~/.v2er-insight/)
+│   │   ├── storage.ts        # Read/write/merge config (deepMerge)
 │   │   └── proxy.ts          # Proxy URL resolution
 │   │
 │   ├── core/                 # [Domain Layer] Business logic
@@ -205,11 +212,14 @@ root
 ### 5. Config Module (Complete)
 
 - **Role**: Persistent configuration management.
+- **Config path**: `~/.v2er-insight/config.json`
 
 **Structure**:
 
-- `path.ts` → Config file path resolution (`~/.v2errc.json`)
-- `storage.ts` → Read/write JSON config
+- `types/` → Modular config types (AIConfig, FetchConfig, AnalyzerConfig, DataConfig, LogConfig)
+- `defaults.ts` → `DEFAULT_CONFIG` with all module defaults; `ResolvedConfig` utility type
+- `path.ts` → Config dir/file path resolution (`~/.v2er-insight/`)
+- `storage.ts` → Read/write config, `getConfig()` merges defaults with user settings via `deepMerge`
 - `proxy.ts` → Get proxy URL (priority: config > HTTPS_PROXY > HTTP_PROXY)
 
 ### 6. Analyzer Module (Complete)
@@ -292,7 +302,7 @@ root
 
 **Priority Order**:
 
-1. Config file (`~/.v2errc.json`)
+1. Config file (`~/.v2er-insight/config.json`)
 2. Environment variable `HTTPS_PROXY`
 3. Environment variable `HTTP_PROXY`
 
