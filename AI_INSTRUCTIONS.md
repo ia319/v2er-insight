@@ -112,11 +112,14 @@ root
 │   │           └── retry.ts         # Retry with exponential backoff
 │   │
 │   └── infra/                # [Infrastructure Layer] External adapters
-│       └── fetcher/          # [Complete] Generic HTTP fetcher
+│       ├── fetcher/          # [Complete] Generic HTTP fetcher
+│       │   ├── index.ts      # Public API exports
+│       │   ├── fetcher.ts    # SequentialStrategy & Fetcher class
+│       │   ├── types.ts      # FetchOptions, FetchResult
+│       │   └── agent.ts      # Proxy agent creation
+│       └── logger/           # [Complete] Global logger
 │           ├── index.ts      # Public API exports
-│           ├── fetcher.ts    # SequentialStrategy & Fetcher class
-│           ├── types.ts      # FetchOptions, FetchResult
-│           └── agent.ts      # Proxy agent creation
+│           └── logger.ts     # Level-based logging (error/warn/info/debug)
 ```
 
 ## Modules
@@ -265,6 +268,25 @@ root
 
 - `DEFAULT_MODEL: 'gemini-2.5-flash-preview-05-20'`
 - `MAX_RETRIES: 3`, `BASE_DELAY: 1000`, `MAX_DELAY: 30000`
+
+### 8. Logger Module (Complete)
+
+- **Role**: Global level-based logger for all layers. Located in `src/infra/logger`.
+
+**Public API**:
+
+- `logger.debug(msg)` → Only visible when level is `debug`
+- `logger.info(msg)` → Normal output (default level)
+- `logger.warn(msg)` → Warning with `[WARN]` label
+- `logger.error(msg)` → Error with `[ERROR]` label
+- `logger.setLevel(level)` → Set minimum log level
+- `logger.getLevel()` → Get current level
+
+**Design**:
+
+- Zero external dependencies (ANSI escape codes for colors)
+- Global singleton, set level once at program entry
+- Level priority: `error > warn > info > debug`
 
 ## Proxy Configuration
 
