@@ -61,8 +61,12 @@ export function cleanExpiredData(username: string): DataFileType[] {
     const filePath = getDataFilePath(username, type);
 
     if (fs.existsSync(filePath) && isExpired(filePath, retentionDays)) {
-      fs.unlinkSync(filePath);
-      deleted.push(type);
+      try {
+        fs.unlinkSync(filePath);
+        deleted.push(type);
+      } catch {
+        // 文件可能在检查后被外部删除，忽略 ENOENT
+      }
     }
   }
 

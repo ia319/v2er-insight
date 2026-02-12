@@ -32,5 +32,5 @@ export function writeDataFile(
 
   const content = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
 
-  fs.writeFileSync(filePath, content, { encoding: 'utf-8' });
+  fs.writeFileSync(filePath, content, { encoding: 'utf-8', mode: 0o600 });
 }

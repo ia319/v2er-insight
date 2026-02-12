@@ -151,7 +151,7 @@ describe('storage/writer', () => {
       expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
         path.join(mockDataBase, 'livid', 'raw.json'),
         JSON.stringify(data, null, 2),
-        { encoding: 'utf-8' },
+        { encoding: 'utf-8', mode: 0o600 },
       );
     });
 
@@ -166,7 +166,7 @@ describe('storage/writer', () => {
       expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
         path.join(mockDataBase, 'livid', 'raw.json'),
         JSON.stringify(data),
-        { encoding: 'utf-8' },
+        { encoding: 'utf-8', mode: 0o600 },
       );
     });
   });

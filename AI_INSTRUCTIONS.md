@@ -311,7 +311,7 @@ root
 
 **Data Directory Structure**:
 
-```
+```text
 ~/.v2er-insight/data/{username}/
 ├── raw.json       # Raw data captured
 ├── analyzed.json   # Analyzer output
@@ -323,7 +323,7 @@ root
 - `getUserDataDir(username)` → User data directory path
 - `getDataFilePath(username, type)` → Specific data file path
 - `readDataFile<T>(username, type)` → Read and parse JSON (returns `null` on missing/invalid)
-- `writeDataFile(username, type, data, options?)` → Write JSON with auto-mkdir
+- `writeDataFile(username, type, data, options?)` → Write JSON with auto-mkdir and `mode: 0o600`
 - `cleanExpiredData(username)` → Remove expired `raw.json`/`analyzed.json` based on config
 
 **Cleanup Strategy**:
