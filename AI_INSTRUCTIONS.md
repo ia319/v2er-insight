@@ -318,7 +318,7 @@ root
 └── result.json     # AI analysis results
 ```
 
-**Public API**:
+**Public API** (username must match `/^[a-zA-Z0-9_-]+$/`, otherwise throws Error):
 
 - `getUserDataDir(username)` → User data directory path
 - `getDataFilePath(username, type)` → Specific data file path
