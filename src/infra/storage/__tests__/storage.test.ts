@@ -55,6 +55,26 @@ describe('storage/paths', () => {
       );
     });
   });
+
+  describe('username validation', () => {
+    it('should accept valid usernames (letters, digits, underscore, hyphen)', async () => {
+      const { getUserDataDir } = await import('../paths');
+      expect(() => getUserDataDir('livid')).not.toThrow();
+      expect(() => getUserDataDir('test_user-01')).not.toThrow();
+    });
+
+    it('should reject path traversal attempts', async () => {
+      const { getUserDataDir } = await import('../paths');
+      expect(() => getUserDataDir('../../../etc')).toThrow('非法字符');
+    });
+
+    it('should reject usernames with special characters', async () => {
+      const { getUserDataDir } = await import('../paths');
+      expect(() => getUserDataDir('user name')).toThrow('非法字符');
+      expect(() => getUserDataDir('user/name')).toThrow('非法字符');
+      expect(() => getUserDataDir('')).toThrow('非法字符');
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -115,8 +135,7 @@ describe('storage/writer', () => {
   });
 
   describe('writeDataFile', () => {
-    it('should create directory and write formatted JSON by default', async () => {
-      mockedFs.existsSync.mockReturnValue(false);
+    it('should always create directory and write formatted JSON', async () => {
       mockedFs.mkdirSync.mockImplementation(() => '' as never);
       mockedFs.writeFileSync.mockImplementation(() => {});
       const { writeDataFile } = await import('../writer');
@@ -124,7 +143,7 @@ describe('storage/writer', () => {
       const data = { topics: [1, 2, 3] };
       writeDataFile('livid', 'raw', data);
 
-      // 应创建目录
+      // mkdirSync 始终调用，recursive: true 已处理目录存在的情况
       expect(mockedFs.mkdirSync).toHaveBeenCalledWith(path.join(mockDataBase, 'livid'), {
         recursive: true,
       });
@@ -136,18 +155,8 @@ describe('storage/writer', () => {
       );
     });
 
-    it('should skip directory creation when it already exists', async () => {
-      mockedFs.existsSync.mockReturnValue(true);
-      mockedFs.writeFileSync.mockImplementation(() => {});
-      const { writeDataFile } = await import('../writer');
-
-      writeDataFile('livid', 'result', { summary: 'test' });
-
-      expect(mockedFs.mkdirSync).not.toHaveBeenCalled();
-    });
-
     it('should write compact JSON when pretty is false', async () => {
-      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
       mockedFs.writeFileSync.mockImplementation(() => {});
       const { writeDataFile } = await import('../writer');
 

@@ -48,7 +48,7 @@ function isExpired(filePath: string, retentionDays: number): boolean {
 export function cleanExpiredData(username: string): DataFileType[] {
   const config = getConfig();
   const keepRaw = config.data?.keepRaw ?? false;
-  const retentionDays = config.data?.rawRetention ?? 1;
+  const retentionDays = Math.max(0, config.data?.rawRetention ?? 1);
 
   // 永久保留模式，不清理
   if (keepRaw) {

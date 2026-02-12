@@ -6,10 +6,8 @@
  */
 
 import fs from 'fs';
-import type { DataFileType } from './types';
-import type { WriteOptions } from './types';
-import { getDataFilePath } from './paths';
-import { getUserDataDir } from './paths';
+import type { DataFileType, WriteOptions } from './types';
+import { getDataFilePath, getUserDataDir } from './paths';
 
 /**
  * 写入指定用户的数据文件
@@ -29,10 +27,8 @@ export function writeDataFile(
   const dataDir = getUserDataDir(username);
   const filePath = getDataFilePath(username, type);
 
-  // 自动创建用户数据目录
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
+  // recursive: true 在目录已存在时不会抛异常，无需前置 existsSync 检查
+  fs.mkdirSync(dataDir, { recursive: true });
 
   const content = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
 

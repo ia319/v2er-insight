@@ -16,12 +16,27 @@ import { DATA_FILE_NAMES } from './types';
 /** 数据根目录名 */
 const DATA_DIR = 'data';
 
+/** 合法用户名格式：仅允许字母、数字、下划线、连字符 */
+const USERNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * 校验用户名是否合法
+ * @throws Error 用户名包含非法字符时抛出
+ */
+function validateUsername(username: string): void {
+  if (!USERNAME_PATTERN.test(username)) {
+    throw new Error(`用户名 "${username}" 包含非法字符，仅允许字母、数字、下划线和连字符`);
+  }
+}
+
 /**
  * 获取用户数据目录路径
  * @param username - V2EX 用户名
  * @returns 如 ~/.v2er-insight/data/livid/
+ * @throws Error 用户名包含非法字符时抛出
  */
 export function getUserDataDir(username: string): string {
+  validateUsername(username);
   return path.join(getConfigDir(), DATA_DIR, username);
 }
 
@@ -30,6 +45,7 @@ export function getUserDataDir(username: string): string {
  * @param username - V2EX 用户名
  * @param type - 数据文件类型
  * @returns 如 ~/.v2er-insight/data/livid/raw.json
+ * @throws Error 用户名包含非法字符时抛出
  */
 export function getDataFilePath(username: string, type: DataFileType): string {
   return path.join(getUserDataDir(username), DATA_FILE_NAMES[type]);
