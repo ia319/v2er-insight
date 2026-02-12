@@ -44,6 +44,7 @@ export const DEFAULT_CONFIG = {
   },
   data: {
     keepRaw: false,
+    rawRetention: 1,
   },
   log: {
     level: 'info' as const,

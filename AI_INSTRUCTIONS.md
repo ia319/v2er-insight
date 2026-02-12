@@ -124,6 +124,13 @@ root
 │       │   ├── fetcher.ts    # SequentialStrategy & Fetcher class
 │       │   ├── types.ts      # FetchOptions, FetchResult
 │       │   └── agent.ts      # Proxy agent creation
+│       ├── storage/          # [Complete] User data persistence
+│       │   ├── index.ts      # Public API exports
+│       │   ├── types.ts      # DataFileType, WriteOptions
+│       │   ├── paths.ts      # User data dir/file path resolution
+│       │   ├── reader.ts     # JSON file reading
+│       │   ├── writer.ts     # JSON file writing (auto-mkdir)
+│       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
 │           ├── index.ts      # Public API exports
 │           └── logger.ts     # Level-based logging (error/warn/info/debug)
@@ -297,6 +304,33 @@ root
 - Zero external dependencies (ANSI escape codes for colors)
 - Global singleton, set level once at program entry
 - Level priority: `error > warn > info > debug`
+
+### 9. Storage Module (Complete)
+
+- **Role**: User data file persistence and lifecycle management. Located in `src/infra/storage`.
+
+**Data Directory Structure**:
+
+```text
+~/.v2er-insight/data/{username}/
+├── raw.json       # Raw data captured
+├── analyzed.json   # Analyzer output
+└── result.json     # AI analysis results
+```
+
+**Public API** (username must match `/^[a-zA-Z0-9_-]+$/`, otherwise throws Error):
+
+- `getUserDataDir(username)` → User data directory path
+- `getDataFilePath(username, type)` → Specific data file path
+- `readDataFile<T>(username, type)` → Read and parse JSON (returns `null` on missing/invalid)
+- `writeDataFile(username, type, data, options?)` → Write JSON with auto-mkdir and `mode: 0o600`
+- `cleanExpiredData(username)` → Remove expired `raw.json`/`analyzed.json` based on config
+
+**Cleanup Strategy**:
+
+- `data.keepRaw = true` → Never clean
+- `data.keepRaw = false` → Delete files older than `data.rawRetention` days (default: 1)
+- `result.json` is never cleaned
 
 ## Proxy Configuration
 
