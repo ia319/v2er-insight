@@ -3,7 +3,7 @@
  */
 
 import { readConfig, writeConfig, getConfigPath } from '@/config';
-import { logger } from '../output';
+import { logger } from '@/infra/logger';
 
 interface ConfigProxyOptions {
   clear?: boolean;

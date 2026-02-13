@@ -11,7 +11,7 @@ const mockLogger = {
   detail: vi.fn(),
 };
 
-vi.mock('../../output', () => ({
+vi.mock('@/infra/logger', () => ({
   logger: mockLogger,
 }));
 

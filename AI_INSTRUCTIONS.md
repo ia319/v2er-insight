@@ -39,14 +39,15 @@ root
 ├── src/
 │   ├── cli/                  # [Complete] Command-line interface
 │   │   ├── index.ts          # CLI entry point (commander setup)
-│   │   ├── types.ts          # CLI option types
-│   │   ├── commands/         # Command handlers
-│   │   │   ├── index.ts      # Re-exports commands
-│   │   │   ├── fetch-user.ts # User data fetch command
-│   │   │   └── config.ts     # Config management command
-│   │   └── output/           # Output utilities
-│   │       ├── index.ts      # Re-exports
-│   │       └── logger.ts     # Formatted console output
+│   │   ├── types.ts          # CLI option types (CommandOptions suffix)
+│   │   ├── utils.ts          # CLI shared utilities (events/error logs)
+│   │   └── commands/         # Command handlers
+│   │       ├── index.ts      # Re-exports commands
+│   │       ├── fetch.ts      # runFetch: Fetch user data
+│   │       ├── analyze.ts    # runAnalyze: Process raw data
+│   │       ├── ai.ts         # runAi: AI profiling
+│   │       ├── show.ts       # runShow: Format and display report
+│   │       └── config.ts     # Proxy configuration command
 │   │
 │   ├── config/               # [Shared] Configuration management
 │   │   ├── index.ts          # Public exports
@@ -133,6 +134,7 @@ root
 │       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
 │           ├── index.ts      # Public API exports
+│           ├── colors.ts     # Shared ANSI color constants
 │           └── logger.ts     # Level-based logging (error/warn/info/debug)
 ```
 
@@ -202,19 +204,21 @@ root
 
 ### 4. CLI Module (Complete)
 
-- **Role**: Command-line interface for user interaction.
+- **Role**: Command-line interface for user interaction and analysis pipeline.
+- **Entry**: `src/cli/index.ts` (Subcommand architecture).
 
-**Commands**:
+**Subcommands**:
 
-- `v2er <username>` → Fetch all user data
-- `v2er <username> --topics` → Fetch topics only
-- `v2er <username> --replies` → Fetch replies only
-- `v2er config proxy <url>` → Set proxy
-- `v2er config proxy --clear` → Clear proxy
+- `v2er fetch <username>` → Fetch and save raw user data (raw.json)
+- `v2er analyze <username>` → Run statistics on raw data (analyzed.json)
+- `v2er ai <username>` → Generate user profile via Gemini (result.json)
+- `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
+- `v2er config proxy <url>` → Manage proxy settings
 
-**Output** (`output/`):
+**Shared Logic** (`utils.ts`):
 
-- `logger.ts` → Formatted console output (info, success, error, progress)
+- `createFetchEvents(label)`: Centralized progress/error reporting for fetch/ai operations.
+- `logFetchError(result)`: Unified error formatting with indentation alignment.
 
 ### 5. Config Module (Complete)
 

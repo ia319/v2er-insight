@@ -7,9 +7,14 @@
  * 使用 ANSI 转义码实现终端彩色输出，无外部依赖。
  */
 
+import { COLORS } from './colors';
+
 // -- 类型 --------------------------------------------------------------------
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+
+/** 未知总数的哨兵值 */
+export const UNKNOWN_TOTAL = -1;
 
 // -- 常量 --------------------------------------------------------------------
 
@@ -20,14 +25,6 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
   warn: 2,
   error: 3,
 };
-
-/** ANSI 颜色码 */
-const COLORS = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  yellow: '\x1b[33m',
-  gray: '\x1b[90m',
-} as const;
 
 /** 级别显示标签 */
 const LEVEL_LABELS: Record<LogLevel, string> = {
@@ -90,6 +87,37 @@ export const logger = {
   error(msg: string): void {
     if (shouldLog('error')) {
       console.error(formatMessage('error', msg));
+    }
+  },
+
+  // -- CLI 格式化输出 --------------------------------------------------------
+
+  /** 章节标题 — 分隔不同操作阶段 */
+  section(title: string): void {
+    if (shouldLog('info')) {
+      console.log(`\n${title}`);
+    }
+  },
+
+  /** 成功信息 — 带绿色对勾前缀 */
+  success(msg: string): void {
+    if (shouldLog('info')) {
+      console.log(`  ${COLORS.green}Done:${COLORS.reset} ${msg}`);
+    }
+  },
+
+  /** 缩进详情 — 补充上一行输出 */
+  detail(msg: string): void {
+    if (shouldLog('info')) {
+      console.log(`  ${msg}`);
+    }
+  },
+
+  /** 进度显示 — 页码或步骤进度 */
+  progress(current: number, total: number, label: string): void {
+    if (shouldLog('info')) {
+      const display = total === UNKNOWN_TOTAL ? `${current + 1}` : `${current + 1}/${total}`;
+      console.log(`  ${label} (${display})...`);
     }
   },
 };
