@@ -49,11 +49,13 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   const sequence = buildMessageSequence(analyzed);
   const totalMessages = sequence.messages.length + 1; // +1 for finalPrompt
 
-  // 创建 Provider 并初始化会话
+  // 创建 Provider
   const provider = new GeminiProvider(apiKey, model);
-  await provider.createSession(sequence.systemPrompt);
 
   try {
+    // 初始化会话
+    await provider.createSession(sequence.systemPrompt);
+
     // 逐条发送数据消息
     logger.section('发送数据至 AI...');
     let messageIndex = 0;

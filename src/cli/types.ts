@@ -12,8 +12,6 @@ export interface FetchCommandOptions {
   replies?: boolean;
   /** 强制重新抓取，忽略缓存 */
   force?: boolean;
-  /** TODO: 仅重试上次失败的页面（预留，Phase 1a 暂不实现） */
-  retry?: boolean;
 }
 
 /**

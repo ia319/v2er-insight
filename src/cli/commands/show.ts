@@ -28,6 +28,7 @@ const OCEAN_LABELS: Record<keyof PsychologicalProfile['scores'], string> = {
  * 示例: ████████░░ 80
  */
 function renderScoreBar(score: number, width = 10): string {
+  if (!Number.isFinite(score)) return '░'.repeat(width) + ' N/A';
   const clamped = Math.max(0, Math.min(100, score));
   const filled = Math.round((clamped / 100) * width);
   const empty = width - filled;
