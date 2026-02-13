@@ -5,7 +5,7 @@
 /**
  * fetch 命令选项
  */
-export interface FetchOptions {
+export interface FetchCommandOptions {
   /** 仅抓取话题 */
   topics?: boolean;
   /** 仅抓取回复 */
@@ -19,7 +19,7 @@ export interface FetchOptions {
 /**
  * ai 命令选项
  */
-export interface AiOptions {
+export interface AiCommandOptions {
   /** 临时指定模型（不影响全局配置） */
   model?: string;
   /** TODO: 临时指定思考水平（预留，AI 模块尚未实现） */
@@ -29,7 +29,7 @@ export interface AiOptions {
 /**
  * show 命令选项
  */
-export interface ShowOptions {
+export interface ShowCommandOptions {
   /** 输出原始 JSON */
   json?: boolean;
   /** 简略版输出（仅 summary + 关键指标） */

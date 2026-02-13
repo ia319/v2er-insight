@@ -35,7 +35,7 @@ function printStats(output: AnalyzerOutput): void {
 /**
  * 执行 analyze 命令
  */
-export async function analyze(username: string): Promise<void> {
+export async function runAnalyze(username: string): Promise<void> {
   // 读取原始数据
   const rawData = readDataFile<RawUserData>(username, 'raw');
 

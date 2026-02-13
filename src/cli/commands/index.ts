@@ -2,5 +2,5 @@
  * CLI 命令导出
  */
 
-export { fetchUser } from './fetch-user';
+export { runFetch } from './fetch';
 export { configProxy } from './config';

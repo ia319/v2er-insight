@@ -11,6 +11,9 @@
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
+/** 未知总数的哨兵值 */
+export const UNKNOWN_TOTAL = -1;
+
 // -- 常量 --------------------------------------------------------------------
 
 /** 级别优先级（数值越大越严重） */
@@ -120,7 +123,7 @@ export const logger = {
   /** 进度显示 — 页码或步骤进度 */
   progress(current: number, total: number, label: string): void {
     if (shouldLog('info')) {
-      const display = total === -1 ? `${current + 1}` : `${current + 1}/${total}`;
+      const display = total === UNKNOWN_TOTAL ? `${current + 1}` : `${current + 1}/${total}`;
       console.log(`  ${label} (${display})...`);
     }
   },

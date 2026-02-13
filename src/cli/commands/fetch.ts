@@ -13,27 +13,12 @@ import type {
   V2exReply,
 } from '@/core/v2ex';
 import type { RawUserData } from '@/core/analyzer';
-import type { FetchResult, FetchEvents } from '@/infra/fetcher';
 import { readDataFile, writeDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
-import type { FetchOptions } from '../types';
-import { logFetchError } from '../utils';
+import type { FetchCommandOptions } from '../types';
+import { createFetchEvents } from '../utils';
 
 // -- 内部工具 ----------------------------------------------------------------
-
-/**
- * 创建抓取事件回调
- */
-function createFetchEvents(label: string): FetchEvents {
-  return {
-    onStart: (_url: string, index: number, total: number) => {
-      logger.progress(index, total, label);
-    },
-    onError: (result: FetchResult) => {
-      logFetchError(result);
-    },
-  };
-}
 
 /**
  * 打印抓取摘要
@@ -66,7 +51,7 @@ function printSummary(
 /**
  * 执行 fetch 命令
  */
-export async function fetch(username: string, options: FetchOptions): Promise<void> {
+export async function runFetch(username: string, options: FetchCommandOptions): Promise<void> {
   // 缓存检查
   if (!options.force) {
     const existing = readDataFile(username, 'raw');
@@ -78,8 +63,9 @@ export async function fetch(username: string, options: FetchOptions): Promise<vo
 
   logger.info(`\n抓取用户数据: ${username}`);
 
-  const fetchTopics = options.topics || (!options.topics && !options.replies);
-  const fetchReplies = options.replies || (!options.topics && !options.replies);
+  // 默认两者都抓取，除非显式指定了其中之一
+  const fetchTopics = options.topics || !options.replies;
+  const fetchReplies = options.replies || !options.topics;
 
   let profile: UserProfileParseResult | null = null;
   let topicsResult: UserTopicsDetailResult | null = null;
@@ -101,7 +87,7 @@ export async function fetch(username: string, options: FetchOptions): Promise<vo
     return;
   }
 
-  // 2. 获取帖子详情（不仅是 URL，需要完整内容）
+  // 2. 获取帖子详情
   if (fetchTopics) {
     logger.section('获取帖子详情...');
     topicsResult = await getAllUserTopicsDetail(username, {
