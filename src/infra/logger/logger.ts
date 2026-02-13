@@ -25,6 +25,7 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 const COLORS = {
   reset: '\x1b[0m',
   red: '\x1b[31m',
+  green: '\x1b[32m',
   yellow: '\x1b[33m',
   gray: '\x1b[90m',
 } as const;
@@ -90,6 +91,37 @@ export const logger = {
   error(msg: string): void {
     if (shouldLog('error')) {
       console.error(formatMessage('error', msg));
+    }
+  },
+
+  // -- CLI 格式化输出 --------------------------------------------------------
+
+  /** 章节标题 — 分隔不同操作阶段 */
+  section(title: string): void {
+    if (shouldLog('info')) {
+      console.log(`\n${title}`);
+    }
+  },
+
+  /** 成功信息 — 带绿色对勾前缀 */
+  success(msg: string): void {
+    if (shouldLog('info')) {
+      console.log(`  ${COLORS.green}Done:${COLORS.reset} ${msg}`);
+    }
+  },
+
+  /** 缩进详情 — 补充上一行输出 */
+  detail(msg: string): void {
+    if (shouldLog('info')) {
+      console.log(`  ${msg}`);
+    }
+  },
+
+  /** 进度显示 — 页码或步骤进度 */
+  progress(current: number, total: number, label: string): void {
+    if (shouldLog('info')) {
+      const display = total === -1 ? `${current + 1}` : `${current + 1}/${total}`;
+      console.log(`  ${label} (${display})...`);
     }
   },
 };

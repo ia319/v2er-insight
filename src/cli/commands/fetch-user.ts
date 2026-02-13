@@ -5,8 +5,9 @@
 import { getUserProfile, getAllUserReplies, getAllUserTopicUrls } from '@/core/v2ex';
 import type { UserTopicUrlsResult, PagedResult, V2exReply } from '@/core/v2ex';
 import type { FetchResult, FetchEvents } from '@/infra/fetcher';
-import { logger } from '../output';
+import { logger } from '@/infra/logger';
 import type { FetchUserOptions } from '../types';
+import { logFetchError } from '../utils';
 
 /**
  * 创建抓取事件回调
@@ -17,7 +18,7 @@ function createFetchEvents(label: string): FetchEvents {
       logger.progress(index, total, label);
     },
     onError: (result: FetchResult) => {
-      logger.fetchError(result);
+      logFetchError(result);
     },
   };
 }
