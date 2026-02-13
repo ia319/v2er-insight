@@ -6,7 +6,7 @@ import { getUserProfile, getAllUserReplies, getAllUserTopicUrls } from '@/core/v
 import type { UserTopicUrlsResult, PagedResult, V2exReply } from '@/core/v2ex';
 import type { FetchResult, FetchEvents } from '@/infra/fetcher';
 import { logger } from '@/infra/logger';
-import type { FetchUserOptions } from '../types';
+import type { FetchOptions } from '../types';
 import { logFetchError } from '../utils';
 
 /**
@@ -54,7 +54,7 @@ function printSummary(
 /**
  * 执行 fetch-user 命令
  */
-export async function fetchUser(username: string, options: FetchUserOptions): Promise<void> {
+export async function fetchUser(username: string, options: FetchOptions): Promise<void> {
   logger.info(`\nFetching data for user: ${username}`);
 
   const fetchTopics = options.topics || (!options.topics && !options.replies);
