@@ -7,6 +7,8 @@
  * 使用 ANSI 转义码实现终端彩色输出，无外部依赖。
  */
 
+import { COLORS } from './colors';
+
 // -- 类型 --------------------------------------------------------------------
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
@@ -23,15 +25,6 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
   warn: 2,
   error: 3,
 };
-
-/** ANSI 颜色码 */
-const COLORS = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  gray: '\x1b[90m',
-} as const;
 
 /** 级别显示标签 */
 const LEVEL_LABELS: Record<LogLevel, string> = {

@@ -51,41 +51,46 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
 
   // 创建 Provider 并初始化会话
   const provider = new GeminiProvider(apiKey, model);
-  provider.createSession(sequence.systemPrompt);
+  await provider.createSession(sequence.systemPrompt);
 
-  // 逐条发送数据消息
-  logger.section('发送数据至 AI...');
-  let messageIndex = 0;
-  for (const message of sequence.messages) {
-    logger.progress(messageIndex, totalMessages, '发送消息');
-    await withRetry(() => provider.sendMessage(message), RETRY_CONFIG);
-    messageIndex++;
-  }
-
-  // 发送最终分析请求
-  logger.progress(sequence.messages.length, totalMessages, '请求分析');
-  const rawResponse = await withRetry(
-    () => provider.sendMessage(sequence.finalPrompt),
-    RETRY_CONFIG,
-  );
-
-  // 解析响应
-  const { data: result, warnings } = parseResponse(rawResponse);
-
-  if (warnings.length > 0) {
-    logger.section('AI 响应警告:');
-    for (const warning of warnings) {
-      logger.warn(`  ${warning}`);
+  try {
+    // 逐条发送数据消息
+    logger.section('发送数据至 AI...');
+    let messageIndex = 0;
+    for (const message of sequence.messages) {
+      logger.progress(messageIndex, totalMessages, '发送消息');
+      await withRetry(() => provider.sendMessage(message), RETRY_CONFIG);
+      messageIndex++;
     }
-  }
 
-  // 持久化结果
-  writeDataFile(username, 'result', result);
-  logger.success('分析结果已保存');
+    // 发送最终分析请求
+    logger.progress(sequence.messages.length, totalMessages, '请求分析');
+    const rawResponse = await withRetry(
+      () => provider.sendMessage(sequence.finalPrompt),
+      RETRY_CONFIG,
+    );
 
-  // 清理过期中间数据
-  const cleaned = cleanExpiredData(username);
-  if (cleaned.length > 0) {
-    logger.detail(`已清理中间数据: ${cleaned.join(', ')}`);
+    // 解析响应
+    const { data: result, warnings } = parseResponse(rawResponse);
+
+    if (warnings.length > 0) {
+      logger.section('AI 响应警告:');
+      for (const warning of warnings) {
+        logger.warn(`  ${warning}`);
+      }
+    }
+
+    // 持久化结果
+    writeDataFile(username, 'result', result);
+    logger.success('分析结果已保存');
+
+    // 清理过期中间数据
+    const cleaned = cleanExpiredData(username);
+    if (cleaned.length > 0) {
+      logger.detail(`已清理中间数据: ${cleaned.join(', ')}`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`AI 分析失败: ${message}`);
   }
 }

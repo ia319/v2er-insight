@@ -6,11 +6,12 @@
 import 'dotenv/config';
 import { program } from 'commander';
 import { runFetch, runAnalyze, runAi, runShow, configProxy } from './commands';
+import packageJson from '../../package.json';
 
 program
   .name('v2er')
   .description('V2EX user insight - Analysis and profiling tool')
-  .version('1.0.0');
+  .version(packageJson.version);
 
 // fetch - 抓取数据
 program

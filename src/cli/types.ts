@@ -22,8 +22,6 @@ export interface FetchCommandOptions {
 export interface AiCommandOptions {
   /** 临时指定模型（不影响全局配置） */
   model?: string;
-  /** TODO: 临时指定思考水平（预留，AI 模块尚未实现） */
-  thinking?: string;
 }
 
 /**

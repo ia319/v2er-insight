@@ -8,19 +8,10 @@
 import type { AIAnalysisResult, PsychologicalProfile } from '@/core/ai';
 import { readDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
+import { COLORS } from '@/infra/logger/colors';
 import type { ShowCommandOptions } from '../types';
 
 // -- 格式化工具 --------------------------------------------------------------
-
-const COLORS = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  cyan: '\x1b[36m',
-  yellow: '\x1b[33m',
-  green: '\x1b[32m',
-  red: '\x1b[31m',
-  gray: '\x1b[90m',
-} as const;
 
 /** OCEAN 五维特质的中文标签 */
 const OCEAN_LABELS: Record<keyof PsychologicalProfile['scores'], string> = {
@@ -81,11 +72,12 @@ function printFull(result: AIAnalysisResult): void {
   console.log(`\n${COLORS.bold}[职业画像]${COLORS.reset}`);
   console.log(`  方向: ${result.professional.career_path}`);
   console.log(`  水平: ${result.professional.level}`);
-  console.log(`  技术栈: ${result.professional.tech_stack.join(', ')}`);
+  console.log(`  技术栈: ${(result.professional.tech_stack ?? []).join(', ')}`);
   console.log(`  专注一致性: ${result.professional.focus_coherence}`);
-  if (result.professional.evolution.timeline.length > 0) {
+  const timeline = result.professional.evolution?.timeline ?? [];
+  if (timeline.length > 0) {
     console.log(`  ${COLORS.gray}演变轨迹:${COLORS.reset}`);
-    for (const entry of result.professional.evolution.timeline) {
+    for (const entry of timeline) {
       console.log(`    ${entry.period} → ${entry.focus}`);
     }
   }
@@ -93,8 +85,8 @@ function printFull(result: AIAnalysisResult): void {
   // Personal
   console.log(`\n${COLORS.bold}[个人生活]${COLORS.reset}`);
   console.log(`  人生阶段: ${result.personal.life_stage}`);
-  console.log(`  兴趣爱好: ${result.personal.hobbies.join(', ')}`);
-  console.log(`  价值取向: ${result.personal.values.join(', ')}`);
+  console.log(`  兴趣爱好: ${(result.personal.hobbies ?? []).join(', ')}`);
+  console.log(`  价值取向: ${(result.personal.values ?? []).join(', ')}`);
 
   // Psychological (OCEAN)
   console.log(`\n${COLORS.bold}[心理画像 — OCEAN]${COLORS.reset}`);
@@ -103,7 +95,7 @@ function printFull(result: AIAnalysisResult): void {
     const score = scores[key as keyof typeof scores];
     console.log(`  ${label.padEnd(4)} ${renderScoreBar(score)}`);
   }
-  console.log(`  关键词: ${result.psychological.keywords.join(', ')}`);
+  console.log(`  关键词: ${(result.psychological.keywords ?? []).join(', ')}`);
 
   // Behavioral
   console.log(`\n${COLORS.bold}[行为画像]${COLORS.reset}`);
