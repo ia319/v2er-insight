@@ -12,4 +12,4 @@ export type { LogLevel } from '@/infra/logger';
 export { getConfigDir, getConfigPath } from './path';
 export { readConfig, writeConfig, getConfig } from './storage';
 export { DEFAULT_CONFIG } from './defaults';
-export { getProxyUrl } from './proxy';
+export { getProxyUrl, initFetchProxy } from './proxy';
