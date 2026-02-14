@@ -24,6 +24,12 @@ export function initFetchProxy(): void {
   const proxyUrl = getProxyUrl();
   if (!proxyUrl) return;
 
-  setGlobalDispatcher(new ProxyAgent(proxyUrl));
-  logger.debug(`已为原生 fetch 设置代理: ${proxyUrl}`);
+  try {
+    setGlobalDispatcher(new ProxyAgent(proxyUrl));
+    logger.debug(`已为原生 fetch 设置代理: ${proxyUrl}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`代理初始化失败 (${proxyUrl}): ${message}`);
+    logger.warn('AI 请求将不使用代理，直接连接');
+  }
 }
