@@ -129,19 +129,22 @@ AI 模块通过以下优先级依次尝试读取 Gemini API Key：
 
 ### 2. 代理读取逻辑 (Proxy)
 
-程序按以下优先级确定请求使用的代理：
+程序按以下优先级确定请求使用的代理（Fetcher 和 AI 模块共用同一优先级）：
 
-- 全局配置文件 (`~/.v2errc.json`)
-- 系统环境变量 `HTTPS_PROXY`
-- 系统环境变量 `HTTP_PROXY`
+1. 全局配置文件 (`~/.v2errc.json`) 中的 `proxy` 字段
+2. 系统环境变量 `HTTPS_PROXY`
+3. 系统环境变量 `HTTP_PROXY`
 
 若以上均未配置，则尝试直接连接。
 
 ### 3. 技术实现细节
 
 - 日志系统：采用级别过滤（Error/Warn/Info/Debug），支持带进度的章节式输出。
-- 代理驱动：内置 `https-proxy-agent`。Axios 的内置代理参数已显式禁用，以确保 Agent 兼容性。
+- 代理驱动（双通道）：
+  - **Fetcher**（V2EX 数据抓取）：`https-proxy-agent` + Axios `httpsAgent`
+  - **AI**（Gemini API 调用）：`undici` `ProxyAgent` + `setGlobalDispatcher`（原生 `fetch()` 代理）
 - 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下。
+- 环境要求：Node.js >= 20.18.1（undici 7.x 要求）。
 
 ---
 

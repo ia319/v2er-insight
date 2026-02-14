@@ -9,7 +9,7 @@ It uses a modular architecture separating generic logic (Fetcher) from business 
 
 ## Tech Stack
 
-- **Language**: TypeScript (Node.js)
+- **Language**: TypeScript (Node.js >= 20.18.1)
 - **Module System**: CommonJS (target ES2020)
 - **Path Aliases**: `@/` → `src/` (via `tsconfig.json` paths + `tsc-alias`)
 - **Build**: `tsc && tsc-alias` (converts aliases to relative paths)
