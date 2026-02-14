@@ -1,0 +1,55 @@
+/**
+ * Workflow 层共享类型定义
+ */
+
+/** 全流程固定步骤名称 */
+export type WorkflowStep = 'fetch' | 'analyze' | 'ai' | 'show';
+
+/** 单步骤执行状态 */
+export type StepStatus = 'success' | 'partial' | 'failed' | 'skipped';
+
+/** 统一错误/诊断原因码 */
+export type ReasonCode =
+  | 'FETCH_PROFILE_FAILED'
+  | 'FETCH_PARTIAL_FAILED'
+  | 'ANALYZE_INPUT_MISSING'
+  | 'AI_API_KEY_MISSING'
+  | 'AI_PROVIDER_FAILED'
+  | 'SHOW_RESULT_MISSING'
+  | 'UNKNOWN_ERROR';
+
+/** 步骤失败或部分成功时可提供给用户的恢复动作 */
+export interface RecoveryAction {
+  /** 可直接执行的恢复命令 */
+  command: string;
+  /** 命令用途说明 */
+  description: string;
+}
+
+/** 单个步骤的结构化执行结果 */
+export interface StepRunResult {
+  /** 当前结果对应的步骤 */
+  step: WorkflowStep;
+  /** 步骤最终状态 */
+  status: StepStatus;
+  /** 非 success 状态下的原因码 */
+  reasonCode?: ReasonCode;
+  /** 面向用户的简短提示 */
+  message?: string;
+  /** 是否可通过恢复动作继续处理 */
+  recoverable?: boolean;
+  /** 恢复动作列表（按建议顺序） */
+  recoverActions?: RecoveryAction[];
+  /** 额外元数据，用于编排判断或后续重试 */
+  meta?: Record<string, unknown>;
+}
+
+/** 本地中间产物状态 */
+export interface WorkflowState {
+  hasRaw: boolean;
+  hasAnalyzed: boolean;
+  hasResult: boolean;
+}
+
+/** partial 状态下的流程策略 */
+export type FailurePolicy = 'continue' | 'stop';
