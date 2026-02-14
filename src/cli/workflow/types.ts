@@ -20,9 +20,11 @@ export type ReasonCode =
 
 /** 步骤失败或部分成功时可提供给用户的恢复动作 */
 export interface RecoveryAction {
-  /** 可直接执行的恢复命令 */
-  command: string;
-  /** 命令用途说明 */
+  /** 动作类型：可执行命令或人工操作指引 */
+  type: 'command' | 'instruction';
+  /** 动作内容：命令文本或操作说明 */
+  content: string;
+  /** 动作用途说明 */
   description: string;
 }
 

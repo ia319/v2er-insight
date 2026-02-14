@@ -6,45 +6,53 @@ import type { ReasonCode, RecoveryAction } from './types';
 const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   FETCH_PROFILE_FAILED: [
     {
-      command: 'v2er fetch <username> --force',
+      type: 'command',
+      content: 'v2er fetch <username> --force',
       description: '重新抓取用户资料并覆盖损坏缓存',
     },
   ],
   FETCH_PARTIAL_FAILED: [
     {
-      command: 'v2er fetch <username> --retry',
+      type: 'command',
+      content: 'v2er fetch <username> --retry',
       description: '仅重试失败页面（该能力将在后续阶段接入）',
     },
     {
-      command: 'v2er <username> --force',
+      type: 'command',
+      content: 'v2er <username> --force',
       description: '强制执行全流程重跑',
     },
   ],
   ANALYZE_INPUT_MISSING: [
     {
-      command: 'v2er fetch <username>',
+      type: 'command',
+      content: 'v2er fetch <username>',
       description: '先生成 raw.json，再执行 analyze',
     },
   ],
   AI_API_KEY_MISSING: [
     {
-      command: 'v2er config proxy <url>',
-      description: '如网络受限，先确保代理配置正确',
+      type: 'instruction',
+      content: '先在环境变量或配置文件中设置 API Key',
+      description: '当前缺少 AI API Key，无法发起 AI 请求',
     },
     {
-      command: '设置 GOOGLE_API_KEY 或 GEMINI_API_KEY',
-      description: '配置 AI API Key 后重试',
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '完成 API Key 配置后重试 AI 步骤',
     },
   ],
   AI_PROVIDER_FAILED: [
     {
-      command: 'v2er ai <username>',
+      type: 'command',
+      content: 'v2er ai <username>',
       description: '在已存在 analyzed.json 时直接重试 AI 步骤',
     },
   ],
   SHOW_RESULT_MISSING: [
     {
-      command: 'v2er ai <username>',
+      type: 'command',
+      content: 'v2er ai <username>',
       description: '先生成 result.json，再执行展示',
     },
   ],
