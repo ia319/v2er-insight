@@ -4,9 +4,13 @@
  */
 
 import 'dotenv/config';
+import { initFetchProxy } from '@/config';
 import { program } from 'commander';
 import { runFetch, runAnalyze, runAi, runShow, configProxy } from './commands';
 import packageJson from '../../package.json';
+
+// 为原生 fetch() 设置代理（AI 模块使用）
+initFetchProxy();
 
 program
   .name('v2er')
