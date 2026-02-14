@@ -61,7 +61,7 @@ root
 │   │   ├── defaults.ts       # DEFAULT_CONFIG + ResolvedConfig type
 │   │   ├── path.ts           # Config dir/file path (~/.v2er-insight/)
 │   │   ├── storage.ts        # Read/write/merge config (deepMerge)
-│   │   └── proxy.ts          # Proxy URL resolution
+│   │   └── proxy.ts          # Proxy URL resolution + native fetch proxy init
 │   │
 │   ├── core/                 # [Domain Layer] Business logic
 │   │   ├── v2ex/             # [Complete] V2EX domain logic
@@ -348,8 +348,10 @@ If none are set, no proxy is used.
 
 **Technical Details**:
 
-- Uses `https-proxy-agent` library to create proxy Agent
-- Axios built-in proxy handling is disabled (`proxy: false`) to avoid conflicts
+- **Fetcher (Axios)**: Uses `https-proxy-agent` to create `httpsAgent`; Axios built-in proxy disabled (`proxy: false`)
+- **AI (native fetch)**: Uses `undici` `ProxyAgent` + `setGlobalDispatcher` to proxy `@google/genai` requests
+- Both mechanisms share the same `getProxyUrl()` resolution logic
+- `initFetchProxy()` is called once at CLI entry (`src/cli/index.ts`)
 - Proxy URL format: `http://host:port` (e.g., `http://127.0.0.1:10808`)
 
 **Security**:
@@ -364,4 +366,4 @@ If none are set, no proxy is used.
 - **Language**: All test descriptions, data, and assertions in English; comments may be Chinese.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: Use `vi.mock` for modules (Fetcher, parsers).
-- **Coverage**: 150+ tests covering parsers, URL generators, services, CLI, config, analyzer, and AI.
+- **Coverage**: 200+ tests covering parsers, URL generators, services, CLI, config, analyzer, and AI.
