@@ -15,6 +15,8 @@ import type {
 import type { RawUserData } from '@/core/analyzer';
 import { readDataFile, writeDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
+import { getRecoveryActions } from '../workflow/recovery';
+import type { StepRunResult } from '../workflow/types';
 import type { FetchCommandOptions } from '../types';
 import { createFetchEvents } from '../utils';
 
@@ -51,13 +53,20 @@ function printSummary(
 /**
  * 执行 fetch 命令
  */
-export async function runFetch(username: string, options: FetchCommandOptions): Promise<void> {
+export async function runFetch(
+  username: string,
+  options: FetchCommandOptions,
+): Promise<StepRunResult> {
   // 缓存检查
   if (!options.force) {
     const existing = readDataFile(username, 'raw');
     if (existing) {
       logger.info(`已存在 ${username} 的抓取数据，使用 --force 强制重新抓取`);
-      return;
+      return {
+        step: 'fetch',
+        status: 'skipped',
+        message: 'raw.json 已存在，跳过抓取',
+      };
     }
   }
 
@@ -84,7 +93,14 @@ export async function runFetch(username: string, options: FetchCommandOptions): 
     }
   } else {
     logger.error('获取用户资料失败');
-    return;
+    return {
+      step: 'fetch',
+      status: 'failed',
+      reasonCode: 'FETCH_PROFILE_FAILED',
+      message: '获取用户资料失败',
+      recoverable: true,
+      recoverActions: getRecoveryActions('FETCH_PROFILE_FAILED'),
+    };
   }
 
   // 2. 获取帖子详情
@@ -129,4 +145,35 @@ export async function runFetch(username: string, options: FetchCommandOptions): 
   logger.success(`数据已保存`);
 
   printSummary(!!profile, topicsResult, replies);
+
+  const failedTopics = topicsResult?.failedTopics ?? 0;
+  const failedPages = replies?.failedPages ?? 0;
+  const isPartial = failedTopics > 0 || failedPages > 0;
+
+  if (isPartial) {
+    return {
+      step: 'fetch',
+      status: 'partial',
+      reasonCode: 'FETCH_PARTIAL_FAILED',
+      message: '抓取已完成，但存在部分页面失败',
+      recoverable: true,
+      recoverActions: getRecoveryActions('FETCH_PARTIAL_FAILED'),
+      meta: {
+        failedTopics,
+        failedPages,
+        // TODO(ia319): 在实现 --retry 后补充真实失败页索引 [2026-02-14]
+        failedPageIndices: [] as number[],
+      },
+    };
+  }
+
+  return {
+    step: 'fetch',
+    status: 'success',
+    message: '抓取完成',
+    meta: {
+      fetchedTopics: topicsResult?.fetchedTopics ?? 0,
+      fetchedReplies: replies?.data.length ?? 0,
+    },
+  };
 }

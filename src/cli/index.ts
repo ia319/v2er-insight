@@ -25,14 +25,18 @@ program
   .option('--topics', 'Fetch topics only')
   .option('--replies', 'Fetch replies only')
   .option('--force', 'Force refetch even if cache exists')
-  .action(runFetch);
+  .action(async (username, options) => {
+    await runFetch(username, options);
+  });
 
 // analyze - 数据分析
 program
   .command('analyze')
   .description('Process raw data and generate statistics')
   .argument('<username>', 'V2EX username')
-  .action(runAnalyze);
+  .action(async (username) => {
+    await runAnalyze(username);
+  });
 
 // ai - AI 画像
 program
@@ -40,7 +44,9 @@ program
   .description('Generate AI user profile and analysis')
   .argument('<username>', 'V2EX username')
   .option('--model <name>', 'Specify Gemini model')
-  .action(runAi);
+  .action(async (username, options) => {
+    await runAi(username, options);
+  });
 
 // show - 展示结果
 program
@@ -49,7 +55,9 @@ program
   .argument('<username>', 'V2EX username')
   .option('--json', 'Output raw JSON')
   .option('--brief', 'Show brief summary only')
-  .action(runShow);
+  .action(async (username, options) => {
+    await runShow(username, options);
+  });
 
 // config - 配置管理
 const config = program.command('config').description('Manage configuration');

@@ -30,6 +30,13 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '先生成 raw.json，再执行 analyze',
     },
   ],
+  AI_INPUT_MISSING: [
+    {
+      type: 'command',
+      content: 'v2er analyze <username>',
+      description: '先生成 analyzed.json，再执行 AI 分析',
+    },
+  ],
   AI_API_KEY_MISSING: [
     {
       type: 'instruction',

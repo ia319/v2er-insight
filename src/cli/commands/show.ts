@@ -10,6 +10,8 @@ import { readDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { COLORS } from '@/infra/logger/colors';
 import type { ShowCommandOptions } from '../types';
+import { getRecoveryActions } from '../workflow/recovery';
+import type { StepRunResult } from '../workflow/types';
 
 // -- 格式化工具 --------------------------------------------------------------
 
@@ -123,27 +125,53 @@ function printFull(result: AIAnalysisResult): void {
 /**
  * 执行 show 命令
  */
-export async function runShow(username: string, options: ShowCommandOptions): Promise<void> {
+export async function runShow(
+  username: string,
+  options: ShowCommandOptions,
+): Promise<StepRunResult> {
   const result = readDataFile<AIAnalysisResult>(username, 'result');
 
   if (!result) {
     logger.error(`未找到 ${username} 的分析结果`);
     logger.info('请先运行: v2er ai <username>');
-    return;
+    return {
+      step: 'show',
+      status: 'failed',
+      reasonCode: 'SHOW_RESULT_MISSING',
+      message: '缺少 result.json，无法展示报告',
+      recoverable: true,
+      recoverActions: getRecoveryActions('SHOW_RESULT_MISSING'),
+    };
   }
 
   // --json: 原始 JSON 输出
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
-    return;
+    return {
+      step: 'show',
+      status: 'success',
+      message: '已输出 JSON 结果',
+      meta: { mode: 'json' },
+    };
   }
 
   // --brief: 简略版
   if (options.brief) {
     printBrief(result);
-    return;
+    return {
+      step: 'show',
+      status: 'success',
+      message: '已输出简略报告',
+      meta: { mode: 'brief' },
+    };
   }
 
   // 默认: 完整格式化
   printFull(result);
+  return {
+    step: 'show',
+    status: 'success',
+    message: '已输出完整报告',
+    meta: { mode: 'full' },
+  };
 }
