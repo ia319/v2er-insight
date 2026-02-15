@@ -33,6 +33,8 @@ program
   });
 
 // fetch - 抓取数据
+// NOTE: 子命令仅对 failed 设置 exitCode=1，partial 视为可接受的降级成功（exitCode=0）。
+// 这与 pipeline 模式不同（partial 会导致 exitCode=1），因为 pipeline 中 partial 影响后续步骤质量。
 program
   .command('fetch')
   .description('Fetch user profile, topics and replies')

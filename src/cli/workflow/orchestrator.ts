@@ -1,4 +1,4 @@
-﻿import { logger } from '@/infra/logger';
+import { logger } from '@/infra/logger';
 import { runAi, runAnalyze, runFetch, runShow } from '../commands';
 import type { AiCommandOptions, FetchCommandOptions, ShowCommandOptions } from '../types';
 import { buildExecutionPlan, detectWorkflowState, resolveEntryStep } from './state';

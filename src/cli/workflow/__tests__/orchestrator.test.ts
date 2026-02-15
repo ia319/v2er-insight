@@ -70,7 +70,7 @@ describe('runWorkflow', () => {
     expect(outcome.exitCode).toBe(0);
     expect(outcome.results).toHaveLength(4);
     expect(mockRunFetch).toHaveBeenCalledWith('alice', { force: true, pipeline: true });
-    expect(mockRunAnalyze).toHaveBeenCalledWith('alice');
+    expect(mockRunAnalyze).toHaveBeenCalledWith('alice', { pipeline: true });
     expect(mockRunAi).toHaveBeenCalledWith('alice', {
       model: 'gemini-2.0-flash',
       thinkingLevel: 'high',
@@ -137,5 +137,21 @@ describe('runWorkflow', () => {
     expect(outcome.results[1]?.message).toContain('network broke');
     expect(mockRunAi).not.toHaveBeenCalled();
     expect(mockRunShow).not.toHaveBeenCalled();
+  });
+
+  it('does not halt on skipped steps and returns success', async () => {
+    mockRunFetch.mockResolvedValue(makeResult('fetch', 'skipped'));
+    mockRunAnalyze.mockResolvedValue(makeResult('analyze', 'success'));
+    mockRunAi.mockResolvedValue(makeResult('ai', 'success'));
+    mockRunShow.mockResolvedValue(makeResult('show', 'success'));
+
+    const outcome = await runWorkflow({ username: 'alice' });
+
+    expect(outcome.overallStatus).toBe('success');
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.results).toHaveLength(4);
+    expect(mockRunAnalyze).toHaveBeenCalled();
+    expect(mockRunAi).toHaveBeenCalled();
+    expect(mockRunShow).toHaveBeenCalled();
   });
 });
