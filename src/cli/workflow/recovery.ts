@@ -12,7 +12,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
     {
       type: 'command',
       content: 'v2er fetch <username> --force',
-      description: '重新抓取用户资料并覆盖损坏缓存',
+      description: '重新抓取 <username> 的用户资料并覆盖损坏缓存',
     },
   ],
   FETCH_PARTIAL_FAILED: [
@@ -98,7 +98,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
 };
 
 /**
- * 获取指定原因码对应的恢复动作列表。
+ * 渲染恢复动作中的模板变量（如 <username>）。
  */
 function renderTemplate(content: string, context: RecoveryRenderContext): string {
   if (!context.username) return content;

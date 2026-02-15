@@ -31,7 +31,7 @@ export function resolveEntryStep(state: WorkflowState, force = false): WorkflowS
 
 /**
  * 根据入口步骤生成线性执行计划。
- * Note：当前使用 switch 以保证分支语义直观；若后续步骤扩展，
+ * Note: 当前使用 switch 以保证分支语义直观；若后续步骤扩展，
  * 可改为“单一顺序数组 + slice”的数据驱动方式，减少维护点。
  */
 export function buildExecutionPlan(entryStep: WorkflowStep): WorkflowStep[] {

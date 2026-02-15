@@ -34,11 +34,14 @@ describe('runAnalyze', () => {
   it('should show error when raw data is missing', async () => {
     mockedReadDataFile.mockReturnValue(null);
 
-    await runAnalyze('testuser');
+    const result = await runAnalyze('testuser');
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('testuser'));
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('v2er fetch'));
     expect(mockedBuildAnalyzerOutput).not.toHaveBeenCalled();
+    expect(result.status).toBe('failed');
+    expect(result.reasonCode).toBe('ANALYZE_INPUT_MISSING');
+    expect(result.recoverable).toBe(true);
   });
 
   it('should call buildAnalyzerOutput with raw data', async () => {
