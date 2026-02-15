@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from '@/config';
+
 /**
  * Workflow 层共享类型定义
  */
@@ -53,4 +55,24 @@ export interface WorkflowState {
   hasRaw: boolean;
   hasAnalyzed: boolean;
   hasResult: boolean;
+}
+
+/** 工作流最终聚合状态 */
+export type WorkflowOverallStatus = 'success' | 'partial' | 'failed';
+
+/** 一键工作流入口参数 */
+export interface RunWorkflowOptions {
+  username: string;
+  force?: boolean;
+  model?: string;
+  thinkingLevel?: ThinkingLevel;
+  verbose?: boolean;
+}
+
+/** 一键工作流执行结果 */
+export interface RunOutcome {
+  overallStatus: WorkflowOverallStatus;
+  exitCode: 0 | 1;
+  failedStep?: WorkflowStep;
+  results: StepRunResult[];
 }
