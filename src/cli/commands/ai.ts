@@ -100,12 +100,15 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
 
     // 持久化结果
     writeDataFile(username, 'result', result);
-    logger.success('分析结果已保存');
 
     // 清理过期中间数据
     const cleaned = cleanExpiredData(username);
-    if (cleaned.length > 0) {
-      logger.detail(`已清理中间数据: ${cleaned.join(', ')}`);
+
+    if (!options.pipeline) {
+      logger.success('分析结果已保存');
+      if (cleaned.length > 0) {
+        logger.detail(`已清理中间数据: ${cleaned.join(', ')}`);
+      }
     }
 
     return {

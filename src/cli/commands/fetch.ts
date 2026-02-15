@@ -142,9 +142,11 @@ export async function runFetch(
   };
 
   writeDataFile(username, 'raw', rawData);
-  logger.success(`数据已保存`);
 
-  printSummary(!!profile, topicsResult, replies);
+  if (!options.pipeline) {
+    logger.success('数据已保存');
+    printSummary(!!profile, topicsResult, replies);
+  }
 
   const failedTopics = topicsResult?.failedTopics ?? 0;
   const failedPages = replies?.failedPages ?? 0;

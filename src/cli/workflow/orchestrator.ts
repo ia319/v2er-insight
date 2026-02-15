@@ -39,7 +39,7 @@ export function buildStepExecutors(options: RunWorkflowOptions): WorkflowExecuto
 
   return {
     fetch: () => runFetch(options.username, fetchOptions),
-    analyze: () => runAnalyze(options.username),
+    analyze: () => runAnalyze(options.username, { pipeline: true }),
     ai: () => runAi(options.username, aiOptions),
     show: () => runShow(options.username, showOptions),
   };

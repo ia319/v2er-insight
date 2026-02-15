@@ -37,7 +37,10 @@ function printStats(output: AnalyzerOutput): void {
 /**
  * 执行 analyze 命令
  */
-export async function runAnalyze(username: string): Promise<StepRunResult> {
+export async function runAnalyze(
+  username: string,
+  options: { pipeline?: boolean } = {},
+): Promise<StepRunResult> {
   // 读取原始数据
   const rawData = readDataFile<RawUserData>(username, 'raw');
 
@@ -60,9 +63,11 @@ export async function runAnalyze(username: string): Promise<StepRunResult> {
     const output = buildAnalyzerOutput(rawData);
 
     writeDataFile(username, 'analyzed', output);
-    logger.success('分析结果已保存');
 
-    printStats(output);
+    if (!options.pipeline) {
+      logger.success('分析结果已保存');
+      printStats(output);
+    }
 
     return {
       step: 'analyze',
