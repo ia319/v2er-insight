@@ -1,16 +1,17 @@
-import { readDataFile } from '@/infra/storage';
+import { existsSync } from 'fs';
+import { getDataFilePath } from '@/infra/storage/paths';
 import type { WorkflowState, WorkflowStep } from './types';
 
 /**
  * 检测用户本地工作流产物状态。
  *
- * 这里采用保守策略：当 JSON 解析失败时，`readDataFile` 会返回 `null`，
- * 当前状态会被视为“文件不可用”，避免使用损坏数据继续流程。
+ * 这里只做“文件是否存在”的轻量判断，不读取和解析 JSON 内容。
+ * 具体的数据缺失或结构错误由各步骤命令自行处理并返回 reasonCode。
  */
 export function detectWorkflowState(username: string): WorkflowState {
-  const hasRaw = readDataFile<unknown>(username, 'raw') !== null;
-  const hasAnalyzed = readDataFile<unknown>(username, 'analyzed') !== null;
-  const hasResult = readDataFile<unknown>(username, 'result') !== null;
+  const hasRaw = existsSync(getDataFilePath(username, 'raw'));
+  const hasAnalyzed = existsSync(getDataFilePath(username, 'analyzed'));
+  const hasResult = existsSync(getDataFilePath(username, 'result'));
 
   return { hasRaw, hasAnalyzed, hasResult };
 }
@@ -30,7 +31,7 @@ export function resolveEntryStep(state: WorkflowState, force = false): WorkflowS
 
 /**
  * 根据入口步骤生成线性执行计划。
- * Note: 当前使用 switch 以保证分支语义直观；若后续步骤扩展，
+ * Note：当前使用 switch 以保证分支语义直观；若后续步骤扩展，
  * 可改为“单一顺序数组 + slice”的数据驱动方式，减少维护点。
  */
 export function buildExecutionPlan(entryStep: WorkflowStep): WorkflowStep[] {

@@ -140,7 +140,7 @@ export async function runShow(
       reasonCode: 'SHOW_RESULT_MISSING',
       message: '缺少 result.json，无法展示报告',
       recoverable: true,
-      recoverActions: getRecoveryActions('SHOW_RESULT_MISSING'),
+      recoverActions: getRecoveryActions('SHOW_RESULT_MISSING', { username }),
     };
   }
 

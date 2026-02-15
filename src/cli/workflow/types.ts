@@ -13,6 +13,7 @@ export type ReasonCode =
   | 'FETCH_PROFILE_FAILED'
   | 'FETCH_PARTIAL_FAILED'
   | 'ANALYZE_INPUT_MISSING'
+  | 'ANALYZE_FAILED'
   | 'AI_INPUT_MISSING'
   | 'AI_API_KEY_MISSING'
   | 'AI_PROVIDER_FAILED'
@@ -53,6 +54,3 @@ export interface WorkflowState {
   hasAnalyzed: boolean;
   hasResult: boolean;
 }
-
-/** partial 状态下的流程策略 */
-export type FailurePolicy = 'continue' | 'stop';

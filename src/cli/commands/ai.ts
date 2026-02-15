@@ -37,7 +37,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       reasonCode: 'AI_INPUT_MISSING',
       message: '缺少 analyzed.json，无法执行 AI 分析',
       recoverable: true,
-      recoverActions: getRecoveryActions('AI_INPUT_MISSING'),
+      recoverActions: getRecoveryActions('AI_INPUT_MISSING', { username }),
     };
   }
 
@@ -54,7 +54,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       reasonCode: 'AI_API_KEY_MISSING',
       message: '缺少 API Key，无法发起 AI 请求',
       recoverable: true,
-      recoverActions: getRecoveryActions('AI_API_KEY_MISSING'),
+      recoverActions: getRecoveryActions('AI_API_KEY_MISSING', { username }),
     };
   }
 
@@ -127,7 +127,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       reasonCode: 'AI_PROVIDER_FAILED',
       message: `AI 分析失败: ${message}`,
       recoverable: true,
-      recoverActions: getRecoveryActions('AI_PROVIDER_FAILED'),
+      recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
     };
   }
 }

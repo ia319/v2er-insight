@@ -103,4 +103,20 @@ describe('runAnalyze', () => {
 
     expect(mockLogger.section).toHaveBeenCalledWith(expect.stringContaining('分析摘要'));
   });
+
+  it('should return ANALYZE_FAILED when analyzer throws', async () => {
+    mockedReadDataFile.mockReturnValue({ profile: {}, topics: [], replies: [] });
+    mockedBuildAnalyzerOutput.mockImplementation(() => {
+      throw new Error('broken analyzer output');
+    });
+
+    const result = await runAnalyze('testuser');
+
+    expect(result.status).toBe('failed');
+    expect(result.reasonCode).toBe('ANALYZE_FAILED');
+    expect(result.recoverActions?.[0]?.content).toContain('testuser');
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('broken analyzer output'),
+    );
+  });
 });

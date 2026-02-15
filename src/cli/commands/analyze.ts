@@ -50,29 +50,39 @@ export async function runAnalyze(username: string): Promise<StepRunResult> {
       reasonCode: 'ANALYZE_INPUT_MISSING',
       message: '缺少 raw.json，无法执行分析',
       recoverable: true,
-      recoverActions: getRecoveryActions('ANALYZE_INPUT_MISSING'),
+      recoverActions: getRecoveryActions('ANALYZE_INPUT_MISSING', { username }),
     };
   }
 
   logger.info(`\n分析用户数据: ${username}`);
 
-  // 执行分析
-  const output = buildAnalyzerOutput(rawData);
+  try {
+    const output = buildAnalyzerOutput(rawData);
 
-  // 持久化
-  writeDataFile(username, 'analyzed', output);
-  logger.success('分析结果已保存');
+    writeDataFile(username, 'analyzed', output);
+    logger.success('分析结果已保存');
 
-  // 输出统计摘要
-  printStats(output);
+    printStats(output);
 
-  return {
-    step: 'analyze',
-    status: 'success',
-    message: '分析完成',
-    meta: {
-      totalPeriods: output.summary.totalPeriods,
-      contentChunks: output.contents.length,
-    },
-  };
+    return {
+      step: 'analyze',
+      status: 'success',
+      message: '分析完成',
+      meta: {
+        totalPeriods: output.summary.totalPeriods,
+        contentChunks: output.contents.length,
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`分析失败: ${message}`);
+    return {
+      step: 'analyze',
+      status: 'failed',
+      reasonCode: 'ANALYZE_FAILED',
+      message: `分析失败: ${message}`,
+      recoverable: true,
+      recoverActions: getRecoveryActions('ANALYZE_FAILED', { username }),
+    };
+  }
 }

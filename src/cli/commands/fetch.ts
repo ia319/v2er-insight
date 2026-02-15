@@ -99,7 +99,7 @@ export async function runFetch(
       reasonCode: 'FETCH_PROFILE_FAILED',
       message: '获取用户资料失败',
       recoverable: true,
-      recoverActions: getRecoveryActions('FETCH_PROFILE_FAILED'),
+      recoverActions: getRecoveryActions('FETCH_PROFILE_FAILED', { username }),
     };
   }
 
@@ -157,7 +157,7 @@ export async function runFetch(
       reasonCode: 'FETCH_PARTIAL_FAILED',
       message: '抓取已完成，但存在部分页面失败',
       recoverable: true,
-      recoverActions: getRecoveryActions('FETCH_PARTIAL_FAILED'),
+      recoverActions: getRecoveryActions('FETCH_PARTIAL_FAILED', { username }),
       meta: {
         failedTopics,
         failedPages,
