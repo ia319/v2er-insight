@@ -1,4 +1,4 @@
-import { logger } from '@/infra/logger';
+﻿import { logger } from '@/infra/logger';
 import { runAi, runAnalyze, runFetch, runShow } from '../commands';
 import type { AiCommandOptions, FetchCommandOptions, ShowCommandOptions } from '../types';
 import { buildExecutionPlan, detectWorkflowState, resolveEntryStep } from './state';
@@ -57,30 +57,46 @@ export async function runWorkflow(options: RunWorkflowOptions): Promise<RunOutco
   const executors = buildStepExecutors(options);
   const results: StepRunResult[] = [];
 
-  if (options.verbose) {
-    logger.debug(
-      `workflow state: raw=${state.hasRaw}, analyzed=${state.hasAnalyzed}, result=${state.hasResult}`,
-    );
-    logger.debug(`workflow entry: ${entryStep}`);
-    logger.debug(`workflow plan: ${plan.join(' -> ')}`);
-  }
+  logger.debug(
+    `workflow state: raw=${state.hasRaw}, analyzed=${state.hasAnalyzed}, result=${state.hasResult}`,
+  );
+  logger.debug(`workflow entry: ${entryStep}`);
+  logger.debug(`workflow plan: ${plan.join(' -> ')}`);
 
   let hasPartial = false;
 
-  for (let index = 0; index < plan.length; index++) {
-    const step = plan[index];
-    const result = await executors[step]();
-    results.push(result);
+  for (const [index, step] of plan.entries()) {
+    try {
+      const result = await executors[step]();
+      results.push(result);
 
-    printStepLine(result, index, plan.length);
+      printStepLine(result, index, plan.length);
 
-    if (result.status === 'partial') {
-      hasPartial = true;
-      printResultSummary(result);
-      continue;
-    }
+      if (result.status === 'partial') {
+        hasPartial = true;
+        printResultSummary(result);
+        continue;
+      }
 
-    if (result.status === 'failed') {
+      if (result.status === 'failed') {
+        printResultSummary(result);
+        return {
+          overallStatus: 'failed',
+          exitCode: 1,
+          failedStep: step,
+          results,
+        };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const result: StepRunResult = {
+        step,
+        status: 'failed',
+        reasonCode: 'UNKNOWN_ERROR',
+        message: `步骤执行异常: ${message}`,
+      };
+      results.push(result);
+      printStepLine(result, index, plan.length);
       printResultSummary(result);
       return {
         overallStatus: 'failed',
