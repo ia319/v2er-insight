@@ -57,19 +57,25 @@ describe('runAi', () => {
   it('should show error when analyzed data is missing', async () => {
     mockedReadDataFile.mockReturnValue(null);
 
-    await runAi('testuser', {});
+    const result = await runAi('testuser', {});
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('testuser'));
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('v2er analyze'));
+    expect(result).toMatchObject({
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'AI_INPUT_MISSING',
+    });
   });
 
   it('should show error when API key is missing', async () => {
     mockedReadDataFile.mockReturnValue({ some: 'data' });
     mockedResolveApiKey.mockReturnValue(undefined);
 
-    await runAi('testuser', {});
+    const result = await runAi('testuser', {});
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('API Key'));
+    expect(result.reasonCode).toBe('AI_API_KEY_MISSING');
   });
 
   it('should complete full flow and persist result', async () => {
@@ -90,10 +96,11 @@ describe('runAi', () => {
     mockedParseResponse.mockReturnValue({ data: aiResult, warnings: [] });
     mockedCleanExpiredData.mockReturnValue([]);
 
-    await runAi('testuser', {});
+    const result = await runAi('testuser', {});
 
     expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', aiResult);
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
+    expect(result.status).toBe('success');
   });
 
   it('should catch and log errors from AI provider', async () => {
@@ -106,11 +113,12 @@ describe('runAi', () => {
     });
     mockCreateSession.mockRejectedValue(new Error('Auth failed'));
 
-    await runAi('testuser', {});
+    const result = await runAi('testuser', {});
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 分析失败'));
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));
     expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
   });
 
   it('should log warnings from AI response', async () => {
@@ -133,5 +141,29 @@ describe('runAi', () => {
     await runAi('testuser', {});
 
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Missing field'));
+  });
+
+  it('should suppress success detail logs in pipeline mode', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedBuildMessageSequence.mockReturnValue({
+      systemPrompt: 'prompt',
+      messages: [],
+      finalPrompt: 'final',
+    });
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('response');
+    mockedParseResponse.mockReturnValue({
+      data: { summary: 'result' },
+      warnings: [],
+    });
+    mockedCleanExpiredData.mockReturnValue(['raw.json']);
+
+    const result = await runAi('testuser', { pipeline: true });
+
+    expect(result.status).toBe('success');
+    expect(mockLogger.success).not.toHaveBeenCalled();
+    expect(mockLogger.detail).not.toHaveBeenCalledWith(expect.stringContaining('已清理中间数据'));
   });
 });

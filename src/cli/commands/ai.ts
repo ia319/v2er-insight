@@ -18,18 +18,27 @@ import {
 import { readDataFile, writeDataFile, cleanExpiredData } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
+import { getRecoveryActions } from '../workflow/recovery';
+import type { StepRunResult } from '../workflow/types';
 
 /**
  * 执行 ai 命令
  */
-export async function runAi(username: string, options: AiCommandOptions): Promise<void> {
+export async function runAi(username: string, options: AiCommandOptions): Promise<StepRunResult> {
   // 读取分析数据
   const analyzed = readDataFile<AnalyzerOutput>(username, 'analyzed');
 
   if (!analyzed) {
     logger.error(`未找到 ${username} 的分析数据`);
     logger.info('请先运行: v2er analyze <username>');
-    return;
+    return {
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'AI_INPUT_MISSING',
+      message: '缺少 analyzed.json，无法执行 AI 分析',
+      recoverable: true,
+      recoverActions: getRecoveryActions('AI_INPUT_MISSING', { username }),
+    };
   }
 
   // 解析 API Key
@@ -39,7 +48,14 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     logger.info('请通过以下方式之一配置:');
     logger.detail('1. 环境变量: GOOGLE_API_KEY 或 GEMINI_API_KEY');
     logger.detail('2. 配置文件: ~/.v2errc.json 中的 geminiApiKey');
-    return;
+    return {
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'AI_API_KEY_MISSING',
+      message: '缺少 API Key，无法发起 AI 请求',
+      recoverable: true,
+      recoverActions: getRecoveryActions('AI_API_KEY_MISSING', { username }),
+    };
   }
 
   const model = options.model ?? DEFAULT_MODEL;
@@ -84,15 +100,37 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
 
     // 持久化结果
     writeDataFile(username, 'result', result);
-    logger.success('分析结果已保存');
 
     // 清理过期中间数据
     const cleaned = cleanExpiredData(username);
-    if (cleaned.length > 0) {
-      logger.detail(`已清理中间数据: ${cleaned.join(', ')}`);
+
+    if (!options.pipeline) {
+      logger.success('分析结果已保存');
+      if (cleaned.length > 0) {
+        logger.detail(`已清理中间数据: ${cleaned.join(', ')}`);
+      }
     }
+
+    return {
+      step: 'ai',
+      status: 'success',
+      message: 'AI 分析完成',
+      meta: {
+        model,
+        warningCount: warnings.length,
+        cleanedFiles: cleaned,
+      },
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`AI 分析失败: ${message}`);
+    return {
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'AI_PROVIDER_FAILED',
+      message: `AI 分析失败: ${message}`,
+      recoverable: true,
+      recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
+    };
   }
 }

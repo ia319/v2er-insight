@@ -6,4 +6,5 @@ export { runFetch } from './fetch';
 export { runAnalyze } from './analyze';
 export { runAi } from './ai';
 export { runShow } from './show';
+export { runPipeline } from './run';
 export { configProxy } from './config';
