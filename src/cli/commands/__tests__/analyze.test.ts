@@ -60,9 +60,14 @@ describe('runAnalyze', () => {
     mockedReadDataFile.mockReturnValue(rawData);
     mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
 
-    await runAnalyze('testuser');
+    const result = await runAnalyze('testuser');
 
     expect(mockedBuildAnalyzerOutput).toHaveBeenCalledWith(rawData);
+    expect(result).toMatchObject({
+      step: 'analyze',
+      status: 'success',
+      message: '分析完成',
+    });
   });
 
   it('should persist analyzed output', async () => {
@@ -81,10 +86,11 @@ describe('runAnalyze', () => {
     mockedReadDataFile.mockReturnValue(rawData);
     mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
 
-    await runAnalyze('testuser');
+    const result = await runAnalyze('testuser');
 
     expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'analyzed', analyzerOutput);
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
+    expect(result.status).toBe('success');
   });
 
   it('should print stats summary after analysis', async () => {
@@ -102,9 +108,35 @@ describe('runAnalyze', () => {
     mockedReadDataFile.mockReturnValue({ profile: {} });
     mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
 
-    await runAnalyze('testuser');
+    const result = await runAnalyze('testuser');
 
     expect(mockLogger.section).toHaveBeenCalledWith(expect.stringContaining('分析摘要'));
+    expect(result.meta).toMatchObject({
+      totalPeriods: 3,
+      contentChunks: 2,
+    });
+  });
+
+  it('should suppress summary logs in pipeline mode', async () => {
+    const analyzerOutput = {
+      userOverview: {
+        joinDate: '2020-01-01',
+        lastActiveTime: '2024-01-01',
+        totalTopics: 10,
+        totalReplies: 50,
+        topicReplyRatio: 0.2,
+      },
+      summary: { totalPeriods: 3 },
+      contents: ['chunk1'],
+    };
+    mockedReadDataFile.mockReturnValue({ profile: {} });
+    mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
+
+    const result = await runAnalyze('testuser', { pipeline: true });
+
+    expect(result.status).toBe('success');
+    expect(mockLogger.success).not.toHaveBeenCalled();
+    expect(mockLogger.section).not.toHaveBeenCalled();
   });
 
   it('should return ANALYZE_FAILED when analyzer throws', async () => {
