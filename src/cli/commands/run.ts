@@ -8,6 +8,7 @@
  */
 
 import type { ThinkingLevel } from '@/config';
+import { logger } from '@/infra/logger';
 import type { RunCommandOptions } from '../types';
 import { runWorkflow } from '../workflow/orchestrator';
 import type { RunWorkflowOptions } from '../workflow/types';
@@ -40,7 +41,13 @@ export function resolveWorkflowOptions(
  * `v2er <username>` 主命令执行入口，由 cli/index.ts 注册调用。
  */
 export async function runPipeline(username: string, options: RunCommandOptions): Promise<void> {
-  const workflowOptions = resolveWorkflowOptions(username, options);
-  const outcome = await runWorkflow(workflowOptions);
-  process.exitCode = outcome.exitCode;
+  try {
+    const workflowOptions = resolveWorkflowOptions(username, options);
+    const outcome = await runWorkflow(workflowOptions);
+    process.exitCode = outcome.exitCode;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`工作流执行失败: ${message}`);
+    process.exitCode = 1;
+  }
 }

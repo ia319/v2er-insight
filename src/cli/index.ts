@@ -24,8 +24,11 @@ program
   .option('--model [name]', 'Specify AI model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level (or select interactively)')
   .option('-v, --verbose', 'Show debug output')
-  .action(async (username, options) => {
-    if (!username) return;
+  .action(async (username, options, command) => {
+    if (!username) {
+      command.help();
+      return;
+    }
     await runPipeline(username, options);
   });
 
@@ -38,7 +41,8 @@ program
   .option('--replies', 'Fetch replies only')
   .option('--force', 'Force refetch even if cache exists')
   .action(async (username, options) => {
-    await runFetch(username, options);
+    const result = await runFetch(username, options);
+    if (result.status === 'failed') process.exitCode = 1;
   });
 
 // analyze - 数据分析
@@ -47,7 +51,8 @@ program
   .description('Process raw data and generate statistics')
   .argument('<username>', 'V2EX username')
   .action(async (username) => {
-    await runAnalyze(username);
+    const result = await runAnalyze(username);
+    if (result.status === 'failed') process.exitCode = 1;
   });
 
 // ai - AI 画像
@@ -57,7 +62,8 @@ program
   .argument('<username>', 'V2EX username')
   .option('--model <name>', 'Specify Gemini model')
   .action(async (username, options) => {
-    await runAi(username, options);
+    const result = await runAi(username, options);
+    if (result.status === 'failed') process.exitCode = 1;
   });
 
 // show - 展示结果
@@ -68,7 +74,8 @@ program
   .option('--json', 'Output raw JSON')
   .option('--brief', 'Show brief summary only')
   .action(async (username, options) => {
-    await runShow(username, options);
+    const result = await runShow(username, options);
+    if (result.status === 'failed') process.exitCode = 1;
   });
 
 // config - 配置管理
