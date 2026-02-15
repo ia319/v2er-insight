@@ -6,7 +6,7 @@
 import 'dotenv/config';
 import { initFetchProxy } from '@/config';
 import { program } from 'commander';
-import { runFetch, runAnalyze, runAi, runShow, configProxy } from './commands';
+import { runFetch, runAnalyze, runAi, runShow, runPipeline, configProxy } from './commands';
 import packageJson from '../../package.json';
 
 // 为原生 fetch() 设置代理（AI 模块使用）
@@ -16,6 +16,18 @@ program
   .name('v2er')
   .description('V2EX user insight - Analysis and profiling tool')
   .version(packageJson.version);
+
+// 主命令 - 一键分析
+program
+  .argument('[username]', 'V2EX username')
+  .option('--force', 'Force re-fetch from scratch')
+  .option('--model [name]', 'Specify AI model (or select interactively)')
+  .option('--thinking-level [level]', 'Specify thinking level (or select interactively)')
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, options) => {
+    if (!username) return;
+    await runPipeline(username, options);
+  });
 
 // fetch - 抓取数据
 program
