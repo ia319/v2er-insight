@@ -7,4 +7,4 @@ export { runAnalyze } from './analyze';
 export { runAi } from './ai';
 export { runShow } from './show';
 export { runPipeline } from './run';
-export { configProxy } from './config';
+export { configProxy, configShow, configSet, configReset } from './config';

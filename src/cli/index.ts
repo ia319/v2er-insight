@@ -6,7 +6,17 @@
 import 'dotenv/config';
 import { initFetchProxy, getConfig } from '@/config';
 import { program } from 'commander';
-import { runFetch, runAnalyze, runAi, runShow, runPipeline, configProxy } from './commands';
+import {
+  runFetch,
+  runAnalyze,
+  runAi,
+  runShow,
+  runPipeline,
+  configProxy,
+  configShow,
+  configSet,
+  configReset,
+} from './commands';
 import { logger } from '@/infra/logger';
 import packageJson from '../../package.json';
 
@@ -95,5 +105,17 @@ config
   .description('Set, view, or clear proxy')
   .option('--clear', 'Clear proxy setting')
   .action(configProxy);
+
+config.command('show [group]').description('Show current configuration').action(configShow);
+
+config
+  .command('set <path> <value>')
+  .description('Set a configuration value (e.g. ai.model gemini-2.5-flash)')
+  .action(configSet);
+
+config
+  .command('reset [group]')
+  .description('Reset configuration to defaults (all or specific group)')
+  .action(configReset);
 
 program.parse();
