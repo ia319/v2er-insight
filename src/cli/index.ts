@@ -4,13 +4,20 @@
  */
 
 import 'dotenv/config';
-import { initFetchProxy } from '@/config';
+import { initFetchProxy, getConfig } from '@/config';
 import { program } from 'commander';
 import { runFetch, runAnalyze, runAi, runShow, runPipeline, configProxy } from './commands';
+import { logger } from '@/infra/logger';
 import packageJson from '../../package.json';
 
 // 为原生 fetch() 设置代理（AI 模块使用）
 initFetchProxy();
+
+// 从配置文件初始化日志级别
+const configLogLevel = getConfig().log?.level;
+if (configLogLevel) {
+  logger.setLevel(configLogLevel);
+}
 
 program
   .name('v2er')
