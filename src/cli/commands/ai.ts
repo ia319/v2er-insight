@@ -12,9 +12,8 @@ import {
   parseResponse,
   resolveApiKey,
   withRetry,
-  DEFAULT_MODEL,
-  RETRY_CONFIG,
 } from '@/core/ai';
+import { getConfig } from '@/config';
 import { readDataFile, writeDataFile, cleanExpiredData } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
@@ -47,7 +46,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     logger.error('未找到 API Key');
     logger.info('请通过以下方式之一配置:');
     logger.detail('1. 环境变量: GOOGLE_API_KEY 或 GEMINI_API_KEY');
-    logger.detail('2. 配置文件: ~/.v2errc.json 中的 geminiApiKey');
+    logger.detail('2. 配置文件: v2er config ai.apiKey <key>');
     return {
       step: 'ai',
       status: 'failed',
@@ -58,7 +57,8 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     };
   }
 
-  const model = options.model ?? DEFAULT_MODEL;
+  const config = getConfig();
+  const model = options.model ?? config.ai?.model ?? 'gemini-3-pro-preview';
   logger.info(`\nAI 分析: ${username} (模型: ${model})`);
 
   // 构建消息序列
@@ -67,6 +67,12 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
 
   // 创建 Provider
   const provider = new GeminiProvider(apiKey, model);
+
+  const retryOptions = {
+    maxRetries: config.ai?.maxRetries,
+    baseDelay: config.ai?.baseDelay,
+    maxDelay: config.ai?.maxDelay,
+  };
 
   try {
     // 初始化会话
@@ -77,7 +83,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     let messageIndex = 0;
     for (const message of sequence.messages) {
       logger.progress(messageIndex, totalMessages, '发送消息');
-      await withRetry(() => provider.sendMessage(message), RETRY_CONFIG);
+      await withRetry(() => provider.sendMessage(message), retryOptions);
       messageIndex++;
     }
 
@@ -85,7 +91,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     logger.progress(sequence.messages.length, totalMessages, '请求分析');
     const rawResponse = await withRetry(
       () => provider.sendMessage(sequence.finalPrompt),
-      RETRY_CONFIG,
+      retryOptions,
     );
 
     // 解析响应

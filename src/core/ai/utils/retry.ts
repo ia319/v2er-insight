@@ -2,7 +2,7 @@
  * 重试工具 - 指数退避
  */
 
-import { RETRY_CONFIG } from '../config';
+import { getConfig } from '@/config';
 
 export interface RetryOptions {
   maxRetries?: number;
@@ -16,10 +16,11 @@ export interface RetryOptions {
  * 使用指数退避 + 随机抖动策略
  */
 export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const aiConfig = getConfig().ai;
   const {
-    maxRetries = RETRY_CONFIG.maxRetries,
-    baseDelay = RETRY_CONFIG.baseDelay,
-    maxDelay = RETRY_CONFIG.maxDelay,
+    maxRetries = aiConfig?.maxRetries ?? 3,
+    baseDelay = aiConfig?.baseDelay ?? 1000,
+    maxDelay = aiConfig?.maxDelay ?? 10_000,
   } = options;
 
   const safeMaxRetries = Math.max(0, maxRetries);
