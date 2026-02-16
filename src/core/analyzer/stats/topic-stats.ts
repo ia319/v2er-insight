@@ -4,7 +4,7 @@
 
 import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
 import type { SinglePeriodStats } from '../types';
-import { ANALYZER_CONFIG } from '../config';
+import { getConfig } from '@/config';
 import { parseAbsoluteDate, average, topN, hourDistribution, formatTimeRange } from '../utils';
 
 interface TopicStatsInput {
@@ -56,7 +56,11 @@ export function calculateTopicStats(
     avgTopicLifecycleDays: average(lifecycleDays),
     topicInteractionRatio: totalClicks > 0 ? totalReplies / totalClicks : 0,
     topicHourDistribution: hourDistribution(topicDates),
-    topicNodeDistribution: topN(topics, (t) => t.nodeName, ANALYZER_CONFIG.NODE_DISTRIBUTION_TOP_N),
+    topicNodeDistribution: topN(
+      topics,
+      (t) => t.nodeName,
+      getConfig().analyzer?.nodeDistributionTopN ?? 3,
+    ),
   };
 }
 

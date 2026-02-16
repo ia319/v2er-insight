@@ -33,6 +33,3 @@ export type {
   ActivePeriod,
   PeriodBoundary,
 } from './types';
-
-// 配置导出
-export { ANALYZER_CONFIG } from './config';
