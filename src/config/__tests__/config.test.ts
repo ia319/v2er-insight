@@ -107,7 +107,7 @@ describe('config/storage', () => {
 
       expect(config.ai?.provider).toBe('gemini');
       expect(config.ai?.model).toBe('gemini-3-pro-preview');
-      expect(config.ai?.thinking).toBe('high');
+      expect(config.ai?.thinkingLevel).toBe('high');
       expect(config.fetch?.timeout).toBe(30_000);
       expect(config.analyzer?.inactivityThreshold).toBe(60);
       expect(config.data?.keepRaw).toBe(false);

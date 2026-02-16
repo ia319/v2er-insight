@@ -18,7 +18,7 @@ export interface AIConfig {
   /** 模型名称 */
   model?: string;
   /** 思考水平 */
-  thinking?: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel;
   /** AI 请求超时（毫秒） */
   timeout?: number;
   /** 最大重试次数 */
