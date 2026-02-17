@@ -52,7 +52,7 @@ const CONFIG_PATHS: Record<string, ConfigPathMeta> = {
   'data.rawRetention': { type: 'number' },
   // Log
   'log.level': { type: 'enum', values: ['error', 'warn', 'info', 'debug'] },
-} as const;
+} satisfies Record<string, ConfigPathMeta>;
 
 /** 所有合法的顶层分组名 */
 const CONFIG_GROUPS = ['ai', 'fetch', 'analyzer', 'data', 'log'] as const;
@@ -208,12 +208,8 @@ export function configShow(group?: string): void {
     }
 
     const groupConfig = display[group as ConfigGroup];
-    if (!groupConfig || Object.keys(groupConfig).length === 0) {
-      logger.info(`[${group}] (using defaults)`);
-    } else {
-      logger.info(`[${group}]`);
-      console.log(JSON.stringify(groupConfig, null, 2));
-    }
+    logger.info(`[${group}]`);
+    console.log(JSON.stringify(groupConfig, null, 2));
     return;
   }
 
