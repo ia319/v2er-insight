@@ -168,7 +168,6 @@ describe('configShow command', () => {
     expect(consoleSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
     expect(output.model).toBe('test-model');
-    consoleSpy.mockRestore();
   });
 
   it('should display proxy when configured', async () => {

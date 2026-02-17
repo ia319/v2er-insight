@@ -220,6 +220,9 @@ root
 - `v2er analyze <username>` → Run statistics on raw data (analyzed.json)
 - `v2er ai <username>` → Generate user profile via Gemini (result.json)
 - `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
+- `v2er config show [group]` → View config (with apiKey masking)
+- `v2er config set <path> <value>` → Set config via dot-path (e.g. `ai.model`)
+- `v2er config reset [group]` → Reset to defaults
 - `v2er config proxy <url>` → Manage proxy settings
 
 **Main Command Options** (`v2er <username>`):
