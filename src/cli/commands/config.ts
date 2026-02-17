@@ -28,6 +28,8 @@ interface ConfigPathMeta {
  * 2. 自动推断值类型并做类型转换
  * 3. 枚举路径做候选值校验
  */
+// NOTE: 枚举 values 与类型定义（ThinkingLevel、LogLevel 等）存在耦合，新增枚举值时需同步更新。
+// 未来可考虑从类型定义中统一导出枚举值以减少维护负担。
 const CONFIG_PATHS: Record<string, ConfigPathMeta> = {
   // 顶层
   proxy: { type: 'string' },
