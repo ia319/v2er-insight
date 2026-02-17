@@ -174,6 +174,24 @@ describe('configShow command', () => {
     consoleSpy.mockRestore();
   });
 
+  it('should display proxy when configured', async () => {
+    mockedGetConfig.mockReturnValue({ proxy: 'http://test:8080' });
+
+    const { configShow } = await import('../config');
+    configShow('proxy');
+
+    expect(mockLogger.info).toHaveBeenCalledWith('[proxy] http://test:8080');
+  });
+
+  it('should display proxy not set message', async () => {
+    mockedGetConfig.mockReturnValue({});
+
+    const { configShow } = await import('../config');
+    configShow('proxy');
+
+    expect(mockLogger.info).toHaveBeenCalledWith('[proxy] (not set)');
+  });
+
   it('should reject unknown group', async () => {
     mockedGetConfig.mockReturnValue({});
 
@@ -292,6 +310,22 @@ describe('configSet command', () => {
 
     expect(mockedWriteConfig).not.toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid boolean'));
+  });
+
+  it('should reject empty string as number value', async () => {
+    const { configSet } = await import('../config');
+    configSet('ai.timeout', '');
+
+    expect(mockedWriteConfig).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid number'));
+  });
+
+  it('should reject Infinity as number value', async () => {
+    const { configSet } = await import('../config');
+    configSet('ai.timeout', 'Infinity');
+
+    expect(mockedWriteConfig).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid number'));
   });
 
   it('should set top-level proxy via set command', async () => {
