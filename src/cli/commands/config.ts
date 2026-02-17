@@ -76,6 +76,7 @@ function maskSensitive(value: string): string {
  *
  * 对 apiKey 字段做掩码处理，其余原样输出。
  */
+// NOTE: 目前仅 ai.apiKey 需要掩码。若新增其他敏感字段，考虑用元数据驱动替代硬编码。
 function formatConfigForDisplay(config: V2erConfig): V2erConfig {
   const display = JSON.parse(JSON.stringify(config)) as V2erConfig;
   if (display.ai?.apiKey) {
@@ -96,8 +97,8 @@ function coerceValue(raw: string, meta: ConfigPathMeta): string | number | boole
 
     case 'number': {
       const num = Number(raw);
-      if (raw.trim() === '' || !Number.isFinite(num)) {
-        throw new Error(`Invalid number value: "${raw}"`);
+      if (raw.trim() === '' || !Number.isFinite(num) || num < 0) {
+        throw new Error(`Invalid number value: "${raw}" (expected non-negative finite number)`);
       }
       return num;
     }

@@ -125,7 +125,6 @@ describe('configShow command', () => {
     expect(consoleSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
     expect(output.ai.model).toBe('gemini-3-pro-preview');
-    consoleSpy.mockRestore();
   });
 
   it('should mask apiKey in display', async () => {
@@ -140,7 +139,6 @@ describe('configShow command', () => {
     const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
     expect(output.ai.apiKey).toBe('sk-1****cdef');
     expect(output.ai.apiKey).not.toContain('1234567890');
-    consoleSpy.mockRestore();
   });
 
   it('should mask short apiKey completely', async () => {
@@ -154,7 +152,6 @@ describe('configShow command', () => {
 
     const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
     expect(output.ai.apiKey).toBe('****');
-    consoleSpy.mockRestore();
   });
 
   it('should display specific group when provided', async () => {
@@ -323,6 +320,14 @@ describe('configSet command', () => {
   it('should reject Infinity as number value', async () => {
     const { configSet } = await import('../config');
     configSet('ai.timeout', 'Infinity');
+
+    expect(mockedWriteConfig).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid number'));
+  });
+
+  it('should reject negative number value', async () => {
+    const { configSet } = await import('../config');
+    configSet('ai.timeout', '-1000');
 
     expect(mockedWriteConfig).not.toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid number'));

@@ -47,7 +47,7 @@ root
 │   │       ├── analyze.ts    # runAnalyze: Process raw data
 │   │       ├── ai.ts         # runAi: AI profiling
 │   │       ├── show.ts       # runShow: Format and display report
-│   │       ├── config.ts     # Proxy configuration command
+│   │       ├── config.ts     # Config management (show/set/reset/proxy)
 │   │       └── run.ts        # runPipeline: Main command entry
 │   │   ├── workflow/         # Workflow orchestration
 │   │   │   ├── types.ts      # StepRunResult, WorkflowStep, RunOutcome
@@ -402,4 +402,4 @@ If none are set, no proxy is used.
 - **Language**: All test descriptions, data, and assertions in English; comments may be Chinese.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: Use `vi.mock` for modules (Fetcher, parsers).
-- **Coverage**: 200+ tests covering parsers, URL generators, services, CLI, config, analyzer, and AI.
+- **Coverage**: 250+ tests covering parsers, URL generators, services, CLI, config, analyzer, and AI.
