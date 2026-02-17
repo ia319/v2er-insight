@@ -3,7 +3,7 @@
  * 通过检测暂停期（>60天无活动）将用户活动分割为多个活跃期
  */
 
-import { ANALYZER_CONFIG } from '../config';
+import { getConfig } from '@/config';
 import type { PeriodBoundary } from '../types';
 
 interface Activity {
@@ -18,7 +18,7 @@ interface Activity {
  */
 export function detectPeriodBoundaries(
   activities: Activity[],
-  thresholdDays: number = ANALYZER_CONFIG.INACTIVITY_THRESHOLD_DAYS,
+  thresholdDays: number = getConfig().analyzer?.inactivityThreshold ?? 60,
 ): PeriodBoundary[] {
   if (activities.length === 0) return [];
 

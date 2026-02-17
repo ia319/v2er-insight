@@ -27,7 +27,7 @@ export const DEFAULT_CONFIG = {
   ai: {
     provider: 'gemini',
     model: 'gemini-3-pro-preview',
-    thinking: 'high' as const,
+    thinkingLevel: 'high' as const,
     timeout: 60_000,
     maxRetries: 3,
     baseDelay: 1000,

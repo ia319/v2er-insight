@@ -23,6 +23,4 @@ export { parseResponse, type ValidationResult } from './parser';
 
 export { resolveApiKey, withRetry, type RetryOptions } from './utils';
 
-export { DEFAULT_MODEL, DEFAULT_TIMEOUT, RETRY_CONFIG } from './config';
-
 export { buildMessageSequence, type MessageSequence } from './prompt';

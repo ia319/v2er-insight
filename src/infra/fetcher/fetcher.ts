@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type { IFetchStrategy, FetchResult, FetchOptions, FetchEvents } from './types';
 import { getHttpsAgent } from './agent';
+import { getConfig } from '@/config';
 
 /**
  * 将响应数据转换为字符串
@@ -33,7 +34,7 @@ export class SequentialStrategy implements IFetchStrategy {
 
       try {
         const response = await axios.get(url, {
-          timeout: options?.timeout ?? 30000,
+          timeout: options?.timeout ?? getConfig().fetch?.timeout ?? 30_000,
           ...(options?.headers && { headers: options.headers }),
           ...(httpsAgent && { httpsAgent }),
           proxy: false,

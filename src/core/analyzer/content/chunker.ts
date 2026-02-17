@@ -5,7 +5,7 @@
 
 import type { ActivePeriod } from '../types';
 import type { PeriodContent, PeriodContentChunk, ContentTopic, ContentReply } from '../types';
-import { ANALYZER_CONFIG } from '../config';
+import { getConfig } from '@/config';
 import { transformTopics, transformReplies } from './transformer';
 
 /**
@@ -19,7 +19,9 @@ import { transformTopics, transformReplies } from './transformer';
  * @returns 完整内容 PeriodContent 或分片数组 PeriodContentChunk[]
  */
 export function chunkPeriodContent(period: ActivePeriod): PeriodContent | PeriodContentChunk[] {
-  const { CHUNK_MAX_TOPICS, CHUNK_MAX_REPLIES } = ANALYZER_CONFIG;
+  const analyzerConfig = getConfig().analyzer;
+  const CHUNK_MAX_TOPICS = analyzerConfig?.chunkMaxTopics ?? 20;
+  const CHUNK_MAX_REPLIES = analyzerConfig?.chunkMaxReplies ?? 100;
   const { index: periodIndex, topics, replies } = period;
 
   // 转换为 AI 格式
@@ -40,7 +42,13 @@ export function chunkPeriodContent(period: ActivePeriod): PeriodContent | Period
   }
 
   // 需要分片
-  return createChunks(periodIndex, contentTopics, contentReplies);
+  return createChunks(
+    periodIndex,
+    contentTopics,
+    contentReplies,
+    CHUNK_MAX_TOPICS,
+    CHUNK_MAX_REPLIES,
+  );
 }
 
 /**
@@ -55,9 +63,9 @@ function createChunks(
   periodIndex: number,
   topics: ContentTopic[],
   replies: ContentReply[],
+  CHUNK_MAX_TOPICS: number,
+  CHUNK_MAX_REPLIES: number,
 ): PeriodContentChunk[] {
-  const { CHUNK_MAX_TOPICS, CHUNK_MAX_REPLIES } = ANALYZER_CONFIG;
-
   // 计算需要的 chunk 数量
   const topicChunks = Math.ceil(topics.length / CHUNK_MAX_TOPICS);
   const replyChunks = Math.ceil(replies.length / CHUNK_MAX_REPLIES);

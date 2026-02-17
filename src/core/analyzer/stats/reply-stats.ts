@@ -4,7 +4,7 @@
 
 import type { V2exReply } from '@/core/v2ex/types/entities';
 import type { SinglePeriodStats } from '../types';
-import { ANALYZER_CONFIG } from '../config';
+import { getConfig } from '@/config';
 import { parseRelativeTime, average, topN, weekdayDistribution } from '../utils';
 
 interface ReplyStatsInput {
@@ -66,7 +66,7 @@ export function calculateReplyStats(
     replyNodeDistribution: topN(
       replies,
       (r) => r.nodeName,
-      ANALYZER_CONFIG.NODE_DISTRIBUTION_TOP_N,
+      getConfig().analyzer?.nodeDistributionTopN ?? 3,
     ),
   };
 }

@@ -39,8 +39,20 @@ vi.mock('@/core/ai', () => ({
   parseResponse: mockedParseResponse,
   resolveApiKey: mockedResolveApiKey,
   withRetry: mockedWithRetry,
-  DEFAULT_MODEL: 'gemini-2.0-flash',
-  RETRY_CONFIG: { maxRetries: 3, baseDelayMs: 100 },
+}));
+
+vi.mock('@/config', () => ({
+  getConfig: vi.fn().mockReturnValue({
+    ai: {
+      provider: 'gemini',
+      model: 'gemini-3-pro-preview',
+      thinkingLevel: 'high',
+      timeout: 60_000,
+      maxRetries: 3,
+      baseDelay: 1000,
+      maxDelay: 10_000,
+    },
+  }),
 }));
 
 vi.mock('@/infra/logger', () => ({
