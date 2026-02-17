@@ -96,7 +96,7 @@ function coerceValue(raw: string, meta: ConfigPathMeta): string | number | boole
 
     case 'number': {
       const num = Number(raw);
-      if (Number.isNaN(num)) {
+      if (raw.trim() === '' || !Number.isFinite(num)) {
         throw new Error(`Invalid number value: "${raw}"`);
       }
       return num;
@@ -191,9 +191,19 @@ export function configShow(group?: string): void {
 
   // 指定分组
   if (group) {
+    // proxy 作为特殊的顶层字段
+    if (group === 'proxy') {
+      if (display.proxy) {
+        logger.info(`[proxy] ${display.proxy}`);
+      } else {
+        logger.info('[proxy] (not set)');
+      }
+      return;
+    }
+
     if (!CONFIG_GROUPS.includes(group as ConfigGroup)) {
       logger.error(`Unknown config group: "${group}"`);
-      logger.detail(`Available groups: ${CONFIG_GROUPS.join(', ')}`);
+      logger.detail(`Available groups: proxy, ${CONFIG_GROUPS.join(', ')}`);
       return;
     }
 
