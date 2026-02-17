@@ -47,7 +47,13 @@ root
 │   │       ├── analyze.ts    # runAnalyze: Process raw data
 │   │       ├── ai.ts         # runAi: AI profiling
 │   │       ├── show.ts       # runShow: Format and display report
-│   │       └── config.ts     # Proxy configuration command
+│   │       ├── config.ts     # Proxy configuration command
+│   │       └── run.ts        # runPipeline: Main command entry
+│   │   ├── workflow/         # Workflow orchestration
+│   │   │   ├── types.ts      # StepRunResult, WorkflowStep, RunOutcome
+│   │   │   ├── state.ts      # detectWorkflowState, buildExecutionPlan
+│   │   │   ├── recovery.ts   # ReasonCode -> RecoveryAction mapping
+│   │   │   └── orchestrator.ts # runWorkflow: Step dispatch & state machine
 │   │
 │   ├── config/               # [Shared] Configuration management
 │   │   ├── index.ts          # Public exports
@@ -207,13 +213,21 @@ root
 - **Role**: Command-line interface for user interaction and analysis pipeline.
 - **Entry**: `src/cli/index.ts` (Subcommand architecture).
 
-**Subcommands**:
+**Commands**:
 
+- `v2er <username>` → One-click pipeline (fetch → analyze → ai → show)
 - `v2er fetch <username>` → Fetch and save raw user data (raw.json)
 - `v2er analyze <username>` → Run statistics on raw data (analyzed.json)
 - `v2er ai <username>` → Generate user profile via Gemini (result.json)
 - `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
 - `v2er config proxy <url>` → Manage proxy settings
+
+**Main Command Options** (`v2er <username>`):
+
+- `--force` → Force re-fetch from scratch
+- `--model [name]` → Specify AI model (optional value)
+- `--thinking-level [level]` → Specify thinking level (optional value)
+- `-v, --verbose` → Show debug output
 
 **Shared Logic** (`utils.ts`):
 
@@ -285,10 +299,11 @@ root
   - `resolveApiKey()` → API key resolution (explicit > config > GOOGLE_API_KEY > GEMINI_API_KEY).
   - `withRetry(fn, options)` → Retry with exponential backoff and jitter.
 
-**Configuration** (`config.ts`):
+**Defaults** (from `config/defaults.ts`):
 
-- `DEFAULT_MODEL: 'gemini-2.5-flash-preview-05-20'`
-- `MAX_RETRIES: 3`, `BASE_DELAY: 1000`, `MAX_DELAY: 30000`
+- Model: `gemini-3-pro-preview` (via `getConfig().ai.model`)
+- ThinkingLevel: `high` (via `getConfig().ai.thinkingLevel`)
+- `maxRetries: 3`, `baseDelay: 1000`, `maxDelay: 10_000`
 
 ### 8. Logger Module (Complete)
 
@@ -309,7 +324,28 @@ root
 - Global singleton, set level once at program entry
 - Level priority: `error > warn > info > debug`
 
-### 9. Storage Module (Complete)
+### 9. Workflow Module (Complete)
+
+- **Role**: One-click pipeline orchestration for `v2er <username>`. Located in `src/cli/workflow`.
+
+**Public API** (`orchestrator.ts`):
+
+- `runWorkflow(options)` → `RunOutcome` (overallStatus, exitCode, results)
+
+**Sub-modules**:
+
+- **Types** (`types.ts`): `StepRunResult`, `WorkflowStep`, `ReasonCode`, `RecoveryAction`, `RunOutcome`
+- **State** (`state.ts`):
+  - `detectWorkflowState(username)` → Checks `raw.json`/`analyzed.json`/`result.json` existence
+  - `resolveEntryStep(state, force?)` → Determines which step to start from
+  - `buildExecutionPlan(entryStep)` → Returns ordered step array via slice
+- **Recovery** (`recovery.ts`): Maps `ReasonCode` → `RecoveryAction[]` with template rendering
+- **Orchestrator** (`orchestrator.ts`):
+  - Sequential step dispatch with `pipeline: true` flag
+  - `failed` → immediate halt, `partial` → continue with exitCode=1
+  - Unified failure output with recovery suggestions
+
+### 10. Storage Module (Complete)
 
 - **Role**: User data file persistence and lifecycle management. Located in `src/infra/storage`.
 
