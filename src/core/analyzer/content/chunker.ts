@@ -42,7 +42,13 @@ export function chunkPeriodContent(period: ActivePeriod): PeriodContent | Period
   }
 
   // 需要分片
-  return createChunks(periodIndex, contentTopics, contentReplies);
+  return createChunks(
+    periodIndex,
+    contentTopics,
+    contentReplies,
+    CHUNK_MAX_TOPICS,
+    CHUNK_MAX_REPLIES,
+  );
 }
 
 /**
@@ -57,11 +63,9 @@ function createChunks(
   periodIndex: number,
   topics: ContentTopic[],
   replies: ContentReply[],
+  CHUNK_MAX_TOPICS: number,
+  CHUNK_MAX_REPLIES: number,
 ): PeriodContentChunk[] {
-  const analyzerConfig = getConfig().analyzer;
-  const CHUNK_MAX_TOPICS = analyzerConfig?.chunkMaxTopics ?? 20;
-  const CHUNK_MAX_REPLIES = analyzerConfig?.chunkMaxReplies ?? 100;
-
   // 计算需要的 chunk 数量
   const topicChunks = Math.ceil(topics.length / CHUNK_MAX_TOPICS);
   const replyChunks = Math.ceil(replies.length / CHUNK_MAX_REPLIES);

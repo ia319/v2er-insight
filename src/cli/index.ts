@@ -20,14 +20,14 @@ import {
 import { logger } from '@/infra/logger';
 import packageJson from '../../package.json';
 
-// 为原生 fetch() 设置代理（AI 模块使用）
-initFetchProxy();
-
-// 从配置文件初始化日志级别
+// 从配置文件初始化日志级别（必须在其他初始化之前）
 const configLogLevel = getConfig().log?.level;
 if (configLogLevel) {
   logger.setLevel(configLogLevel);
 }
+
+// 为原生 fetch() 设置代理（AI 模块使用）
+initFetchProxy();
 
 program
   .name('v2er')
