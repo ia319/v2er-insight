@@ -2,12 +2,27 @@
   "name": "v2er-insight",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/cli/index.js",
   "bin": {
     "v2er": "./dist/cli/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "tsc && tsc-alias",
+    "clean:dist": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "copy:assets": "node ./scripts/copy-dist-assets.cjs",
+    "build:compile": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+    "build:assets": "pnpm run copy:assets",
+    "build": "pnpm run build:compile && pnpm run build:assets",
+    "build:release": "pnpm run clean:dist && pnpm run build && pnpm run prune:maps",
+    "prune:maps": "node ./scripts/prune-dist-maps.cjs",
+    "prepack": "pnpm run build:release",
+    "pack:check": "pnpm pack --dry-run --json",
+    "release:check": "pnpm run check && pnpm run test && pnpm run pack:check",
+    "release:build": "pnpm run build:release",
+    "release:publish": "npm publish --access public",
     "start": "node dist/cli/index.js",
     "dev": "vitest",
     "test": "vitest run",

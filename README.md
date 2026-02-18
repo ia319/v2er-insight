@@ -7,6 +7,36 @@ V2EX 用户画像深度分析工具。通过自动化抓取数据、统计解析
 本项目采用管道化设计，目前通过以下步骤逐步生成深度报告：
 **Fetch** (抓取) → **Analyze** (统计) → **AI** (建模) → **Show** (展示)
 
+## 快速开始
+
+按顺序完成以下步骤：
+
+1. 安装 CLI 包
+
+```bash
+npm install -g v2er-insight
+# 或
+pnpm add -g v2er-insight
+```
+
+2. 配置 Gemini API Key
+
+```bash
+v2er config set ai.apiKey <your_gemini_api_key>
+```
+
+3. 设置代理（可选，建议在受限网络下启用）
+
+```bash
+v2er config proxy http://127.0.0.1:7890
+```
+
+4. 执行一键分析
+
+```bash
+v2er <username>
+```
+
 ## CLI 命令
 
 ### 一键分析（推荐）

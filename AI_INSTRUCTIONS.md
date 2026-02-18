@@ -12,19 +12,30 @@ It uses a modular architecture separating generic logic (Fetcher) from business 
 - **Language**: TypeScript (Node.js >= 20.18.1)
 - **Module System**: CommonJS (target ES2020)
 - **Path Aliases**: `@/` → `src/` (via `tsconfig.json` paths + `tsc-alias`)
-- **Build**: `tsc && tsc-alias` (converts aliases to relative paths)
+- **Build**: `pnpm run build` (`build:compile` + `build:assets`)
+- **Release Build**: `pnpm run build:release` (clean `dist`, compile, copy runtime assets, prune maps)
 - **Linting**: ESLint (Flat Config) + Prettier + Husky
 - **Testing**: Vitest (`vi.mock` for network calls, `@/` alias in `vitest.config.ts`)
 - **HTTP**: Axios
 - **HTML Parsing**: Cheerio
 
+## Build & Packaging Notes
+
+- `scripts/copy-dist-assets.cjs`: Copy runtime non-code assets into `dist` (currently `src/core/ai/prompt/system-prompt.md`) to avoid packaged runtime `ENOENT`.
+- `scripts/prune-dist-maps.cjs`: Remove `*.map` from `dist` before packaging to reduce tarball size and avoid leaking local build path metadata.
+- `pack:check` runs `pnpm pack --dry-run --json` and should be used to verify published files before release.
+
 ## Directory Structure & File Purposes
 
-```
+```text
 root
 ├── eslint.config.mjs         # ESLint Flat Config (v9+)
 ├── package.json              # Dependencies & npm scripts
 ├── tsconfig.json             # TypeScript compiler config
+├── tsconfig.build.json       # Build-only TS config (exclude tests/fixtures)
+├── scripts/                  # Build/package helper scripts
+│   ├── copy-dist-assets.cjs  # Copy runtime assets into dist
+│   └── prune-dist-maps.cjs   # Remove sourcemaps before packing
 ├── vitest.config.ts          # Vitest test runner config
 ├── task2.md                  # V2EX page structure analysis doc
 ├── vitest-env.d.ts           # Vitest global type declarations
@@ -40,8 +51,10 @@ root
 │   ├── cli/                  # [Complete] Command-line interface
 │   │   ├── index.ts          # CLI entry point (commander setup)
 │   │   ├── types.ts          # CLI option types (CommandOptions suffix)
-│   │   ├── utils.ts          # CLI shared utilities (events/error logs)
-│   │   └── commands/         # Command handlers
+│   │   ├── utils.ts          # CLI shared utilities (events/progress logs)
+│   │   ├── utils/            # CLI utility submodules
+│   │   │   └── error.ts      # Shared error detail extraction
+│   │   ├── commands/         # Command handlers
 │   │       ├── index.ts      # Re-exports commands
 │   │       ├── fetch.ts      # runFetch: Fetch user data
 │   │       ├── analyze.ts    # runAnalyze: Process raw data
@@ -232,10 +245,11 @@ root
 - `--thinking-level [level]` → Specify thinking level (optional value)
 - `-v, --verbose` → Show debug output
 
-**Shared Logic** (`utils.ts`):
+**Shared Logic** (`utils.ts` and `utils/error.ts`):
 
 - `createFetchEvents(label)`: Centralized progress/error reporting for fetch/ai operations.
 - `logFetchError(result)`: Unified error formatting with indentation alignment.
+- `extractErrorDetails(error)`: Normalizes error message/raw detail extraction for CLI command and workflow error paths.
 
 ### 5. Config Module (Complete)
 
@@ -310,9 +324,9 @@ root
 - ThinkingLevel: `high` (via `getConfig().ai.thinkingLevel`)
 - `maxRetries: 3`, `baseDelay: 1000`, `maxDelay: 10_000`
 - `runAi` resolves thinking level by priority:
-  - CLI explicit value
-  - `config.ai.thinkingLevel`
-  - undefined
+  - CLI explicit value (e.g. `--thinking-level high`)
+  - `config.ai.thinkingLevel` (defaults to `high` when not explicitly unset)
+  - `undefined` (only if the config field is explicitly removed by the user)
 - Invalid thinking level fails fast with reason code
   `AI_INVALID_THINKING_LEVEL` and skips provider calls.
 
