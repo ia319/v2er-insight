@@ -68,7 +68,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   AI_INVALID_THINKING_LEVEL: [
     {
       type: 'instruction',
-      content: '将 thinking-level 调整为最小/低/中/高之一',
+      content: '将 thinking-level 调整为 minimal | low | medium | high 之一',
       description: '当前传入的思考等级不合法，需使用受支持的枚举值',
     },
     {

@@ -57,7 +57,7 @@ export class GeminiProvider implements IAIProvider {
         ...(typeof timeout === 'number' && {
           httpOptions: { timeout },
         }),
-        ...(sdkThinkingLevel && {
+        ...(sdkThinkingLevel !== undefined && {
           thinkingConfig: { thinkingLevel: sdkThinkingLevel },
         }),
       },

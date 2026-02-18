@@ -81,6 +81,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       reasonCode: 'AI_INVALID_THINKING_LEVEL',
       message: `无效的 thinkingLevel: ${rawThinkingLevel}`,
       recoverable: false,
+      recoverActions: getRecoveryActions('AI_INVALID_THINKING_LEVEL', { username }),
     };
   }
   const thinkingLevel = rawThinkingLevel as ThinkingLevel | undefined;

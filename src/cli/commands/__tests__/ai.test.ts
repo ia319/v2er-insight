@@ -42,20 +42,23 @@ vi.mock('@/core/ai', () => ({
   withRetry: mockedWithRetry,
 }));
 
-vi.mock('@/config', () => ({
-  getConfig: vi.fn().mockReturnValue({
-    ai: {
-      provider: 'gemini',
-      model: 'gemini-3-pro-preview',
-      thinkingLevel: 'high',
-      timeout: 60_000,
-      maxRetries: 3,
-      baseDelay: 1000,
-      maxDelay: 10_000,
-    },
-  }),
-  THINKING_LEVELS: ['minimal', 'low', 'medium', 'high'],
-}));
+vi.mock('@/config', async () => {
+  const actual = await vi.importActual<typeof import('@/config')>('@/config');
+  return {
+    ...actual,
+    getConfig: vi.fn().mockReturnValue({
+      ai: {
+        provider: 'gemini',
+        model: 'gemini-3-pro-preview',
+        thinkingLevel: 'high',
+        timeout: 60_000,
+        maxRetries: 3,
+        baseDelay: 1000,
+        maxDelay: 10_000,
+      },
+    }),
+  };
+});
 
 vi.mock('@/infra/logger', () => ({
   logger: mockLogger,
@@ -152,6 +155,9 @@ describe('runAi', () => {
 
     expect(result.status).toBe('failed');
     expect(result.reasonCode).toBe('AI_INVALID_THINKING_LEVEL');
+    expect(result.recoverable).toBe(false);
+    expect(result.recoverActions).toBeDefined();
+    expect(result.recoverActions?.length).toBeGreaterThan(0);
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('xyz'));
     expect(mockCreateSession).not.toHaveBeenCalled();
   });
