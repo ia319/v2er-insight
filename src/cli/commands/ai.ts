@@ -20,6 +20,7 @@ import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
+import { extractErrorDetails } from '../utils/error';
 
 /**
  * 执行 ai 命令
@@ -163,8 +164,11 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error(`AI 分析失败: ${message}`);
+    const { message, raw } = extractErrorDetails(error);
+    if (!options.pipeline) {
+      logger.error(`AI 分析失败: ${message}`);
+      logger.detail(raw);
+    }
     return {
       step: 'ai',
       status: 'failed',
@@ -172,6 +176,9 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       message: `AI 分析失败: ${message}`,
       recoverable: true,
       recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
+      meta: {
+        rawError: raw,
+      },
     };
   }
 }

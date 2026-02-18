@@ -1,6 +1,7 @@
 import { logger } from '@/infra/logger';
 import { runAi, runAnalyze, runFetch, runShow } from '../commands';
 import type { AiCommandOptions, FetchCommandOptions, ShowCommandOptions } from '../types';
+import { extractErrorDetails } from '../utils/error';
 import { buildExecutionPlan, detectWorkflowState, resolveEntryStep } from './state';
 import type {
   RecoveryAction,
@@ -88,12 +89,15 @@ export async function runWorkflow(options: RunWorkflowOptions): Promise<RunOutco
         };
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const { message, raw } = extractErrorDetails(error);
       const result: StepRunResult = {
         step,
         status: 'failed',
         reasonCode: 'UNKNOWN_ERROR',
         message: `步骤执行异常: ${message}`,
+        meta: {
+          rawError: raw,
+        },
       };
       results.push(result);
       printStepLine(result, index, plan.length);
@@ -140,6 +144,11 @@ function printStepLine(result: StepRunResult, index: number, total: number): voi
 function printResultSummary(result: StepRunResult): void {
   if (result.reasonCode) {
     logger.info(`原因码: ${result.reasonCode}`);
+  }
+
+  const rawError = result.meta?.rawError;
+  if (typeof rawError === 'string') {
+    logger.detail(rawError);
   }
 
   if (!result.recoverActions || result.recoverActions.length === 0) {
