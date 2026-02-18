@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { parseUserProfile } from '../user-profile';
-import { loadFixture } from '../utils';
+import { loadFixture } from '../utils/test-helpers';
 
 const fixturesDir = __dirname;
 
