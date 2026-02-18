@@ -51,10 +51,10 @@ root
 │   ├── cli/                  # [Complete] Command-line interface
 │   │   ├── index.ts          # CLI entry point (commander setup)
 │   │   ├── types.ts          # CLI option types (CommandOptions suffix)
-│   │   ├── utils.ts          # CLI shared utilities (events/error logs)
+│   │   ├── utils.ts          # CLI shared utilities (events/progress logs)
 │   │   ├── utils/            # CLI utility submodules
 │   │   │   └── error.ts      # Shared error detail extraction
-│   │   └── commands/         # Command handlers
+│   │   ├── commands/         # Command handlers
 │   │       ├── index.ts      # Re-exports commands
 │   │       ├── fetch.ts      # runFetch: Fetch user data
 │   │       ├── analyze.ts    # runAnalyze: Process raw data
