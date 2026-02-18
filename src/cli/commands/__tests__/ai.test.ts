@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { ThinkingLevel } from '@/config';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedWriteDataFile = vi.hoisted(() => vi.fn());
@@ -53,6 +54,7 @@ vi.mock('@/config', () => ({
       maxDelay: 10_000,
     },
   }),
+  THINKING_LEVELS: ['minimal', 'low', 'medium', 'high'],
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -110,9 +112,44 @@ describe('runAi', () => {
 
     const result = await runAi('testuser', {});
 
+    // 验证 thinkingLevel 从 config 透传到 createSession
+    expect(mockCreateSession).toHaveBeenCalledWith(sequence.systemPrompt, {
+      thinkingLevel: 'high',
+    });
     expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', aiResult);
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
     expect(result.status).toBe('success');
+  });
+
+  it('should pass CLI thinkingLevel option over config value', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedBuildMessageSequence.mockReturnValue({
+      systemPrompt: 'prompt',
+      messages: [],
+      finalPrompt: 'final',
+    });
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('response');
+    mockedParseResponse.mockReturnValue({ data: { summary: 'r' }, warnings: [] });
+    mockedCleanExpiredData.mockReturnValue([]);
+
+    await runAi('testuser', { thinkingLevel: 'low' });
+
+    expect(mockCreateSession).toHaveBeenCalledWith('prompt', { thinkingLevel: 'low' });
+  });
+
+  it('should reject invalid thinkingLevel value', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+
+    const result = await runAi('testuser', { thinkingLevel: 'xyz' as ThinkingLevel });
+
+    expect(result.status).toBe('failed');
+    expect(result.reasonCode).toBe('AI_INVALID_THINKING_LEVEL');
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('xyz'));
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
   it('should catch and log errors from AI provider', async () => {
