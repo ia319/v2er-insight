@@ -79,7 +79,8 @@ program
   .command('ai')
   .description('Generate AI user profile and analysis')
   .argument('<username>', 'V2EX username')
-  .option('--model <name>', 'Specify Gemini model')
+  .option('--model [name]', 'Specify Gemini model (or select interactively)')
+  .option('--thinking-level [level]', 'Specify thinking level: minimal | low | medium | high')
   .action(async (username, options) => {
     const result = await runAi(username, options);
     if (result.status === 'failed') process.exitCode = 1;
