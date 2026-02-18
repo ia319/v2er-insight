@@ -94,7 +94,6 @@ describe('runPipeline', () => {
 
     expect(mockLogger.setLevel).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-    expect(mockLogger.error).toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('unexpected boom'));
   });
 });

@@ -24,6 +24,7 @@ const mockLogger = vi.hoisted(() => ({
   success: vi.fn(),
   section: vi.fn(),
   detail: vi.fn(),
+  debug: vi.fn(),
   warn: vi.fn(),
   progress: vi.fn(),
 }));

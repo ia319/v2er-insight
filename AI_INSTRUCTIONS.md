@@ -27,7 +27,7 @@ It uses a modular architecture separating generic logic (Fetcher) from business 
 
 ## Directory Structure & File Purposes
 
-```
+```text
 root
 ├── eslint.config.mjs         # ESLint Flat Config (v9+)
 ├── package.json              # Dependencies & npm scripts
