@@ -12,11 +12,18 @@ It uses a modular architecture separating generic logic (Fetcher) from business 
 - **Language**: TypeScript (Node.js >= 20.18.1)
 - **Module System**: CommonJS (target ES2020)
 - **Path Aliases**: `@/` → `src/` (via `tsconfig.json` paths + `tsc-alias`)
-- **Build**: `tsc && tsc-alias` (converts aliases to relative paths)
+- **Build**: `pnpm run build` (`build:compile` + `build:assets`)
+- **Release Build**: `pnpm run build:release` (clean `dist`, compile, copy runtime assets, prune maps)
 - **Linting**: ESLint (Flat Config) + Prettier + Husky
 - **Testing**: Vitest (`vi.mock` for network calls, `@/` alias in `vitest.config.ts`)
 - **HTTP**: Axios
 - **HTML Parsing**: Cheerio
+
+## Build & Packaging Notes
+
+- `scripts/copy-dist-assets.cjs`: Copy runtime non-code assets into `dist` (currently `src/core/ai/prompt/system-prompt.md`), preventing packaged runtime `ENOENT`.
+- `scripts/prune-dist-maps.cjs`: Remove `*.map` and `*.d.ts.map` from `dist` before packaging to reduce tarball size and avoid leaking build path metadata.
+- `pack:check` runs `pnpm pack --dry-run --json` and should be used to verify published files before release.
 
 ## Directory Structure & File Purposes
 
@@ -310,9 +317,9 @@ root
 - ThinkingLevel: `high` (via `getConfig().ai.thinkingLevel`)
 - `maxRetries: 3`, `baseDelay: 1000`, `maxDelay: 10_000`
 - `runAi` resolves thinking level by priority:
-  - CLI explicit value
-  - `config.ai.thinkingLevel`
-  - undefined
+  - CLI explicit value (e.g. `--thinking-level high`)
+  - `config.ai.thinkingLevel` (defaults to `high` when not explicitly unset)
+  - `undefined` (only if the config field is explicitly removed by the user)
 - Invalid thinking level fails fast with reason code
   `AI_INVALID_THINKING_LEVEL` and skips provider calls.
 
