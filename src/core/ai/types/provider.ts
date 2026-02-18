@@ -2,10 +2,18 @@
  * Provider 接口定义
  */
 
+import type { ThinkingLevel } from '@/config/types/ai';
+
+/** createSession 可选参数 */
+export interface SessionOptions {
+  /** 思考等级 */
+  thinkingLevel?: ThinkingLevel;
+}
+
 /** AI Provider 接口 */
 export interface IAIProvider {
   readonly name: string;
   /** 注意：为了支持异步初始化，返回 void | Promise<void> */
-  createSession(systemPrompt: string): void | Promise<void>;
+  createSession(systemPrompt: string, options?: SessionOptions): void | Promise<void>;
   sendMessage(content: string): Promise<string>;
 }

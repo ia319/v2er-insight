@@ -13,4 +13,4 @@ export type {
   RiskAssessment,
   EvolutionTimelineEntry,
 } from './result';
-export type { IAIProvider } from './provider';
+export type { IAIProvider, SessionOptions } from './provider';
