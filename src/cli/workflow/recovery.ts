@@ -65,6 +65,23 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '完成 API Key 配置后重试 AI 步骤',
     },
   ],
+  AI_INVALID_THINKING_LEVEL: [
+    {
+      type: 'instruction',
+      content: '将 thinking-level 调整为 minimal | low | medium | high 之一',
+      description: '当前传入的思考等级不合法，需使用受支持的枚举值',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --thinking-level medium',
+      description: '使用合法思考等级重试 AI 步骤',
+    },
+    {
+      type: 'command',
+      content: 'v2er config set ai.thinkingLevel medium',
+      description: '修正全局默认 thinkingLevel，避免后续重复报错',
+    },
+  ],
   AI_PROVIDER_FAILED: [
     {
       type: 'instruction',

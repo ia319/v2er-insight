@@ -6,8 +6,11 @@
  * 但配置文件面向用户，使用小写更友好。
  */
 
-/** 思考水平（小写，与 SDK 内部 ThinkingLevel_2 类型对齐） */
-export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+/** 合法的思考水平值（运行时校验用） */
+export const THINKING_LEVELS = ['minimal', 'low', 'medium', 'high'] as const;
+
+/** 思考水平类型（从 THINKING_LEVELS 派生，保证类型与运行时一致） */
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 /** AI 模块配置 */
 export interface AIConfig {

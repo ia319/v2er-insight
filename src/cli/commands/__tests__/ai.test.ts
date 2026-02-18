@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import type { ThinkingLevel } from '@/config';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedWriteDataFile = vi.hoisted(() => vi.fn());
@@ -41,19 +42,23 @@ vi.mock('@/core/ai', () => ({
   withRetry: mockedWithRetry,
 }));
 
-vi.mock('@/config', () => ({
-  getConfig: vi.fn().mockReturnValue({
-    ai: {
-      provider: 'gemini',
-      model: 'gemini-3-pro-preview',
-      thinkingLevel: 'high',
-      timeout: 60_000,
-      maxRetries: 3,
-      baseDelay: 1000,
-      maxDelay: 10_000,
-    },
-  }),
-}));
+vi.mock('@/config', async () => {
+  const actual = await vi.importActual<typeof import('@/config')>('@/config');
+  return {
+    ...actual,
+    getConfig: vi.fn().mockReturnValue({
+      ai: {
+        provider: 'gemini',
+        model: 'gemini-3-pro-preview',
+        thinkingLevel: 'high',
+        timeout: 60_000,
+        maxRetries: 3,
+        baseDelay: 1000,
+        maxDelay: 10_000,
+      },
+    }),
+  };
+});
 
 vi.mock('@/infra/logger', () => ({
   logger: mockLogger,
@@ -110,9 +115,51 @@ describe('runAi', () => {
 
     const result = await runAi('testuser', {});
 
+    // 验证 thinkingLevel 从 config 透传到 createSession
+    expect(mockCreateSession).toHaveBeenCalledWith(sequence.systemPrompt, {
+      thinkingLevel: 'high',
+      timeout: 60_000,
+    });
     expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', aiResult);
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
     expect(result.status).toBe('success');
+  });
+
+  it('should pass CLI thinkingLevel option over config value', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedBuildMessageSequence.mockReturnValue({
+      systemPrompt: 'prompt',
+      messages: [],
+      finalPrompt: 'final',
+    });
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('response');
+    mockedParseResponse.mockReturnValue({ data: { summary: 'r' }, warnings: [] });
+    mockedCleanExpiredData.mockReturnValue([]);
+
+    await runAi('testuser', { thinkingLevel: 'low' });
+
+    expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
+      thinkingLevel: 'low',
+      timeout: 60_000,
+    });
+  });
+
+  it('should reject invalid thinkingLevel value', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+
+    const result = await runAi('testuser', { thinkingLevel: 'xyz' as ThinkingLevel });
+
+    expect(result.status).toBe('failed');
+    expect(result.reasonCode).toBe('AI_INVALID_THINKING_LEVEL');
+    expect(result.recoverable).toBe(false);
+    expect(result.recoverActions).toBeDefined();
+    expect(result.recoverActions?.length).toBeGreaterThan(0);
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('xyz'));
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
   it('should catch and log errors from AI provider', async () => {

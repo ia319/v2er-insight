@@ -5,6 +5,7 @@
  */
 
 export type { AIConfig, ThinkingLevel } from './ai';
+export { THINKING_LEVELS } from './ai';
 export type { FetchConfig } from './fetch';
 export type { AnalyzerConfig } from './analyzer';
 export type { DataConfig } from './data';

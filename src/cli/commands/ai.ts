@@ -13,7 +13,8 @@ import {
   resolveApiKey,
   withRetry,
 } from '@/core/ai';
-import { getConfig } from '@/config';
+import { getConfig, THINKING_LEVELS } from '@/config';
+import type { ThinkingLevel } from '@/config';
 import { readDataFile, writeDataFile, cleanExpiredData } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
@@ -58,8 +59,39 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   }
 
   const config = getConfig();
-  const model = options.model ?? config.ai?.model ?? 'gemini-3-pro-preview';
+
+  // Commander 将 --model [name] 无值时解析为 true；
+  // 字符串时直接使用，否则回退到配置/默认值（后续支持交互选择时替换此逻辑）
+  const model =
+    typeof options.model === 'string'
+      ? options.model
+      : (config.ai?.model ?? 'gemini-3-pro-preview');
+
+  // 同上：--thinking-level [level] 无值时为 true，字符串时直接使用
+  const rawThinkingLevel =
+    typeof options.thinkingLevel === 'string' ? options.thinkingLevel : config.ai?.thinkingLevel;
+
+  // 校验 thinkingLevel 合法性
+  if (rawThinkingLevel && !THINKING_LEVELS.includes(rawThinkingLevel as ThinkingLevel)) {
+    logger.error(`无效的思考等级: "${rawThinkingLevel}"`);
+    logger.info(`可选值: ${THINKING_LEVELS.join(' | ')}`);
+    return {
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'AI_INVALID_THINKING_LEVEL',
+      message: `无效的 thinkingLevel: ${rawThinkingLevel}`,
+      recoverable: false,
+      recoverActions: getRecoveryActions('AI_INVALID_THINKING_LEVEL', { username }),
+    };
+  }
+  // 注意：先完成上方白名单校验，再使用该类型断言。
+  // TODO: 使用 type guard 替换断言式收窄 [2026-02-18]
+  const thinkingLevel = rawThinkingLevel as ThinkingLevel | undefined;
+
   logger.info(`\nAI 分析: ${username} (模型: ${model})`);
+  if (thinkingLevel) {
+    logger.detail(`思考等级: ${thinkingLevel}`);
+  }
 
   // 构建消息序列
   const sequence = buildMessageSequence(analyzed);
@@ -76,7 +108,10 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
 
   try {
     // 初始化会话
-    await provider.createSession(sequence.systemPrompt);
+    await provider.createSession(sequence.systemPrompt, {
+      thinkingLevel,
+      timeout: config.ai?.timeout,
+    });
 
     // 逐条发送数据消息
     logger.section('发送数据至 AI...');

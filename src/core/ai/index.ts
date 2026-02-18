@@ -9,6 +9,7 @@ export type {
   AIAnalysisResult,
   AnalysisOptions,
   IAIProvider,
+  SessionOptions,
   ProfessionalProfile,
   PersonalProfile,
   PsychologicalProfile,

@@ -22,10 +22,10 @@ export interface FetchCommandOptions {
  * ai 命令选项
  */
 export interface AiCommandOptions {
-  /** 临时指定模型（不影响全局配置） */
-  model?: string;
-  /** 临时覆盖思考等级（不影响全局配置） */
-  thinkingLevel?: ThinkingLevel;
+  /** 临时指定模型，或 true 表示触发交互选择 */
+  model?: string | true;
+  /** 临时覆盖思考等级，或 true 表示触发交互选择 */
+  thinkingLevel?: ThinkingLevel | true;
   /** 由一键流程触发时开启，供命令控制日志粒度 */
   pipeline?: boolean;
 }

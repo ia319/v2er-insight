@@ -295,6 +295,8 @@ root
   - `system-prompt.md` → Markdown-based system prompt template.
 - **Providers** (`providers/`):
   - `GeminiProvider` → Google Gemini API adapter with multi-turn chat support.
+  - `GeminiProvider.createSession(systemPrompt, options?)` supports
+    `SessionOptions` (`thinkingLevel?: ThinkingLevel`).
 - **Parser** (`parser/`):
   - `parseResponse(text)` → Extracts JSON from AI response (prioritizes ```json blocks).
   - `validateResponse(data)` → Lenient validator with deep merge, score clamping (0-100), and warnings.
@@ -307,6 +309,12 @@ root
 - Model: `gemini-3-pro-preview` (via `getConfig().ai.model`)
 - ThinkingLevel: `high` (via `getConfig().ai.thinkingLevel`)
 - `maxRetries: 3`, `baseDelay: 1000`, `maxDelay: 10_000`
+- `runAi` resolves thinking level by priority:
+  - CLI explicit value
+  - `config.ai.thinkingLevel`
+  - undefined
+- Invalid thinking level fails fast with reason code
+  `AI_INVALID_THINKING_LEVEL` and skips provider calls.
 
 ### 8. Logger Module (Complete)
 
@@ -343,6 +351,7 @@ root
   - `resolveEntryStep(state, force?)` → Determines which step to start from
   - `buildExecutionPlan(entryStep)` → Returns ordered step array via slice
 - **Recovery** (`recovery.ts`): Maps `ReasonCode` → `RecoveryAction[]` with template rendering
+  - Includes `AI_INVALID_THINKING_LEVEL` recovery guidance.
 - **Orchestrator** (`orchestrator.ts`):
   - Sequential step dispatch with `pipeline: true` flag
   - `failed` → immediate halt, `partial` → continue with exitCode=1
