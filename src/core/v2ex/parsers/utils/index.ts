@@ -4,4 +4,3 @@
 
 export { parsePagination } from './pagination';
 export type { PaginationInfo } from './pagination';
-export { loadFixture } from './test-helpers';

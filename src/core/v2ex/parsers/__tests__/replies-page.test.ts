@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 
 import { parseRepliesPage } from '../replies-page';
 import type { RepliesPageParseResult } from '../../types';
-import { loadFixture } from '../utils';
+import { loadFixture } from '../utils/test-helpers';
 
 const fixturesDir = __dirname;
 
