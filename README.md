@@ -68,8 +68,8 @@ v2er ai <username> [选项]
 
 | 选项                       | 说明                                                               |
 | -------------------------- | ------------------------------------------------------------------ |
-| `--model <name>`           | 指定 Gemini 模型（默认: `gemini-3-pro-preview`）                   |
-| `--thinking-level <level>` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
+| `--model [name]`           | 指定 Gemini 模型（默认: `gemini-3-pro-preview`）                   |
+| `--thinking-level [level]` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
 
 ### 4. 报告展示 (Show)
 
@@ -136,7 +136,11 @@ AI 模块通过以下优先级依次尝试读取 Gemini API Key：
 
 若以上均未配置，则尝试直接连接。
 
-### 3. 技术实现细节
+### 3. 参数优先级与默认值来源
+
+配置解析关系：显式参数 > `~/.v2er-insight/config.json` > [src/config/defaults.ts](src/config/defaults.ts)（特例：`proxy` / `apiKey` 还会读取环境变量）。
+
+### 4. 技术实现细节
 
 - 日志系统：采用级别过滤（Error/Warn/Info/Debug），支持带进度的章节式输出。
 - 代理驱动（双通道）：
