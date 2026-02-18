@@ -42,6 +42,10 @@ export function resolveWorkflowOptions(
  */
 export async function runPipeline(username: string, options: RunCommandOptions): Promise<void> {
   try {
+    if (options.verbose) {
+      logger.setLevel('debug');
+    }
+
     const workflowOptions = resolveWorkflowOptions(username, options);
     const outcome = await runWorkflow(workflowOptions);
     process.exitCode = outcome.exitCode;
