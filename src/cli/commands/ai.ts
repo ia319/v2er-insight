@@ -84,6 +84,8 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       recoverActions: getRecoveryActions('AI_INVALID_THINKING_LEVEL', { username }),
     };
   }
+  // 注意：先完成上方白名单校验，再使用该类型断言。
+  // TODO: 使用 type guard 替换断言式收窄 [2026-02-18]
   const thinkingLevel = rawThinkingLevel as ThinkingLevel | undefined;
 
   logger.info(`\nAI 分析: ${username} (模型: ${model})`);

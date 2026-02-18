@@ -12,6 +12,9 @@ export type { IAIProvider };
  * 项目小写 ThinkingLevel → SDK 大写枚举的映射表
  *
  * satisfies 确保每个项目值都有对应 SDK 枚举，SDK 升级时若枚举变化会编译报错。
+ * 注意：只将此映射用于枚举覆盖校验，不要将其视为模型级兼容性保证。
+ * 例如，部分 Gemini 3 Pro 变体可能只接受 low/high，而 Flash 变体支持
+ * minimal/low/medium/high。发起请求前请先校验模型与等级组合，否则运行时仍可能失败。
  */
 const THINKING_LEVEL_MAP = {
   minimal: SdkThinkingLevel.MINIMAL,
