@@ -5,7 +5,7 @@ const path = require('node:path');
 // 并避免把构建时的路径信息暴露到安装产物中。
 // NOTE: 保留 .d.ts 文件，继续提供 TypeScript 类型提示能力。
 const DIST_DIR = path.resolve(process.cwd(), 'dist');
-const DELETE_SUFFIXES = ['.map', '.d.ts.map'];
+const DELETE_SUFFIXES = ['.map'];
 
 function shouldDelete(filePath) {
   return DELETE_SUFFIXES.some((suffix) => filePath.endsWith(suffix));

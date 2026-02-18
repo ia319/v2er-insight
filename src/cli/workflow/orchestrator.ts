@@ -99,7 +99,6 @@ export async function runWorkflow(options: RunWorkflowOptions): Promise<RunOutco
           rawError: raw,
         },
       };
-      logger.debug(`步骤原始错误(${step}): ${raw}`);
       results.push(result);
       printStepLine(result, index, plan.length);
       printResultSummary(result);

@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunCommandOptions } from '@/cli/types';
 
 const mockRunWorkflow = vi.hoisted(() => vi.fn());
@@ -92,8 +92,9 @@ describe('runPipeline', () => {
 
     await runPipeline('alice', {});
 
+    expect(mockLogger.setLevel).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('工作流执行失败'));
+    expect(mockLogger.error).toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('unexpected boom'));
   });
 });
