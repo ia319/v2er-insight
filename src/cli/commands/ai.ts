@@ -105,7 +105,10 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
 
   try {
     // 初始化会话
-    await provider.createSession(sequence.systemPrompt, { thinkingLevel });
+    await provider.createSession(sequence.systemPrompt, {
+      thinkingLevel,
+      timeout: config.ai?.timeout,
+    });
 
     // 逐条发送数据消息
     logger.section('发送数据至 AI...');

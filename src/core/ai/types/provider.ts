@@ -8,6 +8,8 @@ import type { ThinkingLevel } from '@/config/types/ai';
 export interface SessionOptions {
   /** 思考等级 */
   thinkingLevel?: ThinkingLevel;
+  /** 请求超时（毫秒） */
+  timeout?: number;
 }
 
 /** AI Provider 接口 */

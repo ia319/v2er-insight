@@ -115,6 +115,7 @@ describe('runAi', () => {
     // 验证 thinkingLevel 从 config 透传到 createSession
     expect(mockCreateSession).toHaveBeenCalledWith(sequence.systemPrompt, {
       thinkingLevel: 'high',
+      timeout: 60_000,
     });
     expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', aiResult);
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
@@ -137,7 +138,10 @@ describe('runAi', () => {
 
     await runAi('testuser', { thinkingLevel: 'low' });
 
-    expect(mockCreateSession).toHaveBeenCalledWith('prompt', { thinkingLevel: 'low' });
+    expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
+      thinkingLevel: 'low',
+      timeout: 60_000,
+    });
   });
 
   it('should reject invalid thinkingLevel value', async () => {

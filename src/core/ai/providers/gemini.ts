@@ -48,11 +48,15 @@ export class GeminiProvider implements IAIProvider {
    */
   createSession(systemPrompt: string, options?: SessionOptions): void {
     const sdkThinkingLevel = toSdkThinkingLevel(options?.thinkingLevel);
+    const timeout = options?.timeout;
 
     this.chat = this.ai.chats.create({
       model: this.model,
       config: {
         systemInstruction: systemPrompt,
+        ...(typeof timeout === 'number' && {
+          httpOptions: { timeout },
+        }),
         ...(sdkThinkingLevel && {
           thinkingConfig: { thinkingLevel: sdkThinkingLevel },
         }),
