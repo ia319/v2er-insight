@@ -66,8 +66,10 @@ export class SequentialStrategy implements IFetchStrategy {
     const httpsAgent = getHttpsAgent();
     const fetchConfig = getConfig().fetch;
 
-    const maxRetries =
-      options?.maxRetries ?? fetchConfig?.maxRetries ?? DEFAULT_CONFIG.fetch.maxRetries;
+    const maxRetries = Math.max(
+      0,
+      options?.maxRetries ?? fetchConfig?.maxRetries ?? DEFAULT_CONFIG.fetch.maxRetries,
+    );
     const baseDelay =
       options?.baseDelay ?? fetchConfig?.baseDelay ?? DEFAULT_CONFIG.fetch.baseDelay;
     const maxDelay = options?.maxDelay ?? fetchConfig?.maxDelay ?? DEFAULT_CONFIG.fetch.maxDelay;
@@ -115,7 +117,7 @@ export class SequentialStrategy implements IFetchStrategy {
                 : null;
             const delay =
               retryAfterSeconds !== null
-                ? retryAfterSeconds * 1000
+                ? Math.min(retryAfterSeconds * 1000, maxDelay)
                 : getRetryDelay(attempt, baseDelay, maxDelay);
 
             const reason = result.statusCode ? `HTTP ${result.statusCode}` : 'unknown';

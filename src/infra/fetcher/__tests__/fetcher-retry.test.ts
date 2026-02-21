@@ -169,4 +169,43 @@ describe('SequentialStrategy retry behavior', () => {
     expect(results[1]!.success).toBe(true);
     expect(mockedAxios.get).toHaveBeenCalledTimes(3);
   });
+
+  it('should respect Retry-After header on 429', async () => {
+    mockedAxios.get
+      .mockResolvedValueOnce({
+        status: 429,
+        data: 'Too Many Requests',
+        headers: { 'retry-after': '5' },
+      })
+      .mockResolvedValue({ status: 200, data: 'ok' });
+    const strategy = new SequentialStrategy();
+    const onRetry = vi.fn();
+
+    const promise = collectResults(strategy, ['https://example.com'], { onRetry });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(onRetry).toHaveBeenCalledWith(
+      'https://example.com',
+      1, // attempt
+      2, // maxRetries
+      1000, // Retry-After: 5 → 5000ms, capped by maxDelay: 1000
+      'HTTP 429',
+    );
+  });
+
+  it('should return failure after exhausting retries on network error', async () => {
+    mockedAxios.get.mockRejectedValue(new Error('ECONNRESET'));
+    const strategy = new SequentialStrategy();
+
+    const promise = collectResults(strategy, ['https://example.com']);
+    await vi.runAllTimersAsync();
+    const results = await promise;
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.success).toBe(false);
+    expect(results[0]!.error?.message).toBe('ECONNRESET');
+    // 1 initial + 2 retries = 3 calls
+    expect(mockedAxios.get).toHaveBeenCalledTimes(3);
+  });
 });
