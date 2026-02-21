@@ -59,8 +59,9 @@ program
   .option('--topics', 'Fetch topics only')
   .option('--replies', 'Fetch replies only')
   .option('--force', 'Force refetch even if cache exists')
-  .action(async (username, options) => {
-    const result = await runFetch(username, options);
+  .action(async (username, _, command) => {
+    const opts = command.optsWithGlobals();
+    const result = await runFetch(username, opts);
     if (result.status === 'failed') process.exitCode = 1;
   });
 
@@ -81,8 +82,9 @@ program
   .argument('<username>', 'V2EX username')
   .option('--model [name]', 'Specify Gemini model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level: minimal | low | medium | high')
-  .action(async (username, options) => {
-    const result = await runAi(username, options);
+  .action(async (username, _, command) => {
+    const opts = command.optsWithGlobals();
+    const result = await runAi(username, opts);
     if (result.status === 'failed') process.exitCode = 1;
   });
 
