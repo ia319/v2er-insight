@@ -81,21 +81,28 @@ export async function getAllUserTopicsDetail(
 
   // 第二轮：对失败帖发起重试
   if (failedUrls.length > 0) {
+    const recoveredUrls = new Set<string>();
     for await (const result of fetcher.fetch(failedUrls, fetchOptions, options?.events)) {
       if (result.success && result.content) {
         try {
           const detail = parseTopicDetail(result.content);
           topics.push(detail);
           fetchedTopics++;
-          // 从失败列表中移除已恢复的项
-          const idx = failedUrls.indexOf(result.url);
-          if (idx !== -1) failedUrls.splice(idx, 1);
+          recoveredUrls.add(result.url);
         } catch {
-          // 二次重试解析仍失败，保留在 failedUrls 中
+          // 二次重试解析仍失败
         }
       }
-      // HTTP 失败保留在 failedUrls 中
     }
+    // 最终失败数 = 原失败列表 - 已恢复
+    const stillFailed = failedUrls.filter((url) => !recoveredUrls.has(url));
+    return {
+      topics,
+      totalTopics: urlsResult.data.length,
+      fetchedTopics,
+      failedTopics: stillFailed.length,
+      isHidden: false,
+    };
   }
 
   return {

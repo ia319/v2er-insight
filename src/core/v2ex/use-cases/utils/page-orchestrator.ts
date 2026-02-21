@@ -131,22 +131,34 @@ export async function fetchPagedData<TParseResult extends PaginatedParseResult, 
   // 第二轮：对失败页发起重试
   if (failedItems.length > 0) {
     const retryUrls = failedItems.map((item) => item.url);
+    const recoveredUrls = new Set<string>();
     for await (const result of fetcher.fetch(retryUrls, fetchOptions, options?.events)) {
       if (result.success && result.content) {
         try {
           const parsed = parser(result.content);
           allData.push(...extractor(parsed));
           fetchedPages++;
-          // 从失败列表中移除已恢复的项
-          const idx = failedItems.findIndex((item) => item.url === result.url);
-          if (idx !== -1) failedItems.splice(idx, 1);
-        } catch {
-          // 二次重试解析仍失败，保留在 failedItems 中
+          recoveredUrls.add(result.url);
+        } catch (error) {
+          // 二次重试解析仍失败，通知调用方
+          const item = failedItems.find((f) => f.url === result.url);
+          options?.events?.onError?.(
+            {
+              url: result.url,
+              success: false,
+              content: null,
+              error: error instanceof Error ? error : new Error(String(error)),
+              statusCode: 0,
+            },
+            item?.pageIndex ?? -1,
+            totalPages,
+          );
         }
       }
-      // HTTP 失败保留在 failedItems 中
     }
+    const stillFailed = failedItems.filter((item) => !recoveredUrls.has(item.url));
+    return { data: allData, totalPages, fetchedPages, failedPages: stillFailed.length };
   }
 
-  return { data: allData, totalPages, fetchedPages, failedPages: failedItems.length };
+  return { data: allData, totalPages, fetchedPages, failedPages: 0 };
 }
