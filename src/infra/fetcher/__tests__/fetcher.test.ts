@@ -3,16 +3,18 @@ import axios, { type AxiosResponse, type InternalAxiosRequestConfig } from 'axio
 import { SequentialStrategy } from '../index';
 import type { FetchResult } from '../types';
 
-/** 禁用重试的 mock 配置（此文件只测试基础行为，不测试重试） */
-const MOCK_FETCH_CONFIG = { timeout: 30000, maxRetries: 0, baseDelay: 1000, maxDelay: 8_000 };
-
+/** 此文件只测试基础行为，不测试重试（maxRetries: 0） */
 vi.mock('axios');
 vi.mock('../agent', () => ({ getHttpsAgent: () => null }));
 vi.mock('@/config', () => ({
-  getConfig: () => ({ fetch: MOCK_FETCH_CONFIG }),
+  getConfig: () => ({
+    fetch: { timeout: 30_000, maxRetries: 0, baseDelay: 1000, maxDelay: 8_000 },
+  }),
 }));
 vi.mock('@/config/defaults', () => ({
-  DEFAULT_CONFIG: { fetch: MOCK_FETCH_CONFIG },
+  DEFAULT_CONFIG: {
+    fetch: { timeout: 30_000, maxRetries: 0, baseDelay: 1000, maxDelay: 8_000 },
+  },
 }));
 const mockedAxios = axios as Mocked<typeof axios>;
 
