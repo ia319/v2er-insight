@@ -59,8 +59,11 @@ program
   .option('--topics', 'Fetch topics only')
   .option('--replies', 'Fetch replies only')
   .option('--force', 'Force refetch even if cache exists')
-  .action(async (username, options) => {
-    const result = await runFetch(username, options);
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, _, command) => {
+    const opts = command.optsWithGlobals();
+    if (opts.verbose) logger.setLevel('debug');
+    const result = await runFetch(username, opts);
     if (result.status === 'failed') process.exitCode = 1;
   });
 
@@ -69,7 +72,10 @@ program
   .command('analyze')
   .description('Process raw data and generate statistics')
   .argument('<username>', 'V2EX username')
-  .action(async (username) => {
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, _, command) => {
+    const opts = command.optsWithGlobals();
+    if (opts.verbose) logger.setLevel('debug');
     const result = await runAnalyze(username);
     if (result.status === 'failed') process.exitCode = 1;
   });
@@ -81,8 +87,11 @@ program
   .argument('<username>', 'V2EX username')
   .option('--model [name]', 'Specify Gemini model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level: minimal | low | medium | high')
-  .action(async (username, options) => {
-    const result = await runAi(username, options);
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, _, command) => {
+    const opts = command.optsWithGlobals();
+    if (opts.verbose) logger.setLevel('debug');
+    const result = await runAi(username, opts);
     if (result.status === 'failed') process.exitCode = 1;
   });
 
@@ -93,8 +102,11 @@ program
   .argument('<username>', 'V2EX username')
   .option('--json', 'Output raw JSON')
   .option('--brief', 'Show brief summary only')
-  .action(async (username, options) => {
-    const result = await runShow(username, options);
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, _options, command) => {
+    const opts = command.optsWithGlobals();
+    if (opts.verbose) logger.setLevel('debug');
+    const result = await runShow(username, opts);
     if (result.status === 'failed') process.exitCode = 1;
   });
 
