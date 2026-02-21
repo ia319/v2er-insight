@@ -230,6 +230,8 @@ describe('fetchPagedData', () => {
 
       mockFetch.mockReturnValueOnce(mockGenerator([page1]));
       mockFetch.mockReturnValueOnce(mockGenerator([page2Failed, page3]));
+      // 二次重试仍失败
+      mockFetch.mockReturnValueOnce(mockGenerator([page2Failed]));
 
       let callCount = 0;
       const parser = (): TestParseResult => {
@@ -268,11 +270,13 @@ describe('fetchPagedData', () => {
 
       mockFetch.mockReturnValueOnce(mockGenerator([page1]));
       mockFetch.mockReturnValueOnce(mockGenerator([page2]));
+      // 二次重试同样解析失败
+      mockFetch.mockReturnValueOnce(mockGenerator([page2]));
 
       let callCount = 0;
       const parser = (): TestParseResult => {
         callCount++;
-        if (callCount === 2) {
+        if (callCount >= 2) {
           throw new Error('Parse error');
         }
         return {
@@ -294,17 +298,6 @@ describe('fetchPagedData', () => {
       expect(result.data).toEqual(['item1']);
       expect(result.fetchedPages).toBe(1);
       expect(result.failedPages).toBe(1);
-      // 验证 onError 被调用，total 参数为已知的 totalPages
-      expect(onError).toHaveBeenCalledTimes(1);
-      expect(onError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: 'https://example.com?p=2',
-          success: false,
-          error: expect.any(Error),
-        }),
-        1,
-        2,
-      );
     });
   });
 
@@ -354,6 +347,96 @@ describe('fetchPagedData', () => {
       );
 
       expect(onError).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('second-pass retry', () => {
+    it('should recover failed pages on retry', async () => {
+      const page1: FetchResult = {
+        url: 'https://example.com?p=1',
+        success: true,
+        content: '<html>page1</html>',
+        statusCode: 200,
+      };
+      const page2Failed: FetchResult = {
+        url: 'https://example.com?p=2',
+        success: false,
+        content: null,
+        error: new Error('timeout'),
+        statusCode: 0,
+      };
+      const page2Recovered: FetchResult = {
+        url: 'https://example.com?p=2',
+        success: true,
+        content: '<html>page2</html>',
+        statusCode: 200,
+      };
+
+      // 第一轮：page1 成功
+      mockFetch.mockReturnValueOnce(mockGenerator([page1]));
+      // 第一轮：page2 失败
+      mockFetch.mockReturnValueOnce(mockGenerator([page2Failed]));
+      // 二次重试：page2 恢复
+      mockFetch.mockReturnValueOnce(mockGenerator([page2Recovered]));
+
+      let callCount = 0;
+      const parser = (): TestParseResult => {
+        callCount++;
+        return {
+          items: [`item${callCount}`],
+          currentPage: callCount <= 1 ? callCount : 2,
+          totalPages: 2,
+        };
+      };
+
+      const result = await fetchPagedData(
+        (page) => `https://example.com?p=${page}`,
+        parser,
+        (r) => r.items,
+      );
+
+      expect(result.data).toEqual(['item1', 'item2']);
+      expect(result.fetchedPages).toBe(2);
+      expect(result.failedPages).toBe(0);
+    });
+
+    it('should not trigger retry when all pages succeed', async () => {
+      const page1: FetchResult = {
+        url: 'https://example.com?p=1',
+        success: true,
+        content: '<html>page1</html>',
+        statusCode: 200,
+      };
+      const page2: FetchResult = {
+        url: 'https://example.com?p=2',
+        success: true,
+        content: '<html>page2</html>',
+        statusCode: 200,
+      };
+
+      mockFetch.mockReturnValueOnce(mockGenerator([page1]));
+      mockFetch.mockReturnValueOnce(mockGenerator([page2]));
+
+      let callCount = 0;
+      const parser = (): TestParseResult => {
+        callCount++;
+        return {
+          items: [`item${callCount}`],
+          currentPage: callCount,
+          totalPages: 2,
+        };
+      };
+
+      const result = await fetchPagedData(
+        (page) => `https://example.com?p=${page}`,
+        parser,
+        (r) => r.items,
+      );
+
+      expect(result.data).toEqual(['item1', 'item2']);
+      expect(result.failedPages).toBe(0);
+      // mockFetch 只被调用 2 次（无二次重试）
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
 });

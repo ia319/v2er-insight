@@ -1,6 +1,6 @@
 /**
  * 用户发帖详情获取服务
- * 获取用户所有发帖的完整内容
+ * 获取用户所有发帖的完整内容，支持失败帖二次重试
  */
 
 import { Fetcher, SequentialStrategy } from '@/infra/fetcher';
@@ -28,6 +28,9 @@ export interface UserTopicsDetailResult {
 
 /**
  * 获取用户所有发帖的完整详情
+ *
+ * 第一轮批量抓取所有帖子，收集失败项（HTTP 失败或解析失败）；
+ * 第一轮结束后，若存在失败项，发起第二轮重试。
  *
  * @param username - 用户名
  * @param options - 服务配置选项
@@ -58,9 +61,9 @@ export async function getAllUserTopicsDetail(
 
   const topics: TopicDetailParseResult[] = [];
   let fetchedTopics = 0;
-  let failedTopics = 0;
+  const failedUrls: string[] = [];
 
-  // 批量抓取并解析帖子详情
+  // 第一轮：批量抓取并解析帖子详情
   for await (const result of fetcher.fetch(urlsResult.data, fetchOptions, options?.events)) {
     if (result.success && result.content) {
       try {
@@ -68,10 +71,30 @@ export async function getAllUserTopicsDetail(
         topics.push(detail);
         fetchedTopics++;
       } catch {
-        failedTopics++;
+        // 解析失败，记录 URL 用于二次重试
+        failedUrls.push(result.url);
       }
     } else {
-      failedTopics++;
+      failedUrls.push(result.url);
+    }
+  }
+
+  // 第二轮：对失败帖发起重试
+  if (failedUrls.length > 0) {
+    for await (const result of fetcher.fetch(failedUrls, fetchOptions, options?.events)) {
+      if (result.success && result.content) {
+        try {
+          const detail = parseTopicDetail(result.content);
+          topics.push(detail);
+          fetchedTopics++;
+          // 从失败列表中移除已恢复的项
+          const idx = failedUrls.indexOf(result.url);
+          if (idx !== -1) failedUrls.splice(idx, 1);
+        } catch {
+          // 二次重试解析仍失败，保留在 failedUrls 中
+        }
+      }
+      // HTTP 失败保留在 failedUrls 中
     }
   }
 
@@ -79,7 +102,7 @@ export async function getAllUserTopicsDetail(
     topics,
     totalTopics: urlsResult.data.length,
     fetchedTopics,
-    failedTopics,
+    failedTopics: failedUrls.length,
     isHidden: false,
   };
 }
