@@ -4,6 +4,17 @@ import { SequentialStrategy } from '../index';
 import type { FetchResult } from '../types';
 
 vi.mock('axios');
+vi.mock('../agent', () => ({ getHttpsAgent: () => null }));
+vi.mock('@/config', () => ({
+  getConfig: () => ({
+    fetch: { timeout: 30000, maxRetries: 0, baseDelay: 1000, maxDelay: 8000 },
+  }),
+}));
+vi.mock('@/config/defaults', () => ({
+  DEFAULT_CONFIG: {
+    fetch: { timeout: 30000, maxRetries: 0, baseDelay: 1000, maxDelay: 8000 },
+  },
+}));
 const mockedAxios = axios as Mocked<typeof axios>;
 
 // Helper to create a partial Axios response

@@ -35,6 +35,9 @@ export const DEFAULT_CONFIG = {
   },
   fetch: {
     timeout: 30_000,
+    maxRetries: 2,
+    baseDelay: 1000,
+    maxDelay: 8000,
   },
   analyzer: {
     inactivityThreshold: 60,
