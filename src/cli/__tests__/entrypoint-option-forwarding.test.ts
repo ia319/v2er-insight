@@ -36,12 +36,19 @@ vi.mock('@/infra/logger', () => ({
   },
 }));
 
+let originalArgv: string[];
+
 describe('cli option forwarding', () => {
   beforeEach(() => {
+    originalArgv = process.argv;
     vi.clearAllMocks();
     vi.resetModules();
     mockedGetConfig.mockReturnValue({ log: { level: 'info' } });
     mockedRunAi.mockResolvedValue({ status: 'success' });
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
   });
 
   it('should forward --thinking-level to ai subcommand', async () => {
