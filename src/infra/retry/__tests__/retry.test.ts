@@ -1,9 +1,12 @@
 /**
- * Unit tests for utils/retry.ts
+ * infra/retry 单元测试
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { withRetry } from '../retry';
+
+/** 测试用默认选项 */
+const DEFAULT_OPTIONS = { maxRetries: 3, baseDelay: 100, maxDelay: 5000 };
 
 describe('withRetry', () => {
   beforeEach(() => {
@@ -14,10 +17,10 @@ describe('withRetry', () => {
     vi.useRealTimers();
   });
 
-  it('successful function should return result directly', async () => {
+  it('成功时直接返回结果', async () => {
     const fn = vi.fn().mockResolvedValue('success');
 
-    const resultPromise = withRetry(fn, { maxRetries: 3, baseDelay: 100, maxDelay: 5000 });
+    const resultPromise = withRetry(fn, DEFAULT_OPTIONS);
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
@@ -25,14 +28,14 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('should eventually succeed after retries', async () => {
+  it('重试后最终成功', async () => {
     const fn = vi
       .fn()
       .mockRejectedValueOnce(new Error('First failure'))
       .mockRejectedValueOnce(new Error('Second failure'))
       .mockResolvedValue('Eventually successful');
 
-    const resultPromise = withRetry(fn, { maxRetries: 3, baseDelay: 100, maxDelay: 5000 });
+    const resultPromise = withRetry(fn, DEFAULT_OPTIONS);
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
@@ -40,12 +43,11 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it('should throw the last error when max retries exceeded', async () => {
+  it('超过最大重试次数后抛出最后一次错误', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('Continuous failure'));
 
     const resultPromise = withRetry(fn, { maxRetries: 2, baseDelay: 50, maxDelay: 5000 });
 
-    // 先捕获 promise，再运行 timers
     resultPromise.catch(() => {});
 
     await vi.runAllTimersAsync();
@@ -53,12 +55,11 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(3); // 初始 + 2 次重试
   });
 
-  it('should not retry when maxRetries is 0', async () => {
+  it('maxRetries 为 0 时不重试', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('Failure'));
 
     const resultPromise = withRetry(fn, { maxRetries: 0, baseDelay: 100, maxDelay: 5000 });
 
-    // 先捕获 promise，再运行 timers
     resultPromise.catch(() => {});
 
     await vi.runAllTimersAsync();
@@ -66,7 +67,7 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('should treat negative maxRetries as 0 and throw error normally', async () => {
+  it('负数 maxRetries 视为 0，正常抛出错误', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('Negative test'));
 
     const resultPromise = withRetry(fn, { maxRetries: -5, baseDelay: 100, maxDelay: 5000 });

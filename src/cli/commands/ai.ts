@@ -15,6 +15,7 @@ import {
 } from '@/core/ai';
 import { getConfig, THINKING_LEVELS } from '@/config';
 import type { ThinkingLevel } from '@/config';
+import { DEFAULT_CONFIG } from '@/config/defaults';
 import { readDataFile, writeDataFile, cleanExpiredData } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
@@ -102,9 +103,9 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   const provider = new GeminiProvider(apiKey, model);
 
   const retryOptions = {
-    maxRetries: config.ai?.maxRetries,
-    baseDelay: config.ai?.baseDelay,
-    maxDelay: config.ai?.maxDelay,
+    maxRetries: config.ai?.maxRetries ?? DEFAULT_CONFIG.ai.maxRetries,
+    baseDelay: config.ai?.baseDelay ?? DEFAULT_CONFIG.ai.baseDelay,
+    maxDelay: config.ai?.maxDelay ?? DEFAULT_CONFIG.ai.maxDelay,
   };
 
   try {

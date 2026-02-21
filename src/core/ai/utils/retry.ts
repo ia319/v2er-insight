@@ -1,50 +1,8 @@
 /**
- * 重试工具 - 指数退避
- */
-
-import { getConfig } from '@/config';
-
-export interface RetryOptions {
-  maxRetries?: number;
-  baseDelay?: number;
-  maxDelay?: number;
-}
-
-/**
- * 带重试逻辑执行函数
+ * 重试工具 — 向后兼容 re-export
  *
- * 使用指数退避 + 随机抖动策略
+ * 实现已迁移至 infra/retry，此文件保留以维持 core/ai 的公开 API 不变。
  */
-export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  const aiConfig = getConfig().ai;
-  const {
-    maxRetries = aiConfig?.maxRetries ?? 3,
-    baseDelay = aiConfig?.baseDelay ?? 1000,
-    maxDelay = aiConfig?.maxDelay ?? 10_000,
-  } = options;
 
-  const safeMaxRetries = Math.max(0, maxRetries);
-  let lastError: Error | undefined;
-
-  for (let attempt = 0; attempt <= safeMaxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-
-      if (attempt === safeMaxRetries) {
-        break;
-      }
-
-      const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-      const jitter = delay * 0.1 * Math.random();
-      await sleep(delay + jitter);
-    }
-  }
-
-  throw lastError;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export { withRetry } from '@/infra/retry';
+export type { RetryOptions } from '@/infra/retry';
