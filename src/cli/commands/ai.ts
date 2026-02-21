@@ -105,6 +105,11 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     maxRetries: config.ai?.maxRetries ?? DEFAULT_CONFIG.ai.maxRetries,
     baseDelay: config.ai?.baseDelay ?? DEFAULT_CONFIG.ai.baseDelay,
     maxDelay: config.ai?.maxDelay ?? DEFAULT_CONFIG.ai.maxDelay,
+    onRetry: (attempt: number, maxRetries: number, error: Error, delay: number) => {
+      const delaySec = (delay / 1000).toFixed(1);
+      logger.warn(`  AI 重试 (${attempt}/${maxRetries}) [${delaySec}s 后]`);
+      logger.debug(`  原因: ${error.message}`);
+    },
   };
 
   try {

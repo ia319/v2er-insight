@@ -14,7 +14,7 @@ import type { RetryOptions } from './types';
  * 当所有重试耗尽后，抛出最后一次捕获的错误。
  */
 export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions): Promise<T> {
-  const { maxRetries, baseDelay, maxDelay } = options;
+  const { maxRetries, baseDelay, maxDelay, onRetry } = options;
 
   const safeMaxRetries = Math.max(0, maxRetries);
   let lastError: Error | undefined;
@@ -31,7 +31,9 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions):
 
       const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
       const jitter = delay * 0.1 * Math.random();
-      await sleep(delay + jitter);
+      const actualDelay = delay + jitter;
+      onRetry?.(attempt + 1, safeMaxRetries, lastError, actualDelay);
+      await sleep(actualDelay);
     }
   }
 

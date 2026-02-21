@@ -118,7 +118,8 @@ export class SequentialStrategy implements IFetchStrategy {
                 ? retryAfterSeconds * 1000
                 : getRetryDelay(attempt, baseDelay, maxDelay);
 
-            events?.onRetry?.(url, attempt + 1, maxRetries, delay);
+            const reason = result.statusCode ? `HTTP ${result.statusCode}` : 'unknown';
+            events?.onRetry?.(url, attempt + 1, maxRetries, delay, reason);
             await sleep(delay);
           }
         } catch (error) {
@@ -132,7 +133,8 @@ export class SequentialStrategy implements IFetchStrategy {
 
           if (attempt < maxRetries) {
             const delay = getRetryDelay(attempt, baseDelay, maxDelay);
-            events?.onRetry?.(url, attempt + 1, maxRetries, delay);
+            const reason = (error as Error).message ?? 'network error';
+            events?.onRetry?.(url, attempt + 1, maxRetries, delay, reason);
             await sleep(delay);
           }
         }

@@ -31,7 +31,13 @@ export interface FetchEvents {
   onSuccess?: (result: FetchResult, index: number, total: number) => void;
   onError?: (result: FetchResult, index: number, total: number) => void;
   /** 重试时触发 */
-  onRetry?: (url: string, attempt: number, maxRetries: number, delay: number) => void;
+  onRetry?: (
+    url: string,
+    attempt: number,
+    maxRetries: number,
+    delay: number,
+    reason: string,
+  ) => void;
 }
 
 /** 抓取策略接口 */

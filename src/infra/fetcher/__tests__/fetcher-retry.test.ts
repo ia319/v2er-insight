@@ -133,6 +133,7 @@ describe('SequentialStrategy retry behavior', () => {
       1, // attempt
       2, // maxRetries
       expect.any(Number), // delay
+      expect.any(String), // reason
     );
   });
 

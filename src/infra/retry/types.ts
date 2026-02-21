@@ -10,4 +10,6 @@ export interface RetryOptions {
   baseDelay: number;
   /** 重试最大延迟上限（毫秒） */
   maxDelay: number;
+  /** 重试时回调，用于日志输出（可选） */
+  onRetry?: (attempt: number, maxRetries: number, error: Error, delay: number) => void;
 }

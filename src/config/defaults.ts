@@ -35,7 +35,7 @@ export const DEFAULT_CONFIG = {
   },
   fetch: {
     timeout: 30_000,
-    maxRetries: 2,
+    maxRetries: 3,
     baseDelay: 1000,
     maxDelay: 8000,
   },
