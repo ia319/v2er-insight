@@ -17,69 +17,69 @@ function makeResult(overrides: Partial<FetchResult> = {}): FetchResult {
 }
 
 describe('isRetryable', () => {
-  it('网络错误（无 statusCode）→ 可重试', () => {
+  it('should retry on network error (no statusCode)', () => {
     const result = makeResult({ error: new Error('ECONNRESET') });
     expect(isRetryable(result)).toBe(true);
   });
 
-  it('429 Too Many Requests → 可重试', () => {
+  it('should retry on 429 Too Many Requests', () => {
     const result = makeResult({ statusCode: 429 });
     expect(isRetryable(result)).toBe(true);
   });
 
-  it('500 Internal Server Error → 可重试', () => {
+  it('should retry on 500 Internal Server Error', () => {
     const result = makeResult({ statusCode: 500 });
     expect(isRetryable(result)).toBe(true);
   });
 
-  it('502 Bad Gateway → 可重试', () => {
+  it('should retry on 502 Bad Gateway', () => {
     const result = makeResult({ statusCode: 502 });
     expect(isRetryable(result)).toBe(true);
   });
 
-  it('503 Service Unavailable → 可重试', () => {
+  it('should retry on 503 Service Unavailable', () => {
     const result = makeResult({ statusCode: 503 });
     expect(isRetryable(result)).toBe(true);
   });
 
-  it('200 OK → 不可重试', () => {
+  it('should not retry on 200 OK', () => {
     const result = makeResult({ statusCode: 200, success: true, content: 'ok' });
     expect(isRetryable(result)).toBe(false);
   });
 
-  it('403 Forbidden → 不可重试', () => {
+  it('should not retry on 403 Forbidden', () => {
     const result = makeResult({ statusCode: 403 });
     expect(isRetryable(result)).toBe(false);
   });
 
-  it('404 Not Found → 不可重试', () => {
+  it('should not retry on 404 Not Found', () => {
     const result = makeResult({ statusCode: 404 });
     expect(isRetryable(result)).toBe(false);
   });
 });
 
 describe('parseRetryAfter', () => {
-  it('数字字符串 → 返回对应秒数', () => {
+  it('should parse numeric string as seconds', () => {
     expect(parseRetryAfter({ 'retry-after': '30' })).toBe(30);
   });
 
-  it('0 → 返回 0', () => {
+  it('should return 0 for zero value', () => {
     expect(parseRetryAfter({ 'retry-after': '0' })).toBe(0);
   });
 
-  it('无 Retry-After header → 返回 null', () => {
+  it('should return null when Retry-After header is missing', () => {
     expect(parseRetryAfter({ 'content-type': 'text/html' })).toBeNull();
   });
 
-  it('空 headers → 返回 null', () => {
+  it('should return null for undefined headers', () => {
     expect(parseRetryAfter(undefined)).toBeNull();
   });
 
-  it('非数字值 → 返回 null', () => {
+  it('should return null for non-numeric value', () => {
     expect(parseRetryAfter({ 'retry-after': 'invalid' })).toBeNull();
   });
 
-  it('大写 Retry-After → 正常解析', () => {
+  it('should parse capitalized Retry-After header', () => {
     expect(parseRetryAfter({ 'Retry-After': '5' })).toBe(5);
   });
 });

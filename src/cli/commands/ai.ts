@@ -13,9 +13,8 @@ import {
   resolveApiKey,
   withRetry,
 } from '@/core/ai';
-import { getConfig, THINKING_LEVELS } from '@/config';
+import { getConfig, THINKING_LEVELS, DEFAULT_CONFIG } from '@/config';
 import type { ThinkingLevel } from '@/config';
-import { DEFAULT_CONFIG } from '@/config/defaults';
 import { readDataFile, writeDataFile, cleanExpiredData } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';

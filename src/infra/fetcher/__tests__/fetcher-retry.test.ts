@@ -34,7 +34,7 @@ async function collectResults(strategy: SequentialStrategy, urls: string[], even
   return results;
 }
 
-describe('SequentialStrategy 重试行为', () => {
+describe('SequentialStrategy retry behavior', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
@@ -44,7 +44,7 @@ describe('SequentialStrategy 重试行为', () => {
     vi.useRealTimers();
   });
 
-  it('成功请求不重试', async () => {
+  it('should not retry on successful request', async () => {
     mockedAxios.get.mockResolvedValue({ status: 200, data: 'ok' });
     const strategy = new SequentialStrategy();
 
@@ -57,7 +57,7 @@ describe('SequentialStrategy 重试行为', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(1);
   });
 
-  it('5xx 重试后成功', async () => {
+  it('should succeed after retrying 5xx', async () => {
     mockedAxios.get
       .mockResolvedValueOnce({ status: 502, data: 'Bad Gateway' })
       .mockResolvedValue({ status: 200, data: 'ok' });
@@ -72,7 +72,7 @@ describe('SequentialStrategy 重试行为', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);
   });
 
-  it('网络错误重试后成功', async () => {
+  it('should succeed after retrying network error', async () => {
     mockedAxios.get
       .mockRejectedValueOnce(new Error('ECONNRESET'))
       .mockResolvedValue({ status: 200, data: 'ok' });
@@ -87,7 +87,7 @@ describe('SequentialStrategy 重试行为', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);
   });
 
-  it('4xx 不重试，直接返回失败', async () => {
+  it('should not retry on 4xx and return failure immediately', async () => {
     mockedAxios.get.mockResolvedValue({ status: 403, data: 'Forbidden' });
     const strategy = new SequentialStrategy();
 
@@ -101,7 +101,7 @@ describe('SequentialStrategy 重试行为', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(1);
   });
 
-  it('超过 maxRetries 后返回最后失败结果', async () => {
+  it('should return last failure after exhausting maxRetries', async () => {
     mockedAxios.get.mockResolvedValue({ status: 500, data: 'Server Error' });
     const strategy = new SequentialStrategy();
 
@@ -116,7 +116,7 @@ describe('SequentialStrategy 重试行为', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(3);
   });
 
-  it('onRetry 事件被正确触发', async () => {
+  it('should fire onRetry event correctly', async () => {
     mockedAxios.get
       .mockResolvedValueOnce({ status: 502, data: 'error' })
       .mockResolvedValue({ status: 200, data: 'ok' });
@@ -136,7 +136,7 @@ describe('SequentialStrategy 重试行为', () => {
     );
   });
 
-  it('maxRetries 为 0 时不重试', async () => {
+  it('should not retry when maxRetries is 0', async () => {
     mockedAxios.get.mockResolvedValue({ status: 500, data: 'error' });
     const strategy = new SequentialStrategy();
 
@@ -150,7 +150,7 @@ describe('SequentialStrategy 重试行为', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(1);
   });
 
-  it('多个 URL 各自独立重试', async () => {
+  it('should retry each URL independently', async () => {
     mockedAxios.get
       // URL 1: 失败一次后成功
       .mockResolvedValueOnce({ status: 502, data: 'error' })

@@ -17,7 +17,7 @@ describe('withRetry', () => {
     vi.useRealTimers();
   });
 
-  it('成功时直接返回结果', async () => {
+  it('should return result directly on success', async () => {
     const fn = vi.fn().mockResolvedValue('success');
 
     const resultPromise = withRetry(fn, DEFAULT_OPTIONS);
@@ -28,7 +28,7 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('重试后最终成功', async () => {
+  it('should eventually succeed after retries', async () => {
     const fn = vi
       .fn()
       .mockRejectedValueOnce(new Error('First failure'))
@@ -43,7 +43,7 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it('超过最大重试次数后抛出最后一次错误', async () => {
+  it('should throw last error when max retries exceeded', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('Continuous failure'));
 
     const resultPromise = withRetry(fn, { maxRetries: 2, baseDelay: 50, maxDelay: 5000 });
@@ -55,7 +55,7 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(3); // 初始 + 2 次重试
   });
 
-  it('maxRetries 为 0 时不重试', async () => {
+  it('should not retry when maxRetries is 0', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('Failure'));
 
     const resultPromise = withRetry(fn, { maxRetries: 0, baseDelay: 100, maxDelay: 5000 });
@@ -67,7 +67,7 @@ describe('withRetry', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('负数 maxRetries 视为 0，正常抛出错误', async () => {
+  it('should treat negative maxRetries as 0', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('Negative test'));
 
     const resultPromise = withRetry(fn, { maxRetries: -5, baseDelay: 100, maxDelay: 5000 });
@@ -77,5 +77,25 @@ describe('withRetry', () => {
     await vi.runAllTimersAsync();
     await expect(resultPromise).rejects.toThrow('Negative test');
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should cap delay at maxDelay', async () => {
+    const sleepSpy = vi.spyOn(globalThis, 'setTimeout');
+    const fn = vi.fn().mockRejectedValueOnce(new Error('fail')).mockResolvedValue('ok');
+
+    // baseDelay 远大于 maxDelay，验证封顶效果
+    const resultPromise = withRetry(fn, { maxRetries: 1, baseDelay: 50_000, maxDelay: 500 });
+    await vi.runAllTimersAsync();
+    await resultPromise;
+
+    // 找到重试的 setTimeout 调用（排除 delay=0 等噪声）
+    const delays = sleepSpy.mock.calls.map((call) => call[1] as number).filter((d) => d > 0);
+
+    // 实际延迟应 <= maxDelay * 1.1（含 10% jitter）
+    for (const delay of delays) {
+      expect(delay).toBeLessThanOrEqual(500 * 1.1);
+    }
+
+    sleepSpy.mockRestore();
   });
 });
