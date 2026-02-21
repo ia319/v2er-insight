@@ -163,8 +163,6 @@ export async function runFetch(
       meta: {
         failedTopics,
         failedPages,
-        // TODO(ia319): 在实现 --retry 后补充真实失败页索引 [2026-02-14]
-        failedPageIndices: [] as number[],
       },
     };
   }

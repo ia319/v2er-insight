@@ -141,9 +141,14 @@ root
 │   └── infra/                # [Infrastructure Layer] External adapters
 │       ├── fetcher/          # [Complete] Generic HTTP fetcher
 │       │   ├── index.ts      # Public API exports
-│       │   ├── fetcher.ts    # SequentialStrategy & Fetcher class
-│       │   ├── types.ts      # FetchOptions, FetchResult
+│       │   ├── fetcher.ts    # SequentialStrategy & Fetcher class (transport retry)
+│       │   ├── types.ts      # FetchOptions, FetchResult, FetchEvents
+│       │   ├── retryable.ts  # isRetryable() + parseRetryAfter()
 │       │   └── agent.ts      # Proxy agent creation
+│       ├── retry/            # [Complete] Generic retry utility
+│       │   ├── index.ts      # Public API exports
+│       │   ├── retry.ts      # withRetry() — exponential backoff + jitter
+│       │   └── types.ts      # RetryOptions (maxRetries, baseDelay, maxDelay, onRetry)
 │       ├── storage/          # [Complete] User data persistence
 │       │   ├── index.ts      # Public API exports
 │       │   ├── types.ts      # DataFileType, WriteOptions
@@ -161,10 +166,12 @@ root
 
 ### 1. Fetcher Module (Complete)
 
-- **Role**: Pure HTTP fetching, no business logic.
+- **Role**: Pure HTTP fetching with automatic transport-level retry.
 - **Design**: Strategy Pattern (`IFetchStrategy`).
 - **Implementation**: `SequentialStrategy` (rate-limit safe).
-- **Events**: `onStart`, `onSuccess`, `onError` callbacks.
+- **Events**: `onStart`, `onSuccess`, `onError`, `onRetry` callbacks.
+- **Retry**: Exponential backoff for network errors, 5xx, and 429 (respects `Retry-After` header). 4xx errors are not retried.
+- **Config**: `maxRetries` (default 3), `baseDelay` (1000ms), `maxDelay` (8000ms) via `FetchConfig`.
 
 ### 2. V2EX Module (Complete)
 
@@ -220,6 +227,7 @@ root
 - `fetchPagedData()` → Generic pagination orchestrator (probe + batch)
   - First page events use `total=-1` (unknown until parsed)
   - Triggers `onError` callback for both fetch and parse failures
+  - Second-pass retry: collects failed pages and retries once after first round
 
 ### 4. CLI Module (Complete)
 
@@ -316,7 +324,7 @@ root
   - `validateResponse(data)` → Lenient validator with deep merge, score clamping (0-100), and warnings.
 - **Utils** (`utils/`):
   - `resolveApiKey()` → API key resolution (explicit > config > GOOGLE_API_KEY > GEMINI_API_KEY).
-  - `withRetry(fn, options)` → Retry with exponential backoff and jitter.
+  - `withRetry(fn, options)` → Re-export from `infra/retry`.
 
 **Defaults** (from `config/defaults.ts`):
 
@@ -330,7 +338,41 @@ root
 - Invalid thinking level fails fast with reason code
   `AI_INVALID_THINKING_LEVEL` and skips provider calls.
 
-### 8. Logger Module (Complete)
+### 8. Retry Module (Complete)
+
+- **Role**: Generic retry utility with exponential backoff + jitter. Located in `src/infra/retry`.
+
+**Public API**:
+
+- `withRetry<T>(fn, options)` → Executes `fn` with automatic retry on failure
+
+**RetryOptions**:
+
+- `maxRetries: number` → Max retry attempts (0 = no retry)
+- `baseDelay: number` → Initial delay in ms
+- `maxDelay: number` → Delay cap in ms
+- `onRetry?: (attempt, maxRetries, error, delay) => void` → Optional callback for logging
+
+**Retry Strategy**:
+
+- Delay formula: `min(baseDelay * 2^attempt, maxDelay) + 10% jitter`
+- Negative `maxRetries` treated as 0
+- Throws the last captured error when all retries are exhausted
+
+**Integration Points**:
+
+| Consumer            | Location                                   | Usage                                                      |
+| ------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| Fetcher (transport) | `infra/fetcher/fetcher.ts`                 | Inline retry loop per URL, own `onRetry` via `FetchEvents` |
+| AI (request)        | `cli/commands/ai.ts`                       | `withRetry()` wrapping `provider.sendMessage()`            |
+| Use-Case (business) | `page-orchestrator.ts`, `topics-detail.ts` | Second-pass retry for failed pages/topics                  |
+
+**CLI Logging**:
+
+- Retry attempts logged at `warn` level (always visible)
+- Error details logged at `debug` level (visible with `-v`)
+
+### 9. Logger Module (Complete)
 
 - **Role**: Global level-based logger for all layers. Located in `src/infra/logger`.
 
@@ -428,4 +470,4 @@ If none are set, no proxy is used.
 - **Language**: All test descriptions, data, and assertions in English; comments may be Chinese.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: Use `vi.mock` for modules (Fetcher, parsers).
-- **Coverage**: 250+ tests covering parsers, URL generators, services, CLI, config, analyzer, and AI.
+- **Coverage**: 280+ tests covering parsers, URL generators, services, CLI, config, analyzer, AI, and retry.

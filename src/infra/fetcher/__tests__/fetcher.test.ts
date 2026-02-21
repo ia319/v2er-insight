@@ -3,7 +3,19 @@ import axios, { type AxiosResponse, type InternalAxiosRequestConfig } from 'axio
 import { SequentialStrategy } from '../index';
 import type { FetchResult } from '../types';
 
+/** 此文件只测试基础行为，不测试重试（maxRetries: 0） */
 vi.mock('axios');
+vi.mock('../agent', () => ({ getHttpsAgent: () => null }));
+vi.mock('@/config', () => ({
+  getConfig: () => ({
+    fetch: { timeout: 30_000, maxRetries: 0, baseDelay: 1000, maxDelay: 8_000 },
+  }),
+}));
+vi.mock('@/config/defaults', () => ({
+  DEFAULT_CONFIG: {
+    fetch: { timeout: 30_000, maxRetries: 0, baseDelay: 1000, maxDelay: 8_000 },
+  },
+}));
 const mockedAxios = axios as Mocked<typeof axios>;
 
 // Helper to create a partial Axios response
@@ -23,10 +35,6 @@ describe('SequentialStrategy', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedAxios.get.mockResolvedValue(createResponse('') as AxiosResponse);
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
   });
 
   it('should fetch URLs sequentially and return results', async () => {

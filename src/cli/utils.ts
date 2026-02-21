@@ -47,5 +47,10 @@ export function createFetchEvents(label: string): FetchEvents {
     onError: (result: FetchResult) => {
       logFetchError(result);
     },
+    onRetry: (url: string, attempt: number, maxRetries: number, delay: number, reason: string) => {
+      const delaySec = (delay / 1000).toFixed(1);
+      logger.warn(`  重试 (${attempt}/${maxRetries}) [${delaySec}s 后]: ${url}`);
+      logger.debug(`  原因: ${reason}`);
+    },
   };
 }
