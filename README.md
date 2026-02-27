@@ -133,6 +133,12 @@ v2er config set ai.thinkingLevel medium     # 设置思考等级
 v2er config set log.level debug             # 开启调试日志
 v2er config set data.keepRaw true           # 保留原始数据
 v2er config set ai.timeout 120000           # AI 请求超时 120s
+v2er config set ai.maxRetries 5             # AI 最大重试次数
+v2er config set ai.baseDelay 2000           # AI 重试基础延迟 2s
+v2er config set ai.maxDelay 20000           # AI 重试最大延迟 20s
+v2er config set fetch.maxRetries 5           # 抓取最大重试次数
+v2er config set fetch.baseDelay 2000         # 抓取重试基础延迟 2s
+v2er config set fetch.maxDelay 30000         # 抓取重试最大延迟 30s
 
 # 重置
 v2er config reset                           # 重置全部为默认值

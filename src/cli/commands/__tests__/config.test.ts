@@ -343,6 +343,24 @@ describe('configSet command', () => {
     });
   });
 
+  it('should set fetch retry config paths', async () => {
+    mockedReadConfig.mockReturnValue({});
+    const { configSet } = await import('../config');
+
+    configSet('fetch.maxRetries', '5');
+    expect(mockedWriteConfig).toHaveBeenCalledWith({ fetch: { maxRetries: 5 } });
+
+    vi.clearAllMocks();
+    mockedReadConfig.mockReturnValue({});
+    configSet('fetch.baseDelay', '2000');
+    expect(mockedWriteConfig).toHaveBeenCalledWith({ fetch: { baseDelay: 2000 } });
+
+    vi.clearAllMocks();
+    mockedReadConfig.mockReturnValue({});
+    configSet('fetch.maxDelay', '30000');
+    expect(mockedWriteConfig).toHaveBeenCalledWith({ fetch: { maxDelay: 30000 } });
+  });
+
   it('should preserve existing config when setting new value', async () => {
     mockedReadConfig.mockReturnValue({
       proxy: 'http://existing:8080',

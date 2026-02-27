@@ -272,6 +272,31 @@ root
 - `storage.ts` → Read/write config, `getConfig()` merges defaults with user settings via `deepMerge`
 - `proxy.ts` → Get proxy URL (priority: config > HTTPS_PROXY > HTTP_PROXY)
 
+**CLI Config Paths** (`CONFIG_PATHS` in `config.ts`):
+
+| Path                            | Type    | Notes                                 |
+| ------------------------------- | ------- | ------------------------------------- |
+| `proxy`                         | string  |                                       |
+| `ai.provider`                   | enum    | `gemini`                              |
+| `ai.apiKey`                     | string  |                                       |
+| `ai.model`                      | string  |                                       |
+| `ai.thinkingLevel`              | enum    | `minimal` / `low` / `medium` / `high` |
+| `ai.timeout`                    | number  |                                       |
+| `ai.maxRetries`                 | number  |                                       |
+| `ai.baseDelay`                  | number  |                                       |
+| `ai.maxDelay`                   | number  |                                       |
+| `fetch.timeout`                 | number  |                                       |
+| `fetch.maxRetries`              | number  |                                       |
+| `fetch.baseDelay`               | number  |                                       |
+| `fetch.maxDelay`                | number  |                                       |
+| `analyzer.inactivityThreshold`  | number  |                                       |
+| `analyzer.chunkMaxTopics`       | number  |                                       |
+| `analyzer.chunkMaxReplies`      | number  |                                       |
+| `analyzer.nodeDistributionTopN` | number  |                                       |
+| `data.keepRaw`                  | boolean |                                       |
+| `data.rawRetention`             | number  |                                       |
+| `log.level`                     | enum    | `error` / `warn` / `info` / `debug`   |
+
 ### 6. Analyzer Module (Complete)
 
 - **Role**: Process raw user data into structured AI input (located in `src/core/analyzer`).

@@ -44,6 +44,9 @@ const CONFIG_PATHS: Record<string, ConfigPathMeta> = {
   'ai.maxDelay': { type: 'number' },
   // Fetch
   'fetch.timeout': { type: 'number' },
+  'fetch.maxRetries': { type: 'number' },
+  'fetch.baseDelay': { type: 'number' },
+  'fetch.maxDelay': { type: 'number' },
   // Analyzer
   'analyzer.inactivityThreshold': { type: 'number' },
   'analyzer.chunkMaxTopics': { type: 'number' },
