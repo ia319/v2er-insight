@@ -328,7 +328,7 @@ root
 
 **Defaults** (from `config/defaults.ts`):
 
-- Model: `gemini-3-pro-preview` (via `getConfig().ai.model`)
+- Model: `gemini-3.1-pro-preview` (via `getConfig().ai.model`)
 - ThinkingLevel: `high` (via `getConfig().ai.thinkingLevel`)
 - `maxRetries: 3`, `baseDelay: 1000`, `maxDelay: 10_000`
 - `runAi` resolves thinking level by priority:

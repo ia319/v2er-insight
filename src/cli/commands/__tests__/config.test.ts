@@ -115,7 +115,7 @@ describe('configShow command', () => {
   it('should display full config with defaults', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockedGetConfig.mockReturnValue({
-      ai: { provider: 'gemini', model: 'gemini-3-pro-preview' },
+      ai: { provider: 'gemini', model: 'gemini-3.1-pro-preview' },
       fetch: { timeout: 30000 },
     });
 
@@ -124,7 +124,7 @@ describe('configShow command', () => {
 
     expect(consoleSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
-    expect(output.ai.model).toBe('gemini-3-pro-preview');
+    expect(output.ai.model).toBe('gemini-3.1-pro-preview');
   });
 
   it('should mask apiKey in display', async () => {

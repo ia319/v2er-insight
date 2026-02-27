@@ -50,7 +50,7 @@ vi.mock('@/config', async () => {
     getConfig: vi.fn().mockReturnValue({
       ai: {
         provider: 'gemini',
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         thinkingLevel: 'high',
         timeout: 60_000,
         maxRetries: 3,

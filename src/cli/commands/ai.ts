@@ -66,7 +66,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   const model =
     typeof options.model === 'string'
       ? options.model
-      : (config.ai?.model ?? 'gemini-3-pro-preview');
+      : (config.ai?.model ?? DEFAULT_CONFIG.ai.model);
 
   // 同上：--thinking-level [level] 无值时为 true，字符串时直接使用
   const rawThinkingLevel =
