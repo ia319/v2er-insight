@@ -50,7 +50,7 @@ v2er <username>
 | 选项                       | 说明                                                               |
 | -------------------------- | ------------------------------------------------------------------ |
 | `--force`                  | 强制重新抓取（忽略本地缓存）                                       |
-| `--model [name]`           | 指定 AI 模型（默认: `gemini-3-pro-preview`）                       |
+| `--model [name]`           | 指定 AI 模型（默认: `gemini-3.1-pro-preview`）                     |
 | `--thinking-level [level]` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
 | `-v, --verbose`            | 显示调试输出                                                       |
 
@@ -98,7 +98,7 @@ v2er ai <username> [选项]
 
 | 选项                       | 说明                                                               |
 | -------------------------- | ------------------------------------------------------------------ |
-| `--model [name]`           | 指定 Gemini 模型（默认: `gemini-3-pro-preview`）                   |
+| `--model [name]`           | 指定 Gemini 模型（默认: `gemini-3.1-pro-preview`）                 |
 | `--thinking-level [level]` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
 
 ### 4. 报告展示 (Show)

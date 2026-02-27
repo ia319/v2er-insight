@@ -26,7 +26,7 @@ export type ResolvedConfig = Required<{
 export const DEFAULT_CONFIG = {
   ai: {
     provider: 'gemini',
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-3.1-pro-preview',
     thinkingLevel: 'high' as const,
     timeout: 60_000,
     maxRetries: 3,
