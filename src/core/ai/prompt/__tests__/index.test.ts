@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
-import type { ContentTopic, ContentReply } from '@/core/analyzer/types';
+import type { AnalyzerOutput, PeriodContentChunk } from '@/core/analyzer/types';
 
 vi.mock('node:fs');
 
@@ -12,9 +12,9 @@ vi.mock('node:fs');
 function createInput(
   overrides: {
     totalPeriods?: number;
-    contents?: Array<{ periodIndex: number; topics: ContentTopic[]; replies: ContentReply[] }>;
+    contents?: AnalyzerOutput['contents'];
   } = {},
-) {
+): AnalyzerOutput {
   return {
     userOverview: {
       joinDate: '2020-01-01',
@@ -32,6 +32,60 @@ function createInput(
     contents: overrides.contents ?? [],
   };
 }
+
+describe('buildAnalysisRequest', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.mocked(fs.readFileSync).mockReturnValue('# System Prompt\nTest prompt content');
+  });
+
+  it('should build one compact JSON payload with the system prompt', async () => {
+    const { buildAnalysisRequest } = await import('../index');
+    const input = createInput();
+
+    const result = buildAnalysisRequest(input);
+
+    expect(result.systemPrompt).toContain('Test prompt content');
+    expect(result.payload).toBe(JSON.stringify(input));
+    expect(JSON.parse(result.payload)).toEqual(input);
+  });
+
+  it('should preserve all period chunks in the payload', async () => {
+    const { buildAnalysisRequest } = await import('../index');
+    const chunks: PeriodContentChunk[] = [
+      {
+        periodIndex: 0,
+        chunkIndex: 0,
+        totalChunksInPeriod: 2,
+        topics: [{ title: 'Topic', nodeName: 'tech', content: 'First chunk' }],
+        replies: [],
+      },
+      {
+        periodIndex: 0,
+        chunkIndex: 1,
+        totalChunksInPeriod: 2,
+        topics: [],
+        replies: [{ topicTitle: 'Topic', nodeName: 'tech', content: 'Second chunk' }],
+      },
+    ];
+    const input = createInput({ contents: chunks });
+
+    const result = buildAnalysisRequest(input);
+
+    expect(JSON.parse(result.payload)).toEqual(input);
+  });
+
+  it('should preserve an empty contents array without adding an envelope', async () => {
+    const { buildAnalysisRequest } = await import('../index');
+    const input = createInput({ contents: [] });
+
+    const result = buildAnalysisRequest(input);
+    const payload = JSON.parse(result.payload) as Record<string, unknown>;
+
+    expect(payload).toEqual(input);
+    expect(Object.keys(payload)).toEqual(['userOverview', 'summary', 'contents']);
+  });
+});
 
 describe('buildMessageSequence', () => {
   beforeEach(() => {
