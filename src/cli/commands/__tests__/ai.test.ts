@@ -77,6 +77,9 @@ describe('runAi', () => {
 
     const result = await runAi('testuser', {});
 
+    expect(mockedReadDataFile).toHaveBeenCalledWith('testuser', 'analyzed');
+    expect(mockedResolveApiKey).not.toHaveBeenCalled();
+    expect(MockGeminiProvider).not.toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('testuser'));
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('v2er analyze'));
     expect(result).toMatchObject({
