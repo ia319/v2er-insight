@@ -161,7 +161,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   } catch (error) {
     const { message, raw } = extractErrorDetails(error);
     if (!options.pipeline) {
-      logger.error(`AI 分析失败: ${message}`);
+      logger.error(`AI 单次分析请求失败: ${message}`);
       logger.debug(raw);
     }
     return {

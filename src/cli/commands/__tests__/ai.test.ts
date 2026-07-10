@@ -143,7 +143,10 @@ describe('runAi', () => {
         onRetry: expect.any(Function),
       }),
     );
+    expect(mockedParseResponse).toHaveBeenCalledOnce();
+    expect(mockedParseResponse).toHaveBeenCalledWith('raw response');
     expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', aiResult);
+    expect(mockedCleanExpiredData).toHaveBeenCalledWith('testuser');
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
     expect(result.status).toBe('success');
   });
@@ -221,11 +224,53 @@ describe('runAi', () => {
 
     const result = await runAi('testuser', {});
 
-    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 分析失败'));
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));
     expect(mockedWriteDataFile).not.toHaveBeenCalled();
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
+  });
+
+  it('should not persist or clean data when response parsing fails', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedBuildAnalysisRequest.mockReturnValue({
+      systemPrompt: 'prompt',
+      payload: 'payload',
+    });
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('invalid response');
+    mockedParseResponse.mockImplementation(() => {
+      throw new Error('Invalid response JSON');
+    });
+
+    const result = await runAi('testuser', {});
+
+    expect(mockedParseResponse).toHaveBeenCalledOnce();
+    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+    expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
+  });
+
+  it('should report failure when the single payload cannot be sent', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedBuildAnalysisRequest.mockReturnValue({
+      systemPrompt: 'prompt',
+      payload: 'payload',
+    });
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockRejectedValue(new Error('Request failed'));
+
+    const result = await runAi('testuser', {});
+
+    expect(mockSendMessage).toHaveBeenCalledOnce();
+    expect(mockedParseResponse).not.toHaveBeenCalled();
+    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
   });
 
   it('should log warnings from AI response', async () => {
