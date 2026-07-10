@@ -119,17 +119,26 @@ describe('runAi', () => {
 
     const result = await runAi('testuser', {});
 
-    // 验证 thinkingLevel 从 config 透传到 createSession
+    expect(MockGeminiProvider).toHaveBeenCalledWith('test-api-key', 'gemini-3.1-pro-preview');
     expect(mockCreateSession).toHaveBeenCalledWith(sequence.systemPrompt, {
       thinkingLevel: 'high',
       timeout: 60_000,
     });
+    expect(mockedWithRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        maxRetries: 3,
+        baseDelay: 1000,
+        maxDelay: 10_000,
+        onRetry: expect.any(Function),
+      }),
+    );
     expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', aiResult);
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
     expect(result.status).toBe('success');
   });
 
-  it('should pass CLI thinkingLevel option over config value', async () => {
+  it('should pass CLI model and thinkingLevel options over config values', async () => {
     mockedReadDataFile.mockReturnValue({ some: 'data' });
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildMessageSequence.mockReturnValue({
@@ -143,10 +152,37 @@ describe('runAi', () => {
     mockedParseResponse.mockReturnValue({ data: { summary: 'r' }, warnings: [] });
     mockedCleanExpiredData.mockReturnValue([]);
 
-    await runAi('testuser', { thinkingLevel: 'low' });
+    await runAi('testuser', {
+      model: 'gemini-custom-model',
+      thinkingLevel: 'low',
+    });
 
+    expect(MockGeminiProvider).toHaveBeenCalledWith('test-api-key', 'gemini-custom-model');
     expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
       thinkingLevel: 'low',
+      timeout: 60_000,
+    });
+  });
+
+  it('should use config values when optional CLI values are omitted', async () => {
+    mockedReadDataFile.mockReturnValue({ some: 'data' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedBuildMessageSequence.mockReturnValue({
+      systemPrompt: 'prompt',
+      messages: [],
+      finalPrompt: 'final',
+    });
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('response');
+    mockedParseResponse.mockReturnValue({ data: { summary: 'r' }, warnings: [] });
+    mockedCleanExpiredData.mockReturnValue([]);
+
+    await runAi('testuser', { model: true, thinkingLevel: true });
+
+    expect(MockGeminiProvider).toHaveBeenCalledWith('test-api-key', 'gemini-3.1-pro-preview');
+    expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
+      thinkingLevel: 'high',
       timeout: 60_000,
     });
   });
