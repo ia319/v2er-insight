@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { AnalyzerOutput, PeriodContentChunk } from '@/core/analyzer/types';
 
 vi.mock('node:fs');
@@ -87,46 +88,14 @@ describe('buildAnalysisRequest', () => {
   });
 });
 
-describe('buildMessageSequence', () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.mocked(fs.readFileSync).mockReturnValue('# System Prompt\nTest prompt content');
-  });
+describe('system prompt protocol', () => {
+  it('should require immediate analysis of one complete input', async () => {
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    const promptPath = path.resolve(process.cwd(), 'src/core/ai/prompt/system-prompt.md');
+    const prompt = actualFs.readFileSync(promptPath, 'utf8');
 
-  it('should build correct message sequence structure', async () => {
-    const { buildMessageSequence } = await import('../index');
-
-    const result = buildMessageSequence(createInput());
-
-    expect(result.systemPrompt).toContain('Test prompt content');
-    expect(result.messages).toHaveLength(2); // userOverview + summary
-    expect(result.finalPrompt).toContain('JSON');
-  });
-
-  it('should generate messages for each active period contents', async () => {
-    const { buildMessageSequence } = await import('../index');
-
-    const result = buildMessageSequence(
-      createInput({
-        totalPeriods: 2,
-        contents: [
-          { periodIndex: 0, topics: [], replies: [] },
-          { periodIndex: 1, topics: [], replies: [] },
-        ],
-      }),
-    );
-
-    // userOverview + summary + 2 contents
-    expect(result.messages).toHaveLength(4);
-  });
-
-  it('messages should be valid JSON strings', async () => {
-    const { buildMessageSequence } = await import('../index');
-
-    const result = buildMessageSequence(createInput());
-
-    result.messages.forEach((msg) => {
-      expect(() => JSON.parse(msg)).not.toThrow();
-    });
+    expect(prompt).toContain('one complete analysis input');
+    expect(prompt).toContain('Do not wait for a follow-up instruction');
+    expect(prompt).toContain('Return exactly one valid JSON object');
   });
 });

@@ -5,7 +5,7 @@ const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedWriteDataFile = vi.hoisted(() => vi.fn());
 const mockedCleanExpiredData = vi.hoisted(() => vi.fn());
 const mockedResolveApiKey = vi.hoisted(() => vi.fn());
-const mockedBuildMessageSequence = vi.hoisted(() => vi.fn());
+const mockedBuildAnalysisRequest = vi.hoisted(() => vi.fn());
 const mockedParseResponse = vi.hoisted(() => vi.fn());
 const mockedWithRetry = vi.hoisted(() => vi.fn());
 
@@ -37,7 +37,7 @@ vi.mock('@/infra/storage', () => ({
 
 vi.mock('@/core/ai', () => ({
   GeminiProvider: MockGeminiProvider,
-  buildMessageSequence: mockedBuildMessageSequence,
+  buildAnalysisRequest: mockedBuildAnalysisRequest,
   parseResponse: mockedParseResponse,
   resolveApiKey: mockedResolveApiKey,
   withRetry: mockedWithRetry,
@@ -101,16 +101,15 @@ describe('runAi', () => {
 
   it('should complete full flow and persist result', async () => {
     const analyzedData = { some: 'data' };
-    const sequence = {
+    const request = {
       systemPrompt: 'You are an analyst',
-      messages: ['msg1', 'msg2'],
-      finalPrompt: 'Final prompt',
+      payload: '{"some":"data"}',
     };
     const aiResult = { summary: 'Analysis result' };
 
     mockedReadDataFile.mockReturnValue(analyzedData);
     mockedResolveApiKey.mockReturnValue('test-api-key');
-    mockedBuildMessageSequence.mockReturnValue(sequence);
+    mockedBuildAnalysisRequest.mockReturnValue(request);
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('raw response');
@@ -120,10 +119,21 @@ describe('runAi', () => {
     const result = await runAi('testuser', {});
 
     expect(MockGeminiProvider).toHaveBeenCalledWith('test-api-key', 'gemini-3.1-pro-preview');
-    expect(mockCreateSession).toHaveBeenCalledWith(sequence.systemPrompt, {
+    expect(mockedBuildAnalysisRequest).toHaveBeenCalledWith(analyzedData);
+    expect(mockCreateSession).toHaveBeenCalledWith(request.systemPrompt, {
       thinkingLevel: 'high',
       timeout: 60_000,
     });
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendMessage).toHaveBeenCalledWith(request.payload);
+    const [createSessionOrder] = mockCreateSession.mock.invocationCallOrder;
+    const [sendMessageOrder] = mockSendMessage.mock.invocationCallOrder;
+    if (createSessionOrder === undefined || sendMessageOrder === undefined) {
+      throw new Error('Expected provider session and message calls');
+    }
+    expect(createSessionOrder).toBeLessThan(sendMessageOrder);
+    expect(mockLogger.section).toHaveBeenCalledWith('发送完整分析数据至 AI...');
+    expect(mockLogger.progress).not.toHaveBeenCalled();
     expect(mockedWithRetry).toHaveBeenCalledWith(
       expect.any(Function),
       expect.objectContaining({
@@ -141,10 +151,9 @@ describe('runAi', () => {
   it('should pass CLI model and thinkingLevel options over config values', async () => {
     mockedReadDataFile.mockReturnValue({ some: 'data' });
     mockedResolveApiKey.mockReturnValue('test-api-key');
-    mockedBuildMessageSequence.mockReturnValue({
+    mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
-      messages: [],
-      finalPrompt: 'final',
+      payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
@@ -167,10 +176,9 @@ describe('runAi', () => {
   it('should use config values when optional CLI values are omitted', async () => {
     mockedReadDataFile.mockReturnValue({ some: 'data' });
     mockedResolveApiKey.mockReturnValue('test-api-key');
-    mockedBuildMessageSequence.mockReturnValue({
+    mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
-      messages: [],
-      finalPrompt: 'final',
+      payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
@@ -205,10 +213,9 @@ describe('runAi', () => {
   it('should catch and log errors from AI provider', async () => {
     mockedReadDataFile.mockReturnValue({ some: 'data' });
     mockedResolveApiKey.mockReturnValue('test-api-key');
-    mockedBuildMessageSequence.mockReturnValue({
+    mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
-      messages: [],
-      finalPrompt: 'final',
+      payload: 'payload',
     });
     mockCreateSession.mockRejectedValue(new Error('Auth failed'));
 
@@ -217,16 +224,16 @@ describe('runAi', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 分析失败'));
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));
     expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(mockSendMessage).not.toHaveBeenCalled();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
   });
 
   it('should log warnings from AI response', async () => {
     mockedReadDataFile.mockReturnValue({ some: 'data' });
     mockedResolveApiKey.mockReturnValue('test-api-key');
-    mockedBuildMessageSequence.mockReturnValue({
+    mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
-      messages: [],
-      finalPrompt: 'final',
+      payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
@@ -245,10 +252,9 @@ describe('runAi', () => {
   it('should suppress success detail logs in pipeline mode', async () => {
     mockedReadDataFile.mockReturnValue({ some: 'data' });
     mockedResolveApiKey.mockReturnValue('test-api-key');
-    mockedBuildMessageSequence.mockReturnValue({
+    mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
-      messages: [],
-      finalPrompt: 'final',
+      payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);

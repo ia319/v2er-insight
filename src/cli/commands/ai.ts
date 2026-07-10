@@ -1,14 +1,14 @@
 /**
- * ai 命令 — 调用 AI 分析用户数据
+ * AI command for generating a profile from normalized analyzer output.
  *
- * 读取 analyzed.json，构建多轮对话消息序列，
- * 通过 GeminiProvider 发送至 AI，解析响应后写入 result.json。
+ * Read analyzed.json, send it as one complete JSON payload, parse the
+ * provider response, and persist result.json.
  */
 
 import type { AnalyzerOutput } from '@/core/analyzer';
 import {
   GeminiProvider,
-  buildMessageSequence,
+  buildAnalysisRequest,
   parseResponse,
   resolveApiKey,
   withRetry,
@@ -23,7 +23,11 @@ import type { StepRunResult } from '../workflow/types';
 import { extractErrorDetails } from '../utils/error';
 
 /**
- * 执行 ai 命令
+ * Run the AI analysis command for one user.
+ *
+ * @param username - V2EX username whose analyzed data should be processed.
+ * @param options - Per-command model, thinking, and pipeline overrides.
+ * @returns The workflow result for the AI step.
  */
 export async function runAi(username: string, options: AiCommandOptions): Promise<StepRunResult> {
   // 读取分析数据
@@ -94,9 +98,8 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     logger.detail(`思考等级: ${thinkingLevel}`);
   }
 
-  // 构建消息序列
-  const sequence = buildMessageSequence(analyzed);
-  const totalMessages = sequence.messages.length + 1; // +1 for finalPrompt
+  // Build one request so every provider receives the same complete payload.
+  const request = buildAnalysisRequest(analyzed);
 
   // 创建 Provider
   const provider = new GeminiProvider(apiKey, model);
@@ -113,27 +116,14 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   };
 
   try {
-    // 初始化会话
-    await provider.createSession(sequence.systemPrompt, {
+    // Apply the system prompt before sending the analysis payload.
+    await provider.createSession(request.systemPrompt, {
       thinkingLevel,
       timeout: config.ai?.timeout,
     });
 
-    // 逐条发送数据消息
-    logger.section('发送数据至 AI...');
-    let messageIndex = 0;
-    for (const message of sequence.messages) {
-      logger.progress(messageIndex, totalMessages, '发送消息');
-      await withRetry(() => provider.sendMessage(message), retryOptions);
-      messageIndex++;
-    }
-
-    // 发送最终分析请求
-    logger.progress(sequence.messages.length, totalMessages, '请求分析');
-    const rawResponse = await withRetry(
-      () => provider.sendMessage(sequence.finalPrompt),
-      retryOptions,
-    );
+    logger.section('发送完整分析数据至 AI...');
+    const rawResponse = await withRetry(() => provider.sendMessage(request.payload), retryOptions);
 
     // 解析响应
     const { data: result, warnings } = parseResponse(rawResponse);
