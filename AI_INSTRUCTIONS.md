@@ -125,7 +125,7 @@ root
 │   │       │   ├── result.ts        # AIAnalysisResult
 │   │       │   └── provider.ts      # IAIProvider interface
 │   │       ├── prompt/          # System prompt & message builder
-│   │       │   ├── index.ts         # buildMessageSequence()
+│   │       │   ├── index.ts         # buildAnalysisRequest()
 │   │       │   └── system-prompt.md # AI system prompt template
 │   │       ├── providers/       # AI provider adapters
 │   │       │   ├── index.ts         # Re-exports providers
@@ -338,7 +338,7 @@ root
 **Sub-modules**:
 
 - **Prompt** (`prompt/`):
-  - `buildMessageSequence(input)` → Constructs multi-turn message sequence from analyzer output.
+  - `buildAnalysisRequest(input)` → Constructs one compact AnalyzerOutput JSON payload with the system prompt.
   - `system-prompt.md` → Markdown-based system prompt template.
 - **Providers** (`providers/`):
   - `GeminiProvider` → Google Gemini API adapter with multi-turn chat support.
@@ -350,6 +350,12 @@ root
 - **Utils** (`utils/`):
   - `resolveApiKey()` → API key resolution (explicit > config > GOOGLE_API_KEY > GEMINI_API_KEY).
   - `withRetry(fn, options)` → Re-export from `infra/retry`.
+
+**Analysis Data Contract**:
+
+- `AnalysisRequest` contains the system prompt and the normalized AnalyzerOutput payload.
+- `AnalysisRequest.payload` is the compact JSON serialization of `userOverview`, `summary`, and all `contents` entries.
+- `result.json` stores the validated `AIAnalysisResult`.
 
 **Defaults** (from `config/defaults.ts`):
 
