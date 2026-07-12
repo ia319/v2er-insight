@@ -28,8 +28,8 @@ You will receive a JSON object structured as `AnalyzerOutput`. This structure co
 interface UserOverview {
   joinDate: string; // Account creation date
   lastActiveTime: string; // Last activity timestamp
-  topicReplyRatio: number | null; // Topic/Reply ratio, null if topics hidden
-  totalTopics: number | null; // Total topics count, null if topics hidden or 0
+  topicReplyRatio: number | null; // null when unavailable or no replies exist
+  totalTopics: number | null; // null when topics are hidden or not requested
   totalReplies: number | null; // null when replies were not requested
   isTopicsHidden: boolean; // Whether topic list is hidden by user
   dailyRanking: number | null; // Daily activity ranking
