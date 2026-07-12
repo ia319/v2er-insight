@@ -70,6 +70,7 @@ describe('getAllUserTopicsDetail', () => {
 
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123', '/t/456'],
       currentPage: 1,
       totalPages: 1,
@@ -109,6 +110,7 @@ describe('getAllUserTopicsDetail', () => {
     mockFetch.mockReturnValue(mockGenerator([listPage]));
     mockParseTopicsListPage.mockReturnValue({
       isHidden: true,
+      invalidTopicCount: 0,
       topicUrls: [],
       currentPage: 1,
       totalPages: 1,
@@ -131,6 +133,7 @@ describe('getAllUserTopicsDetail', () => {
     mockFetch.mockReturnValue(mockGenerator([listPage]));
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: [],
       currentPage: 1,
       totalPages: 1,
@@ -140,8 +143,7 @@ describe('getAllUserTopicsDetail', () => {
 
     expect(result.topics).toEqual([]);
     expect(result.totalTopics).toBe(0);
-    // 当主题列表为空且只有单页时，isHidden 为 true（基于 topic-urls.ts 的实现逻辑）
-    expect(result.isHidden).toBe(true);
+    expect(result.isHidden).toBe(false);
   });
 
   it('should count failures when topic fetch fails', async () => {
@@ -170,6 +172,7 @@ describe('getAllUserTopicsDetail', () => {
 
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123', '/t/456'],
       currentPage: 1,
       totalPages: 1,
@@ -211,6 +214,7 @@ describe('getAllUserTopicsDetail', () => {
 
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123'],
       currentPage: 1,
       totalPages: 1,

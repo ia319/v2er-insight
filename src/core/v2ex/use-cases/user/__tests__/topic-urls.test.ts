@@ -52,6 +52,7 @@ describe('getAllUserTopicUrls', () => {
     mockFetch.mockReturnValue(mockGenerator([fetchResult]));
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123456', '/t/789012'],
       currentPage: 1,
       totalPages: 1,
@@ -76,6 +77,7 @@ describe('getAllUserTopicUrls', () => {
     mockFetch.mockReturnValue(mockGenerator([fetchResult]));
     mockParseTopicsListPage.mockReturnValue({
       isHidden: true,
+      invalidTopicCount: 0,
       topicUrls: [],
       currentPage: 1,
       totalPages: 1,
@@ -87,7 +89,7 @@ describe('getAllUserTopicUrls', () => {
     expect(result.isHidden).toBe(true);
   });
 
-  it('should set isHidden when no topics found', async () => {
+  it('should preserve an explicitly visible empty topic list', async () => {
     const fetchResult: FetchResult = {
       url: 'https://www.v2ex.com/member/testuser/topics?p=1',
       success: true,
@@ -98,6 +100,7 @@ describe('getAllUserTopicUrls', () => {
     mockFetch.mockReturnValue(mockGenerator([fetchResult]));
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: [],
       currentPage: 1,
       totalPages: 1,
@@ -106,8 +109,7 @@ describe('getAllUserTopicUrls', () => {
     const result = await getAllUserTopicUrls('testuser');
 
     expect(result.data).toEqual([]);
-    // isHidden is true when empty data and single page
-    expect(result.isHidden).toBe(true);
+    expect(result.isHidden).toBe(false);
   });
 
   it('should merge URLs from multiple pages', async () => {
@@ -132,6 +134,7 @@ describe('getAllUserTopicUrls', () => {
       callCount++;
       return {
         isHidden: false,
+        invalidTopicCount: 0,
         topicUrls: [`/t/page${callCount}`],
         currentPage: callCount,
         totalPages: 2,
@@ -165,6 +168,7 @@ describe('getAllUserTopicUrls', () => {
 
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123'],
       currentPage: 1,
       totalPages: 2,
@@ -174,5 +178,27 @@ describe('getAllUserTopicUrls', () => {
 
     expect(result.data).toEqual(['https://www.v2ex.com/t/123']);
     expect(result.failedPages).toBe(1);
+  });
+
+  it('should expose invalid topic identity counts', async () => {
+    const fetchResult: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>topics</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValue(mockGenerator([fetchResult]));
+    mockParseTopicsListPage.mockReturnValue({
+      isHidden: false,
+      invalidTopicCount: 2,
+      topicUrls: ['/t/123'],
+      currentPage: 1,
+      totalPages: 1,
+    });
+
+    const result = await getAllUserTopicUrls('testuser');
+
+    expect(result.invalidTopicCount).toBe(2);
   });
 });
