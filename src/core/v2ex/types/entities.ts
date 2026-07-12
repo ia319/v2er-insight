@@ -8,10 +8,14 @@
  * 来源：/member/{username}/replies 页面中的单个回复项
  */
 export interface V2exReply {
+  /** Stable reply identity derived from the topic URL and reply anchor. */
+  replyId: string | null;
+  /** Stable topic identity derived from `/t/{id}`. */
+  topicId: string | null;
+  /** Reply floor number derived from `#reply{N}`. */
+  replyNumber: number | null;
   /** 主题标题 */
   topicTitle: string;
-  /** 该主题的回复总数（从 href #reply{N} 提取） */
-  topicReplyCount: number;
   /** 节点名称 */
   nodeName: string;
   /** 回复时间（相对时间或具体日期） */

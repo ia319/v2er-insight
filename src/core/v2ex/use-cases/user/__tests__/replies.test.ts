@@ -47,8 +47,10 @@ describe('getAllUserReplies', () => {
       totalReplies: 2,
       replies: [
         {
+          replyId: '100001#reply10',
+          topicId: '100001',
+          replyNumber: 10,
           topicTitle: 'Topic 1',
-          topicReplyCount: 10,
           nodeName: 'node1',
           replyTime: '1 day ago',
           content: 'Reply 1',
@@ -56,8 +58,10 @@ describe('getAllUserReplies', () => {
           replyTo: null,
         },
         {
+          replyId: '100002#reply5',
+          topicId: '100002',
+          replyNumber: 5,
           topicTitle: 'Topic 2',
-          topicReplyCount: 5,
           nodeName: 'node2',
           replyTime: '2 days ago',
           content: 'Reply 2',
@@ -101,8 +105,10 @@ describe('getAllUserReplies', () => {
         totalReplies: 20,
         replies: [
           {
+            replyId: `10000${callCount}#reply10`,
+            topicId: `10000${callCount}`,
+            replyNumber: 10,
             topicTitle: `Topic ${callCount}`,
-            topicReplyCount: 10,
             nodeName: 'node',
             replyTime: '1 day ago',
             content: `Reply ${callCount}`,
@@ -166,8 +172,10 @@ describe('getAllUserReplies', () => {
       totalReplies: 20,
       replies: [
         {
+          replyId: '100001#reply10',
+          topicId: '100001',
+          replyNumber: 10,
           topicTitle: 'Topic 1',
-          topicReplyCount: 10,
           nodeName: 'node',
           replyTime: '1 day ago',
           content: 'Reply 1',

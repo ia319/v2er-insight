@@ -39,11 +39,13 @@ describe('transformReplies', () => {
   it('should transform V2exReply to ContentReply', () => {
     const replies: V2exReply[] = [
       {
+        replyId: '100001#reply50',
+        topicId: '100001',
+        replyNumber: 50,
         topicTitle: 'Reply Topic Title',
         nodeName: 'Q&A',
         content: 'Reply Content',
         replyTime: '1 day ago',
-        topicReplyCount: 50,
         isDirectReply: true,
         replyTo: null,
       },

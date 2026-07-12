@@ -46,8 +46,10 @@ describe('splitByPeriods', () => {
   it('should assign replies to correct periods', () => {
     const replies = [
       {
+        replyId: '100001#reply10',
+        topicId: '100001',
+        replyNumber: 10,
         topicTitle: 'Topic',
-        topicReplyCount: 10,
         nodeName: 'test',
         replyTime: '5 天前',
         content: 'reply',

@@ -28,8 +28,10 @@ describe('calculateUserOverview', () => {
       ],
       replies: [
         {
+          replyId: '100001#reply50',
+          topicId: '100001',
+          replyNumber: 50,
           topicTitle: 'Topic',
-          topicReplyCount: 50,
           nodeName: 'node',
           replyTime: '1 天前',
           content: 'reply',
@@ -37,8 +39,10 @@ describe('calculateUserOverview', () => {
           replyTo: null,
         },
         {
+          replyId: '100002#reply30',
+          topicId: '100002',
+          replyNumber: 30,
           topicTitle: 'Topic2',
-          topicReplyCount: 30,
           nodeName: 'node2',
           replyTime: '2 天前',
           content: 'reply2',

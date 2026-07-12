@@ -23,6 +23,9 @@ describe('parseRepliesPage', () => {
 
   it('should parse direct reply correctly', () => {
     const directReply = result.replies[0];
+    expect(directReply?.replyId).toBe('100001#reply50');
+    expect(directReply?.topicId).toBe('100001');
+    expect(directReply?.replyNumber).toBe(50);
     expect(directReply?.topicTitle).toBe('示例主题标题一');
     expect(directReply?.nodeName).toBe('程序员');
     expect(directReply?.replyTime).toBe('2023 年 5 月 12 日');
@@ -37,5 +40,21 @@ describe('parseRepliesPage', () => {
     expect(mentionReply?.isDirectReply).toBe(false);
     expect(mentionReply?.replyTo).toBe('otheruser');
     expect(mentionReply?.content).toBe('这是一条回复他人的内容。');
+  });
+
+  it('should preserve a reply with null identity when its anchor is invalid', () => {
+    const html = loadFixture(fixturesDir, 'replies-page.html').replace(
+      '/t/100001#reply50',
+      '/t/invalid#reply50',
+    );
+
+    const invalidResult = parseRepliesPage(html);
+
+    expect(invalidResult.replies[0]).toMatchObject({
+      replyId: null,
+      topicId: null,
+      replyNumber: null,
+      topicTitle: '示例主题标题一',
+    });
   });
 });

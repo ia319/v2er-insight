@@ -52,7 +52,7 @@ interface SinglePeriodStats {
   replyCount: number;
   avgReplyLength: number; // Effort: Average reply length (chars)
   directReplyRatio: number; // Interaction style: Direct reply ratio
-  avgRepliedTopicHeat: number; // Interest: Average heat of replied topics
+  avgReplyPosition: number; // Average reply floor position, not topic heat
   replyWeekdayDistribution: Record<string, number> | null; // Weekly distribution
   replyNodeDistribution: Record<string, number>; // Top nodes for replies
 }
@@ -120,7 +120,7 @@ Map the provided metrics to the following psychological and behavioral dimension
 | :--------------------------------------------- | :----------------------------------- | :------------------------------------------------------------------------- |
 | `topicInteractionRatio` & `avgTopicReplyCount` | **Social: Content Appeal**           | High = Influential/Engaging; Low = Self-expression/Niche.                  |
 | `avgTopicLifecycleDays`                        | **Social: Discussion Depth**         | Long = Deep discussions; Short = Q&A or News.                              |
-| `avgRepliedTopicHeat`                          | **Behavioral: Heat Sensitivity**     | High = Trend Follower (Eating Melons); Low = Independent/Niche.            |
+| `replyNodeDistribution` & reply content        | **Behavioral: Heat Sensitivity**     | Infer trend focus from recurring nodes and content themes.                 |
 | `topicNodeDistribution`                        | **Professional: Focus**              | Identify tech stack and expertise areas.                                   |
 | `replyWeekdayDistribution`                     | **Behavioral: Work Pattern**         | Weekday high = Professional/Work-related; Weekend high = Hobbyist/Student. |
 | `avgReplyLength`                               | **Psychological: Conscientiousness** | Long = Serious/Detail-oriented; Short = Casual/Quick.                      |

@@ -6,6 +6,7 @@ import * as cheerio from 'cheerio';
 
 import type { V2exReply } from '../types/entities';
 import type { RepliesPageParseResult } from '../types/parse-result';
+import { extractReplyIdentityFromPath } from '../urls/topic-urls';
 import { parsePagination } from './utils';
 import { REPLIES_PAGE_SELECTORS } from './selectors';
 
@@ -46,12 +47,11 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     const replyContentWrapper = dockArea.next();
     const replyContent = replyContentWrapper.find(REPLY_CONTENT);
 
-    // 主题标题和回复总数
+    // Derive identity from the source link instead of mutable content.
     const topicLink = dockArea.find(TOPIC_LINK);
     const topicTitle = topicLink.text().trim();
     const topicHref = topicLink.attr('href') ?? '';
-    const replyCountMatch = topicHref.match(/#reply(\d+)/);
-    const topicReplyCount = replyCountMatch?.[1] ? parseInt(replyCountMatch[1], 10) : 0;
+    const replyIdentity = extractReplyIdentityFromPath(topicHref);
 
     // 节点名称
     const nodeLink = dockArea.find(NODE_LINK);
@@ -82,8 +82,10 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     }
 
     replies.push({
+      replyId: replyIdentity?.replyId ?? null,
+      topicId: replyIdentity?.topicId ?? null,
+      replyNumber: replyIdentity?.replyNumber ?? null,
       topicTitle,
-      topicReplyCount,
       nodeName,
       replyTime,
       content,

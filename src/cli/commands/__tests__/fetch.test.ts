@@ -50,8 +50,10 @@ const topic = {
 };
 
 const reply = {
+  replyId: '100001#reply1',
+  topicId: '100001',
+  replyNumber: 1,
   topicTitle: 'Snapshot design',
-  topicReplyCount: 1,
   nodeName: 'programmer',
   replyTime: '1 天前',
   content: 'Reply content',

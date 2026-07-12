@@ -9,8 +9,10 @@ describe('calculateReplyStats', () => {
   it('should calculate reply statistics', () => {
     const replies = [
       {
+        replyId: '100001#reply100',
+        topicId: '100001',
+        replyNumber: 100,
         topicTitle: 'Topic 1',
-        topicReplyCount: 100,
         nodeName: 'go',
         replyTime: '1 天前',
         content: 'This is a reply',
@@ -18,8 +20,10 @@ describe('calculateReplyStats', () => {
         replyTo: null,
       },
       {
+        replyId: '100002#reply50',
+        topicId: '100002',
+        replyNumber: 50,
         topicTitle: 'Topic 2',
-        topicReplyCount: 50,
         nodeName: 'go',
         replyTime: '2 天前',
         content: 'Another reply here',
@@ -27,8 +31,10 @@ describe('calculateReplyStats', () => {
         replyTo: 'user',
       },
       {
+        replyId: '100003#reply25',
+        topicId: '100003',
+        replyNumber: 25,
         topicTitle: 'Topic 3',
-        topicReplyCount: 25,
         nodeName: 'python',
         replyTime: '3 天前',
         content: 'Short',
@@ -44,7 +50,7 @@ describe('calculateReplyStats', () => {
 
     expect(result.replyCount).toBe(3);
     expect(result.directReplyRatio).toBeCloseTo(0.67, 1);
-    expect(result.avgRepliedTopicHeat).toBeCloseTo(58.33, 1);
+    expect(result.avgReplyPosition).toBeCloseTo(58.33, 1);
     expect(result.replyNodeDistribution).toEqual({ go: 2, python: 1 });
 
     // 验证星期分布：
@@ -74,6 +80,27 @@ describe('calculateReplyStats', () => {
 
     expect(result.replyCount).toBe(0);
     expect(result.avgReplyLength).toBe(0);
+    expect(result.avgReplyPosition).toBe(0);
     expect(result.replyWeekdayDistribution).toBeNull();
+  });
+
+  it('should exclude replies without stable positions from the average', () => {
+    const result = calculateReplyStats({
+      replies: [
+        {
+          replyId: null,
+          topicId: null,
+          replyNumber: null,
+          topicTitle: 'Unknown topic',
+          nodeName: 'go',
+          replyTime: '1 天前',
+          content: 'Reply without a stable anchor',
+          isDirectReply: true,
+          replyTo: null,
+        },
+      ],
+    });
+
+    expect(result.avgReplyPosition).toBe(0);
   });
 });

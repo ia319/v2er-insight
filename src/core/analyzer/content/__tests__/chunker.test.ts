@@ -23,11 +23,13 @@ function createTopic(index: number): V2exTopicDetail {
 // Create replies for testing
 function createReply(index: number): V2exReply {
   return {
+    replyId: `100001#reply${index}`,
+    topicId: '100001',
+    replyNumber: index,
     topicTitle: `Reply Topic ${index}`,
     nodeName: 'Q&A',
     content: `Reply Content ${index}`,
     replyTime: '1 day ago',
-    topicReplyCount: 50,
     isDirectReply: true,
     replyTo: null,
   };
