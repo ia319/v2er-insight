@@ -54,6 +54,27 @@ function mapTopic(topic: V2exTopicDetail): TopicSnapshot {
   };
 }
 
+function compareStrings(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
+
+function compareNumericIds(left: string, right: string): number {
+  const normalizedLeft = left.replace(/^0+/, '') || '0';
+  const normalizedRight = right.replace(/^0+/, '') || '0';
+
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return normalizedLeft.length - normalizedRight.length;
+  }
+
+  return compareStrings(normalizedLeft, normalizedRight) || compareStrings(left, right);
+}
+
 function buildTopicsCollection(
   data: SnapshotRequest<UserTopicsDetailResult>,
 ): RawSnapshotV2['topics'] {
@@ -70,7 +91,9 @@ function buildTopicsCollection(
     topicsById.set(topic.topicId, mapTopic(topic));
   }
 
-  const items = Array.from(topicsById.values());
+  const items = Array.from(topicsById.values()).sort((left, right) =>
+    compareNumericIds(left.topicId, right.topicId),
+  );
   const failedCount = Math.max(result.failedTopics, result.totalTopics - items.length);
   const totalExpected = result.failedPages > 0 ? null : result.totalTopics;
   const isPartial = result.failedPages > 0 || failedCount > 0 || result.invalidTopicCount > 0;
@@ -139,7 +162,14 @@ function buildRepliesCollection(
     repliesById.set(reply.replyId, mapReply(reply, capturedAt));
   }
 
-  const items = Array.from(repliesById.values());
+  const items = Array.from(repliesById.values()).sort((left, right) => {
+    const topicComparison = compareNumericIds(left.topicId, right.topicId);
+    if (topicComparison !== 0) {
+      return topicComparison;
+    }
+
+    return left.replyNumber - right.replyNumber || compareStrings(left.replyId, right.replyId);
+  });
   const identityFailureCount = Math.max(result.invalidReplyCount, detectedIdentityFailures);
   const failedCount =
     result.totalReplies === null

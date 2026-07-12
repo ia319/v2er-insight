@@ -25,6 +25,17 @@ describe('topN', () => {
   it('should handle empty array', () => {
     expect(topN([], (x: string) => x, 3)).toEqual({});
   });
+
+  it('should resolve equal counts by key regardless of input order', () => {
+    expect(topN(['beta', 'alpha'], (item) => item, 1)).toEqual({ alpha: 1 });
+    expect(topN(['alpha', 'beta'], (item) => item, 1)).toEqual({ alpha: 1 });
+  });
+
+  it('should count keys that match object prototype properties', () => {
+    const result = topN(['__proto__', '__proto__'], (item) => item, 1);
+
+    expect(Object.entries(result)).toEqual([['__proto__', 2]]);
+  });
 });
 
 describe('hourDistribution', () => {

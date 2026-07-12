@@ -15,16 +15,29 @@ export function topN<T>(
   getKey: (item: T) => string,
   n: number,
 ): Record<string, number> {
-  const counts: Record<string, number> = {};
+  const counts = new Map<string, number>();
 
   for (const item of items) {
     const key = getKey(item);
-    counts[key] = (counts[key] ?? 0) + 1;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
-  // 按数量降序排序，取前 N
-  const sorted = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
+  // Resolve equal counts by key so input order cannot change the selected Top N.
+  const sorted = Array.from(counts.entries())
+    .sort(([leftKey, leftCount], [rightKey, rightCount]) => {
+      const countComparison = rightCount - leftCount;
+      if (countComparison !== 0) {
+        return countComparison;
+      }
+
+      if (leftKey < rightKey) {
+        return -1;
+      }
+      if (leftKey > rightKey) {
+        return 1;
+      }
+      return 0;
+    })
     .slice(0, n);
 
   return Object.fromEntries(sorted);

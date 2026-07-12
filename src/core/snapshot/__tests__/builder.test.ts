@@ -299,6 +299,35 @@ describe('buildRawSnapshot', () => {
     expect(snapshot.replies.items[0]?.content).toBe('New reply');
   });
 
+  it('sorts topics and replies by stable numeric identities', () => {
+    const snapshot = buildSnapshot(
+      createTopicsResult({
+        topics: [
+          createTopic({ topicId: '10', sourceUrl: 'https://www.v2ex.com/t/10' }),
+          createTopic({ topicId: '1', sourceUrl: 'https://www.v2ex.com/t/1' }),
+          createTopic({ topicId: '2', sourceUrl: 'https://www.v2ex.com/t/2' }),
+        ],
+        totalTopics: 3,
+        fetchedTopics: 3,
+      }),
+      createRepliesResult({
+        data: [
+          createReply({ replyId: '10#reply1', topicId: '10', replyNumber: 1 }),
+          createReply({ replyId: '2#reply5', topicId: '2', replyNumber: 5 }),
+          createReply({ replyId: '2#reply1', topicId: '2', replyNumber: 1 }),
+        ],
+        totalReplies: 3,
+      }),
+    );
+
+    expect(snapshot.topics.items.map((topic) => topic.topicId)).toEqual(['1', '2', '10']);
+    expect(snapshot.replies.items.map((reply) => reply.replyId)).toEqual([
+      '2#reply1',
+      '2#reply5',
+      '10#reply1',
+    ]);
+  });
+
   it('rejects internally inconsistent reply identities', () => {
     const snapshot = buildSnapshot(
       createTopicsResult(),
