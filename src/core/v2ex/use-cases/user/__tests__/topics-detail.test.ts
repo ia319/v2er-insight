@@ -100,6 +100,8 @@ describe('getAllUserTopicsDetail', () => {
     expect(result.totalTopics).toBe(2);
     expect(result.fetchedTopics).toBe(2);
     expect(result.failedTopics).toBe(0);
+    expect(result.failedPages).toBe(0);
+    expect(result.invalidTopicCount).toBe(0);
     expect(result.isHidden).toBe(false);
     expect(result.topics).toEqual([
       expect.objectContaining({
@@ -186,8 +188,58 @@ describe('getAllUserTopicsDetail', () => {
       totalTopics: 2,
       fetchedTopics: 0,
       failedTopics: 2,
+      failedPages: 0,
+      invalidTopicCount: 2,
       isHidden: false,
     });
+  });
+
+  it('should preserve topic list page failures', async () => {
+    const listPage: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>list</html>',
+      statusCode: 200,
+    };
+    const failedListPage: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=2',
+      success: false,
+      content: null,
+      error: new Error('List page failed'),
+      statusCode: 0,
+    };
+    const topic: FetchResult = {
+      url: 'https://www.v2ex.com/t/123',
+      success: true,
+      content: '<html>topic</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValueOnce(mockGenerator([listPage]));
+    mockFetch.mockReturnValueOnce(mockGenerator([failedListPage]));
+    mockFetch.mockReturnValueOnce(mockGenerator([failedListPage]));
+    mockFetch.mockReturnValueOnce(mockGenerator([topic]));
+    mockParseTopicsListPage.mockReturnValue({
+      isHidden: false,
+      invalidTopicCount: 0,
+      topicUrls: ['/t/123'],
+      currentPage: 1,
+      totalPages: 2,
+    });
+    mockParseTopicDetail.mockReturnValue({
+      title: 'Topic 1',
+      nodeName: 'node',
+      createdAt: '2024-01-01',
+      content: 'Content',
+      replyCount: 10,
+      lastReplyTime: null,
+      clickCount: 100,
+    });
+
+    const result = await getAllUserTopicsDetail('testuser');
+
+    expect(result.failedPages).toBe(1);
+    expect(result.topics).toHaveLength(1);
   });
 
   it('should count failures when topic fetch fails', async () => {

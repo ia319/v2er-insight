@@ -73,6 +73,8 @@ describe('runFetch', () => {
       totalTopics: 1,
       fetchedTopics: 1,
       failedTopics: 0,
+      failedPages: 0,
+      invalidTopicCount: 0,
       isHidden: false,
     });
     mockedGetAllUserReplies.mockResolvedValue({
@@ -145,6 +147,8 @@ describe('runFetch', () => {
       totalTopics: 2,
       fetchedTopics: 1,
       failedTopics: 1,
+      failedPages: 0,
+      invalidTopicCount: 0,
       isHidden: false,
     });
     mockedGetAllUserReplies.mockResolvedValue({

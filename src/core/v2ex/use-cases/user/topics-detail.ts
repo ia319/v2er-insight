@@ -23,6 +23,10 @@ export interface UserTopicsDetailResult {
   fetchedTopics: number;
   /** 获取失败的帖子数 */
   failedTopics: number;
+  /** Number of topic list pages that could not be fetched. */
+  failedPages: number;
+  /** Number of topic links without a stable identity. */
+  invalidTopicCount: number;
   /** 用户是否隐藏了主题列表 */
   isHidden: boolean;
 }
@@ -71,6 +75,8 @@ export async function getAllUserTopicsDetail(
       totalTopics,
       fetchedTopics: 0,
       failedTopics: urlsResult.invalidTopicCount,
+      failedPages: urlsResult.failedPages,
+      invalidTopicCount: urlsResult.invalidTopicCount,
       isHidden: urlsResult.isHidden,
     };
   }
@@ -127,6 +133,8 @@ export async function getAllUserTopicsDetail(
       totalTopics,
       fetchedTopics: topicsById.size,
       failedTopics: stillFailed.length + urlsResult.invalidTopicCount,
+      failedPages: urlsResult.failedPages,
+      invalidTopicCount: urlsResult.invalidTopicCount,
       isHidden: false,
     };
   }
@@ -136,6 +144,8 @@ export async function getAllUserTopicsDetail(
     totalTopics,
     fetchedTopics: topicsById.size,
     failedTopics: failedUrls.length + urlsResult.invalidTopicCount,
+    failedPages: urlsResult.failedPages,
+    invalidTopicCount: urlsResult.invalidTopicCount,
     isHidden: false,
   };
 }
