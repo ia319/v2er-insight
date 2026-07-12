@@ -17,6 +17,22 @@ function createInput(
   } = {},
 ): AnalyzerOutput {
   return {
+    schemaVersion: 2,
+    dataQuality: {
+      capturedAt: '2026-07-12T03:04:05.000Z',
+      topics: {
+        status: 'complete',
+        totalExpected: 10,
+        fetchedCount: 10,
+        failedCount: 0,
+      },
+      replies: {
+        status: 'complete',
+        totalExpected: 20,
+        fetchedCount: 20,
+        failedCount: 0,
+      },
+    },
     userOverview: {
       joinDate: '2020-01-01',
       lastActiveTime: '2024-01-01',
@@ -84,7 +100,13 @@ describe('buildAnalysisRequest', () => {
     const payload = JSON.parse(result.payload) as Record<string, unknown>;
 
     expect(payload).toEqual(input);
-    expect(Object.keys(payload)).toEqual(['userOverview', 'summary', 'contents']);
+    expect(Object.keys(payload)).toEqual([
+      'schemaVersion',
+      'dataQuality',
+      'userOverview',
+      'summary',
+      'contents',
+    ]);
   });
 });
 
@@ -96,6 +118,7 @@ describe('system prompt protocol', () => {
 
     expect(prompt).toContain('one complete analysis input');
     expect(prompt).toContain('Do not wait for a follow-up instruction');
+    expect(prompt).toContain('never infer deletion from missing records');
     expect(prompt).toContain('Return exactly one valid JSON object');
   });
 });

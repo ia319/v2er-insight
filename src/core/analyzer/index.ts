@@ -13,7 +13,8 @@
  */
 
 // 主入口函数
-export { buildAnalyzerOutput, buildAnalyzerOutputFromSnapshot } from './builder';
+export { buildAnalyzerOutputFromSnapshot } from './builder';
+export { ANALYZER_OUTPUT_SCHEMA_VERSION } from './types';
 
 // 类型导出
 export type {
@@ -21,6 +22,7 @@ export type {
   RawUserData,
   // 输出
   AnalyzerOutput,
+  SnapshotQuality,
   UserOverview,
   PeriodsSummary,
   SinglePeriodStats,

@@ -100,4 +100,62 @@ describe('createAnalyzerInput', () => {
       '2026-07-12T00:04:05.000Z',
     );
   });
+
+  it('exposes snapshot collection quality in Analyzer output', () => {
+    expect(buildAnalyzerOutputFromSnapshot(snapshot)).toMatchObject({
+      schemaVersion: 2,
+      dataQuality: {
+        capturedAt: '2026-07-12T03:04:05.000Z',
+        topics: {
+          status: 'complete',
+          totalExpected: 1,
+          fetchedCount: 1,
+          failedCount: 0,
+        },
+        replies: {
+          status: 'complete',
+          totalExpected: 1,
+          fetchedCount: 1,
+          failedCount: 0,
+        },
+      },
+    });
+  });
+
+  it('preserves partial and not-requested quality states', () => {
+    const incompleteSnapshot: RawSnapshotV2 = {
+      ...snapshot,
+      topics: {
+        ...snapshot.topics,
+        status: 'partial',
+        totalExpected: 2,
+        failedCount: 1,
+      },
+      replies: {
+        status: 'not_requested',
+        totalExpected: null,
+        fetchedCount: 0,
+        failedCount: 0,
+        failedPageCount: 0,
+        identityFailureCount: 0,
+        items: [],
+      },
+    };
+
+    expect(buildAnalyzerOutputFromSnapshot(incompleteSnapshot).dataQuality).toEqual({
+      capturedAt: snapshot.capturedAt,
+      topics: {
+        status: 'partial',
+        totalExpected: 2,
+        fetchedCount: 1,
+        failedCount: 1,
+      },
+      replies: {
+        status: 'not_requested',
+        totalExpected: null,
+        fetchedCount: 0,
+        failedCount: 0,
+      },
+    });
+  });
 });

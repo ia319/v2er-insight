@@ -18,4 +18,6 @@ export type {
   PeriodContent,
   PeriodContentChunk,
   AnalyzerOutput,
+  SnapshotQuality,
 } from './output';
+export { ANALYZER_OUTPUT_SCHEMA_VERSION } from './output';

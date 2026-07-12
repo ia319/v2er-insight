@@ -11,6 +11,7 @@ import type {
   PeriodContent,
   PeriodContentChunk,
 } from './types';
+import { ANALYZER_OUTPUT_SCHEMA_VERSION } from './types';
 import { detectPeriodBoundaries, splitByPeriods } from './periods';
 import { calculateUserOverview } from './stats/user-overview';
 import { calculateTopicStats } from './stats/topic-stats';
@@ -21,24 +22,16 @@ import type { RawSnapshotV2 } from '@/core/snapshot';
 import { createAnalyzerInput } from './adapters/snapshot';
 
 /**
- * 构建完整的 Analyzer 输出
+ * Build the core metrics and content fields used by AnalyzerOutput.
  *
- * 处理流程：
- * 1. 计算用户总览
- * 2. 提取所有活动日期
- * 3. 检测活跃期边界
- * 4. 将数据分割到各活跃期
- * 5. 计算每个活跃期的统计
- * 6. 转换并分片内容
- *
- * @param data - V2EX 抓取的原始用户数据
- * @param referenceDate - 参考日期（用于相对时间解析）
- * @returns 完整的 Analyzer 输出
+ * @param data - Internal input adapted from a validated raw snapshot.
+ * @param referenceDate - Shared reference for relative reply times.
+ * @returns User overview, period summary, and content chunks.
  */
-export function buildAnalyzerOutput(
+function buildAnalyzerCoreOutput(
   data: RawUserData,
   referenceDate: Date = new Date(),
-): AnalyzerOutput {
+): Pick<AnalyzerOutput, 'userOverview' | 'summary' | 'contents'> {
   // 1. 计算用户总览
   const userOverview = calculateUserOverview(data, referenceDate);
 
@@ -77,7 +70,30 @@ export function buildAnalyzerOutput(
  * @returns Analyzer output using the snapshot capture time as the time reference.
  */
 export function buildAnalyzerOutputFromSnapshot(snapshot: RawSnapshotV2): AnalyzerOutput {
-  return buildAnalyzerOutput(createAnalyzerInput(snapshot), new Date(snapshot.capturedAt));
+  const coreOutput = buildAnalyzerCoreOutput(
+    createAnalyzerInput(snapshot),
+    new Date(snapshot.capturedAt),
+  );
+
+  return {
+    schemaVersion: ANALYZER_OUTPUT_SCHEMA_VERSION,
+    dataQuality: {
+      capturedAt: snapshot.capturedAt,
+      topics: {
+        status: snapshot.topics.status,
+        totalExpected: snapshot.topics.totalExpected,
+        fetchedCount: snapshot.topics.fetchedCount,
+        failedCount: snapshot.topics.failedCount,
+      },
+      replies: {
+        status: snapshot.replies.status,
+        totalExpected: snapshot.replies.totalExpected,
+        fetchedCount: snapshot.replies.fetchedCount,
+        failedCount: snapshot.replies.failedCount,
+      },
+    },
+    ...coreOutput,
+  };
 }
 
 /**

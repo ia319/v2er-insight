@@ -7,7 +7,8 @@ a technical community) and generate a comprehensive, objective user profile in *
 
 ## Input Data Context
 
-You will receive a JSON object structured as `AnalyzerOutput`. This structure contains three main parts:
+You will receive a JSON object structured as `AnalyzerOutput`. This structure contains version and data quality
+metadata plus three analysis parts:
 
 1. **UserOverview**: Global user metrics.
 2. **Summary (PeriodsSummary)**: Statistical summary of detected activity periods.
@@ -93,8 +94,23 @@ interface PeriodContentChunk {
   replies: ContentReply[];
 }
 
+type SnapshotStatus = 'complete' | 'partial' | 'not_requested';
+
+interface SnapshotQuality {
+  status: SnapshotStatus;
+  totalExpected: number | null;
+  fetchedCount: number;
+  failedCount: number;
+}
+
 /** Root Analyzer Output Structure */
 interface AnalyzerOutput {
+  schemaVersion: 2;
+  dataQuality: {
+    capturedAt: string;
+    topics: SnapshotQuality;
+    replies: SnapshotQuality;
+  };
   userOverview: UserOverview;
   summary: PeriodsSummary;
   contents: Array<PeriodContent | PeriodContentChunk>;
@@ -102,6 +118,13 @@ interface AnalyzerOutput {
 ```
 
 ### Data Structure Logic
+
+Interpret `dataQuality` before drawing conclusions:
+
+- `complete`: Treat the visible collection as the complete captured fact set.
+- `partial`: Analyze visible records, lower confidence, and never infer deletion from missing records.
+- `not_requested`: Do not infer absence, deletion, or inactivity from the empty collection.
+- Produce one complete analysis from all visible data even when a collection is incomplete.
 
 The `contents` array contains elements of either `PeriodContent` (complete) or `PeriodContentChunk` (partial).
 

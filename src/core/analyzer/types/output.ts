@@ -2,6 +2,19 @@
  * Analyzer 输出类型
  */
 
+import type { SnapshotCollectionStatus } from '@/core/snapshot';
+
+/** Analyzer output schema persisted in analyzed.json. */
+export const ANALYZER_OUTPUT_SCHEMA_VERSION = 2 as const;
+
+/** Collection quality exposed to downstream AI providers. */
+export interface SnapshotQuality {
+  status: SnapshotCollectionStatus;
+  totalExpected: number | null;
+  fetchedCount: number;
+  failedCount: number;
+}
+
 /** 用户总览 */
 export interface UserOverview {
   joinDate: string;
@@ -71,6 +84,12 @@ export interface PeriodContentChunk {
 
 /** Analyzer 最终输出 */
 export interface AnalyzerOutput {
+  schemaVersion: typeof ANALYZER_OUTPUT_SCHEMA_VERSION;
+  dataQuality: {
+    capturedAt: string;
+    topics: SnapshotQuality;
+    replies: SnapshotQuality;
+  };
   userOverview: UserOverview;
   summary: PeriodsSummary;
   contents: Array<PeriodContent | PeriodContentChunk>;
