@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { getTopicUrl, extractTopicIdFromPath } from '../topic-urls';
+import { getTopicUrl, extractTopicIdFromPath, extractReplyIdentityFromPath } from '../topic-urls';
 
 describe('getTopicUrl', () => {
   it('should generate topic URL from string ID', () => {
@@ -45,5 +45,30 @@ describe('extractTopicIdFromPath', () => {
 
   it('should return null for invalid path', () => {
     expect(extractTopicIdFromPath('/member/user')).toBeNull();
+  });
+});
+
+describe('extractReplyIdentityFromPath', () => {
+  it('should extract a stable identity from a relative reply URL', () => {
+    expect(extractReplyIdentityFromPath('/t/123456#reply50')).toEqual({
+      topicId: '123456',
+      replyNumber: 50,
+      replyId: '123456#reply50',
+    });
+  });
+
+  it('should extract a stable identity from an absolute reply URL', () => {
+    expect(extractReplyIdentityFromPath('https://www.v2ex.com/t/123456?p=2#reply0')).toEqual({
+      topicId: '123456',
+      replyNumber: 0,
+      replyId: '123456#reply0',
+    });
+  });
+
+  it('should reject paths without a complete numeric reply anchor', () => {
+    expect(extractReplyIdentityFromPath('/t/123456')).toBeNull();
+    expect(extractReplyIdentityFromPath('/t/123456#reply')).toBeNull();
+    expect(extractReplyIdentityFromPath('/t/topic#reply1')).toBeNull();
+    expect(extractReplyIdentityFromPath('/t/123456#reply1suffix')).toBeNull();
   });
 });

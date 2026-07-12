@@ -4,6 +4,13 @@
 
 import { V2EX_BASE } from './constants';
 
+/** Stable identity encoded by a V2EX reply anchor. */
+export interface ReplyIdentity {
+  topicId: string;
+  replyNumber: number;
+  replyId: string;
+}
+
 /**
  * 生成单个帖子页面 URL
  * 支持帖子 ID 或相对路径作为输入
@@ -46,4 +53,31 @@ export function getTopicUrl(topicIdOrPath: string | number): string {
 export function extractTopicIdFromPath(path: string): string | null {
   const match = path.match(/\/t\/(\d+)/);
   return match?.[1] ?? null;
+}
+
+/**
+ * Extract a stable topic and reply identity from a V2EX reply URL.
+ *
+ * @param path - Relative or absolute topic URL containing a `#replyN` anchor.
+ * @returns The stable reply identity, or `null` when the URL is incomplete.
+ */
+export function extractReplyIdentityFromPath(path: string): ReplyIdentity | null {
+  const normalized = path.trim();
+  const topicId = extractTopicIdFromPath(normalized);
+  const replyMatch = normalized.match(/#reply(\d+)(?:$|[?&])/);
+
+  if (!topicId || !replyMatch?.[1]) {
+    return null;
+  }
+
+  const replyNumber = Number.parseInt(replyMatch[1], 10);
+  if (!Number.isSafeInteger(replyNumber)) {
+    return null;
+  }
+
+  return {
+    topicId,
+    replyNumber,
+    replyId: `${topicId}#reply${replyNumber}`,
+  };
 }

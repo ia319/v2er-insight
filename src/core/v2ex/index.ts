@@ -20,7 +20,9 @@ export {
   getUserTopicsUrl,
   getTopicUrl,
   extractTopicIdFromPath,
+  extractReplyIdentityFromPath,
 } from './urls';
+export type { ReplyIdentity } from './urls';
 
 // 解析器导出
 export {
