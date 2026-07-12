@@ -12,6 +12,7 @@ import {
   type SnapshotCollection,
   type TopicSnapshot,
 } from './types';
+import { normalizeReplyTime } from './reply-time';
 
 /** Requested scope paired with its required fetch result. */
 export type SnapshotRequest<T> =
@@ -98,7 +99,10 @@ function hasStableReplyIdentity(
 
 function mapReply(
   reply: V2exReply & { replyId: string; topicId: string; replyNumber: number },
+  capturedAt: Date,
 ): ReplySnapshot {
+  const normalizedTime = normalizeReplyTime(reply.replyTime, capturedAt);
+
   return {
     replyId: reply.replyId,
     topicId: reply.topicId,
@@ -106,8 +110,8 @@ function mapReply(
     topicTitle: reply.topicTitle,
     nodeName: reply.nodeName,
     displayReplyTime: reply.replyTime,
-    occurredAt: null,
-    timePrecision: 'unknown',
+    occurredAt: normalizedTime.occurredAt,
+    timePrecision: normalizedTime.timePrecision,
     content: reply.content,
     isDirectReply: reply.isDirectReply,
     replyTo: reply.replyTo,
@@ -116,6 +120,7 @@ function mapReply(
 
 function buildRepliesCollection(
   data: SnapshotRequest<UserRepliesResult>,
+  capturedAt: Date,
 ): RawSnapshotV2['replies'] {
   if (!data.requested) {
     return createNotRequestedCollection<ReplySnapshot>();
@@ -131,7 +136,7 @@ function buildRepliesCollection(
       continue;
     }
 
-    repliesById.set(reply.replyId, mapReply(reply));
+    repliesById.set(reply.replyId, mapReply(reply, capturedAt));
   }
 
   const items = Array.from(repliesById.values());
@@ -173,6 +178,6 @@ export function buildRawSnapshot(input: BuildRawSnapshotInput): RawSnapshotV2 {
       dailyRanking: input.profile.dailyRanking,
     },
     topics: buildTopicsCollection(input.topics),
-    replies: buildRepliesCollection(input.replies),
+    replies: buildRepliesCollection(input.replies, input.capturedAt),
   };
 }

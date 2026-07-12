@@ -45,7 +45,7 @@ function createSnapshot() {
             replyNumber: 2,
             topicTitle: 'Topic title',
             nodeName: 'create',
-            replyTime: '3 hours ago',
+            replyTime: '3 小时前',
             content: 'Reply content',
             isDirectReply: true,
             replyTo: null,
@@ -108,6 +108,25 @@ describe('isRawSnapshotV2', () => {
         replies: {
           ...snapshot.replies,
           items: [{ ...reply, replyId: '100#reply3' }],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects reply time precision without a normalized occurrence', () => {
+    const snapshot = createSnapshot();
+    const reply = snapshot.replies.items[0];
+
+    if (!reply) {
+      throw new Error('Expected reply fixture');
+    }
+
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        replies: {
+          ...snapshot.replies,
+          items: [{ ...reply, occurredAt: null, timePrecision: 'hour' }],
         },
       }),
     ).toBe(false);

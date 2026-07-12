@@ -1,6 +1,8 @@
 export { buildRawSnapshot } from './builder';
 export type { BuildRawSnapshotInput, SnapshotRequest } from './builder';
 export { isRawSnapshotV2 } from './validator';
+export { normalizeReplyTime } from './reply-time';
+export type { NormalizedReplyTime } from './reply-time';
 
 export { RAW_SNAPSHOT_SCHEMA_VERSION } from './types';
 export type {

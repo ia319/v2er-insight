@@ -53,11 +53,7 @@ function isReplySnapshot(value: unknown): value is ReplySnapshot {
     typeof value.topicTitle !== 'string' ||
     typeof value.nodeName !== 'string' ||
     typeof value.displayReplyTime !== 'string' ||
-    !isNullableString(value.occurredAt) ||
-    (value.timePrecision !== 'minute' &&
-      value.timePrecision !== 'hour' &&
-      value.timePrecision !== 'day' &&
-      value.timePrecision !== 'unknown') ||
+    !hasValidNormalizedReplyTime(value.occurredAt, value.timePrecision) ||
     typeof value.content !== 'string' ||
     typeof value.isDirectReply !== 'boolean' ||
     !isNullableString(value.replyTo)
@@ -66,6 +62,17 @@ function isReplySnapshot(value: unknown): value is ReplySnapshot {
   }
 
   return value.replyId === `${value.topicId}#reply${value.replyNumber}`;
+}
+
+function hasValidNormalizedReplyTime(occurredAt: unknown, timePrecision: unknown): boolean {
+  if (occurredAt === null) {
+    return timePrecision === 'unknown';
+  }
+
+  return (
+    isCanonicalIsoTime(occurredAt) &&
+    (timePrecision === 'minute' || timePrecision === 'hour' || timePrecision === 'day')
+  );
 }
 
 function isSnapshotCollection<T>(
@@ -136,7 +143,7 @@ function hasUniqueItems<T>(items: T[], getIdentity: (item: T) => string): boolea
   return true;
 }
 
-function isCapturedAt(value: unknown): value is string {
+function isCanonicalIsoTime(value: unknown): value is string {
   if (typeof value !== 'string') {
     return false;
   }
@@ -156,7 +163,7 @@ export function isRawSnapshotV2(value: unknown): value is RawSnapshotV2 {
     !isRecord(value) ||
     value.schemaVersion !== 2 ||
     typeof value.username !== 'string' ||
-    !isCapturedAt(value.capturedAt) ||
+    !isCanonicalIsoTime(value.capturedAt) ||
     !isRecord(value.profile) ||
     typeof value.profile.joinDate !== 'string' ||
     (value.profile.dailyRanking !== null && !isNonNegativeInteger(value.profile.dailyRanking)) ||
