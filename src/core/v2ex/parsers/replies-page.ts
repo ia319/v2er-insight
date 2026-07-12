@@ -31,7 +31,7 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
   let invalidReplyCount = 0;
 
   // 获取用户回复总数
-  let totalReplies = 0;
+  let totalReplies: number | null = null;
   const headerText = $(TOTAL_CONTAINER).text();
   const totalMatch = headerText.match(/回复总数\s+(\d+)/);
   if (totalMatch?.[1]) {

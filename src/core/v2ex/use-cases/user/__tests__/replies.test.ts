@@ -157,6 +157,28 @@ describe('getAllUserReplies', () => {
     expect(result.fetchedPages).toBe(1);
   });
 
+  it('should preserve an unknown declared reply total', async () => {
+    const fetchResult: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/replies?p=1',
+      success: true,
+      content: '<html>replies without total</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValue(mockGenerator([fetchResult]));
+    mockParseRepliesPage.mockReturnValue({
+      totalReplies: null,
+      invalidReplyCount: 0,
+      replies: [],
+      currentPage: 1,
+      totalPages: 1,
+    });
+
+    const result = await getAllUserReplies('testuser');
+
+    expect(result.totalReplies).toBeNull();
+  });
+
   it('should count failures when pages fail', async () => {
     const page1: FetchResult = {
       url: 'https://www.v2ex.com/member/testuser/replies?p=1',

@@ -21,8 +21,8 @@ export interface UserProfileParseResult {
  * 来源：/member/{username}/replies?p={page}
  */
 export interface RepliesPageParseResult {
-  /** 用户的回复总数（页面顶部显示的"回复总数 30237"） */
-  totalReplies: number;
+  /** Declared total reply count, or `null` when the page omits it. */
+  totalReplies: number | null;
   /** Number of replies without a stable source anchor. */
   invalidReplyCount: number;
   /** 本页回复列表 */

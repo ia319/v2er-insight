@@ -10,7 +10,7 @@ import { fetchPagedData } from '../utils';
 
 /** Reply collection with item-level completeness metadata. */
 export interface UserRepliesResult extends PagedResult<V2exReply> {
-  totalReplies: number;
+  totalReplies: number | null;
   invalidReplyCount: number;
 }
 
@@ -25,14 +25,16 @@ export async function getAllUserReplies(
   username: string,
   options?: ServiceOptions,
 ): Promise<UserRepliesResult> {
-  let totalReplies = 0;
+  let totalReplies: number | null = null;
   let invalidReplyCount = 0;
 
   const result = await fetchPagedData(
     (page) => getUserRepliesUrl(username, page),
     (html) => {
       const parsed = parseRepliesPage(html);
-      totalReplies = Math.max(totalReplies, parsed.totalReplies);
+      if (parsed.totalReplies !== null) {
+        totalReplies = Math.max(totalReplies ?? 0, parsed.totalReplies);
+      }
       invalidReplyCount += parsed.invalidReplyCount;
       return parsed;
     },

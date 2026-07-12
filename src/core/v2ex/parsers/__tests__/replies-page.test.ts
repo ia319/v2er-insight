@@ -59,4 +59,10 @@ describe('parseRepliesPage', () => {
     });
     expect(invalidResult.invalidReplyCount).toBe(1);
   });
+
+  it('should return null when the page omits the declared reply total', () => {
+    const resultWithoutTotal = parseRepliesPage('<html><body></body></html>');
+
+    expect(resultWithoutTotal.totalReplies).toBeNull();
+  });
 });
