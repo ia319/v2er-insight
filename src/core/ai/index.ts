@@ -24,4 +24,4 @@ export { parseResponse, type ValidationResult } from './parser';
 
 export { resolveApiKey, withRetry, type RetryOptions } from './utils';
 
-export { buildMessageSequence, type MessageSequence } from './prompt';
+export { buildAnalysisRequest, type AnalysisRequest } from './prompt';

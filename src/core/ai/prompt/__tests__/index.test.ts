@@ -4,7 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
-import type { ContentTopic, ContentReply } from '@/core/analyzer/types';
+import * as path from 'node:path';
+import type { AnalyzerOutput, PeriodContentChunk } from '@/core/analyzer/types';
 
 vi.mock('node:fs');
 
@@ -12,9 +13,9 @@ vi.mock('node:fs');
 function createInput(
   overrides: {
     totalPeriods?: number;
-    contents?: Array<{ periodIndex: number; topics: ContentTopic[]; replies: ContentReply[] }>;
+    contents?: AnalyzerOutput['contents'];
   } = {},
-) {
+): AnalyzerOutput {
   return {
     userOverview: {
       joinDate: '2020-01-01',
@@ -33,46 +34,68 @@ function createInput(
   };
 }
 
-describe('buildMessageSequence', () => {
+describe('buildAnalysisRequest', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.mocked(fs.readFileSync).mockReturnValue('# System Prompt\nTest prompt content');
   });
 
-  it('should build correct message sequence structure', async () => {
-    const { buildMessageSequence } = await import('../index');
+  it('should build one compact JSON payload with the system prompt', async () => {
+    const { buildAnalysisRequest } = await import('../index');
+    const input = createInput();
 
-    const result = buildMessageSequence(createInput());
+    const result = buildAnalysisRequest(input);
 
     expect(result.systemPrompt).toContain('Test prompt content');
-    expect(result.messages).toHaveLength(2); // userOverview + summary
-    expect(result.finalPrompt).toContain('JSON');
+    expect(result.payload).toBe(JSON.stringify(input));
+    expect(JSON.parse(result.payload)).toEqual(input);
   });
 
-  it('should generate messages for each active period contents', async () => {
-    const { buildMessageSequence } = await import('../index');
+  it('should preserve all period chunks in the payload', async () => {
+    const { buildAnalysisRequest } = await import('../index');
+    const chunks: PeriodContentChunk[] = [
+      {
+        periodIndex: 0,
+        chunkIndex: 0,
+        totalChunksInPeriod: 2,
+        topics: [{ title: 'Topic', nodeName: 'tech', content: 'First chunk' }],
+        replies: [],
+      },
+      {
+        periodIndex: 0,
+        chunkIndex: 1,
+        totalChunksInPeriod: 2,
+        topics: [],
+        replies: [{ topicTitle: 'Topic', nodeName: 'tech', content: 'Second chunk' }],
+      },
+    ];
+    const input = createInput({ contents: chunks });
 
-    const result = buildMessageSequence(
-      createInput({
-        totalPeriods: 2,
-        contents: [
-          { periodIndex: 0, topics: [], replies: [] },
-          { periodIndex: 1, topics: [], replies: [] },
-        ],
-      }),
-    );
+    const result = buildAnalysisRequest(input);
 
-    // userOverview + summary + 2 contents
-    expect(result.messages).toHaveLength(4);
+    expect(JSON.parse(result.payload)).toEqual(input);
   });
 
-  it('messages should be valid JSON strings', async () => {
-    const { buildMessageSequence } = await import('../index');
+  it('should preserve an empty contents array without adding an envelope', async () => {
+    const { buildAnalysisRequest } = await import('../index');
+    const input = createInput({ contents: [] });
 
-    const result = buildMessageSequence(createInput());
+    const result = buildAnalysisRequest(input);
+    const payload = JSON.parse(result.payload) as Record<string, unknown>;
 
-    result.messages.forEach((msg) => {
-      expect(() => JSON.parse(msg)).not.toThrow();
-    });
+    expect(payload).toEqual(input);
+    expect(Object.keys(payload)).toEqual(['userOverview', 'summary', 'contents']);
+  });
+});
+
+describe('system prompt protocol', () => {
+  it('should require immediate analysis of one complete input', async () => {
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    const promptPath = path.resolve(process.cwd(), 'src/core/ai/prompt/system-prompt.md');
+    const prompt = actualFs.readFileSync(promptPath, 'utf8');
+
+    expect(prompt).toContain('one complete analysis input');
+    expect(prompt).toContain('Do not wait for a follow-up instruction');
+    expect(prompt).toContain('Return exactly one valid JSON object');
   });
 });
