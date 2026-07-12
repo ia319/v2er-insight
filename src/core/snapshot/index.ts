@@ -1,5 +1,6 @@
 export { buildRawSnapshot } from './builder';
 export type { BuildRawSnapshotInput } from './builder';
+export { isRawSnapshotV2 } from './validator';
 
 export { RAW_SNAPSHOT_SCHEMA_VERSION } from './types';
 export type {
