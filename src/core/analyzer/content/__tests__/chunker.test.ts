@@ -10,6 +10,8 @@ import type { V2exTopicDetail, V2exReply } from '@/core/v2ex/types/entities';
 // Create topics for testing
 function createTopic(index: number): V2exTopicDetail {
   return {
+    topicId: String(200000 + index),
+    sourceUrl: `https://www.v2ex.com/t/${200000 + index}`,
     title: `Topic ${index}`,
     nodeName: 'Technology',
     content: `Content ${index}`,

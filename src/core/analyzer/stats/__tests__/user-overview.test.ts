@@ -17,6 +17,8 @@ describe('calculateUserOverview', () => {
       profile: mockProfile,
       topics: [
         {
+          topicId: '200001',
+          sourceUrl: 'https://www.v2ex.com/t/200001',
           title: 'Test',
           nodeName: 'test',
           createdAt: '2024-01-01 10:00:00 +08:00',

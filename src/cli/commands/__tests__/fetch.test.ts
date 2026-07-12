@@ -40,6 +40,8 @@ const profile = {
 };
 
 const topic = {
+  topicId: '200001',
+  sourceUrl: 'https://www.v2ex.com/t/200001',
   title: 'Snapshot design',
   nodeName: 'programmer',
   createdAt: '2026-07-01 10:00:00 +08:00',

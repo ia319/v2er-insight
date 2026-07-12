@@ -22,7 +22,11 @@ vi.mock('../../../parsers', () => ({
 vi.mock('../../../urls', () => ({
   getUserTopicsUrl: (username: string, page: number) =>
     `https://www.v2ex.com/member/${username}/topics?p=${page}`,
-  getTopicUrl: (path: string) => `https://www.v2ex.com${path}`,
+  getTopicUrl: (idOrPath: string) => {
+    const topicId = idOrPath.match(/\/t\/(\d+)/)?.[1] ?? idOrPath;
+    return `https://www.v2ex.com/t/${topicId}`;
+  },
+  extractTopicIdFromPath: (path: string) => path.match(/\/t\/(\d+)/)?.[1] ?? null,
 }));
 
 import { getAllUserTopicsDetail } from '../topics-detail';
@@ -97,6 +101,18 @@ describe('getAllUserTopicsDetail', () => {
     expect(result.fetchedTopics).toBe(2);
     expect(result.failedTopics).toBe(0);
     expect(result.isHidden).toBe(false);
+    expect(result.topics).toEqual([
+      expect.objectContaining({
+        topicId: '123',
+        sourceUrl: 'https://www.v2ex.com/t/123',
+        title: 'Topic 1',
+      }),
+      expect.objectContaining({
+        topicId: '456',
+        sourceUrl: 'https://www.v2ex.com/t/456',
+        title: 'Topic 2',
+      }),
+    ]);
   });
 
   it('should return empty when hidden', async () => {
@@ -144,6 +160,34 @@ describe('getAllUserTopicsDetail', () => {
     expect(result.topics).toEqual([]);
     expect(result.totalTopics).toBe(0);
     expect(result.isHidden).toBe(false);
+  });
+
+  it('should count invalid topic identities as failed topics', async () => {
+    const listPage: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>list</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValue(mockGenerator([listPage]));
+    mockParseTopicsListPage.mockReturnValue({
+      isHidden: false,
+      invalidTopicCount: 2,
+      topicUrls: [],
+      currentPage: 1,
+      totalPages: 1,
+    });
+
+    const result = await getAllUserTopicsDetail('testuser');
+
+    expect(result).toMatchObject({
+      topics: [],
+      totalTopics: 2,
+      fetchedTopics: 0,
+      failedTopics: 2,
+      isHidden: false,
+    });
   });
 
   it('should count failures when topic fetch fails', async () => {

@@ -10,6 +10,8 @@ describe('transformTopics', () => {
   it('should transform V2exTopicDetail to ContentTopic', () => {
     const topics: V2exTopicDetail[] = [
       {
+        topicId: '200001',
+        sourceUrl: 'https://www.v2ex.com/t/200001',
         title: 'Test Title',
         nodeName: 'Technology',
         content: 'Test Content',

@@ -33,6 +33,10 @@ export interface V2exReply {
  * 来源：/t/{topic_id} 页面
  */
 export interface V2exTopicDetail {
+  /** Stable topic identity derived from `/t/{id}`. */
+  topicId: string;
+  /** Canonical source URL for the topic. */
+  sourceUrl: string;
   /** 主题标题 */
   title: string;
   /** 节点名称 */
