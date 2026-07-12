@@ -23,6 +23,8 @@ export interface UserProfileParseResult {
 export interface RepliesPageParseResult {
   /** 用户的回复总数（页面顶部显示的"回复总数 30237"） */
   totalReplies: number;
+  /** Number of replies without a stable source anchor. */
+  invalidReplyCount: number;
   /** 本页回复列表 */
   replies: V2exReply[];
   /** 当前页码 */

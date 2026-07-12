@@ -77,6 +77,8 @@ describe('runFetch', () => {
     });
     mockedGetAllUserReplies.mockResolvedValue({
       data: [reply],
+      totalReplies: 1,
+      invalidReplyCount: 0,
       totalPages: 1,
       fetchedPages: 1,
       failedPages: 0,
@@ -147,6 +149,8 @@ describe('runFetch', () => {
     });
     mockedGetAllUserReplies.mockResolvedValue({
       data: [reply],
+      totalReplies: 3,
+      invalidReplyCount: 0,
       totalPages: 3,
       fetchedPages: 1,
       failedPages: 2,

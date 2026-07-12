@@ -42,6 +42,7 @@ export {
 export type {
   ServiceOptions,
   PagedResult,
+  UserRepliesResult,
   UserTopicUrlsResult,
   UserTopicsDetailResult,
 } from './use-cases';

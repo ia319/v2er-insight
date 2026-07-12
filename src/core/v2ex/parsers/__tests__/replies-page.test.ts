@@ -16,6 +16,7 @@ describe('parseRepliesPage', () => {
 
   it('should parse replies list with pagination', () => {
     expect(result.totalReplies).toBe(1234);
+    expect(result.invalidReplyCount).toBe(0);
     expect(result.currentPage).toBe(1);
     expect(result.totalPages).toBe(10);
     expect(result.replies).toHaveLength(2);
@@ -56,5 +57,6 @@ describe('parseRepliesPage', () => {
       replyNumber: null,
       topicTitle: '示例主题标题一',
     });
+    expect(invalidResult.invalidReplyCount).toBe(1);
   });
 });

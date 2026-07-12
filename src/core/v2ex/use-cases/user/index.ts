@@ -5,6 +5,7 @@
 // 类型导出
 export type { UserTopicUrlsResult } from './topic-urls';
 export type { UserTopicsDetailResult } from './topics-detail';
+export type { UserRepliesResult } from './replies';
 
 // 服务函数导出
 export { getUserProfile } from './profile';

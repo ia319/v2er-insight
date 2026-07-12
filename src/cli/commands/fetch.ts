@@ -9,8 +9,7 @@ import { getUserProfile, getAllUserReplies, getAllUserTopicsDetail } from '@/cor
 import type {
   UserProfileParseResult,
   UserTopicsDetailResult,
-  PagedResult,
-  V2exReply,
+  UserRepliesResult,
 } from '@/core/v2ex';
 import type { RawUserData } from '@/core/analyzer';
 import { readDataFile, writeDataFile } from '@/infra/storage';
@@ -28,7 +27,7 @@ import { createFetchEvents } from '../utils';
 function printSummary(
   profileOk: boolean,
   topicsResult: UserTopicsDetailResult | null,
-  replies: PagedResult<V2exReply> | null,
+  replies: UserRepliesResult | null,
 ): void {
   logger.section('=== 抓取摘要 ===');
   logger.detail(`Profile: ${profileOk ? 'OK' : 'Failed'}`);
@@ -78,7 +77,7 @@ export async function runFetch(
 
   let profile: UserProfileParseResult | null = null;
   let topicsResult: UserTopicsDetailResult | null = null;
-  let replies: PagedResult<V2exReply> | null = null;
+  let replies: UserRepliesResult | null = null;
 
   // 1. 获取用户资料
   logger.section('获取用户资料...');

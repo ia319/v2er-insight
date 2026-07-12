@@ -28,6 +28,7 @@ const {
 export function parseRepliesPage(html: string): RepliesPageParseResult {
   const $ = cheerio.load(html);
   const replies: V2exReply[] = [];
+  let invalidReplyCount = 0;
 
   // 获取用户回复总数
   let totalReplies = 0;
@@ -52,6 +53,9 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     const topicTitle = topicLink.text().trim();
     const topicHref = topicLink.attr('href') ?? '';
     const replyIdentity = extractReplyIdentityFromPath(topicHref);
+    if (!replyIdentity) {
+      invalidReplyCount++;
+    }
 
     // 节点名称
     const nodeLink = dockArea.find(NODE_LINK);
@@ -96,6 +100,7 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
 
   return {
     totalReplies,
+    invalidReplyCount,
     replies,
     currentPage,
     totalPages,

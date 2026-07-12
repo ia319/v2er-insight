@@ -45,6 +45,7 @@ describe('getAllUserReplies', () => {
     mockFetch.mockReturnValue(mockGenerator([fetchResult]));
     mockParseRepliesPage.mockReturnValue({
       totalReplies: 2,
+      invalidReplyCount: 0,
       replies: [
         {
           replyId: '100001#reply10',
@@ -77,6 +78,8 @@ describe('getAllUserReplies', () => {
 
     expect(result.data).toHaveLength(2);
     expect(result.totalPages).toBe(1);
+    expect(result.totalReplies).toBe(2);
+    expect(result.invalidReplyCount).toBe(0);
     expect(result.fetchedPages).toBe(1);
     expect(result.failedPages).toBe(0);
   });
@@ -103,11 +106,12 @@ describe('getAllUserReplies', () => {
       callCount++;
       return {
         totalReplies: 20,
+        invalidReplyCount: callCount === 1 ? 1 : 0,
         replies: [
           {
-            replyId: `10000${callCount}#reply10`,
-            topicId: `10000${callCount}`,
-            replyNumber: 10,
+            replyId: callCount === 1 ? null : `10000${callCount}#reply10`,
+            topicId: callCount === 1 ? null : `10000${callCount}`,
+            replyNumber: callCount === 1 ? null : 10,
             topicTitle: `Topic ${callCount}`,
             nodeName: 'node',
             replyTime: '1 day ago',
@@ -125,6 +129,8 @@ describe('getAllUserReplies', () => {
 
     expect(result.data).toHaveLength(2);
     expect(result.totalPages).toBe(2);
+    expect(result.totalReplies).toBe(20);
+    expect(result.invalidReplyCount).toBe(1);
     expect(result.fetchedPages).toBe(2);
   });
 
@@ -139,6 +145,7 @@ describe('getAllUserReplies', () => {
     mockFetch.mockReturnValue(mockGenerator([fetchResult]));
     mockParseRepliesPage.mockReturnValue({
       totalReplies: 0,
+      invalidReplyCount: 0,
       replies: [],
       currentPage: 1,
       totalPages: 1,
@@ -170,6 +177,7 @@ describe('getAllUserReplies', () => {
 
     mockParseRepliesPage.mockReturnValue({
       totalReplies: 20,
+      invalidReplyCount: 0,
       replies: [
         {
           replyId: '100001#reply10',
