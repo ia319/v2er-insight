@@ -2,7 +2,8 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedWriteDataFile = vi.hoisted(() => vi.fn());
-const mockedBuildAnalyzerOutput = vi.hoisted(() => vi.fn());
+const mockedBuildAnalyzerOutputFromSnapshot = vi.hoisted(() => vi.fn());
+const mockedIsRawSnapshotV2 = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
   error: vi.fn(),
@@ -17,7 +18,11 @@ vi.mock('@/infra/storage', () => ({
 }));
 
 vi.mock('@/core/analyzer', () => ({
-  buildAnalyzerOutput: mockedBuildAnalyzerOutput,
+  buildAnalyzerOutputFromSnapshot: mockedBuildAnalyzerOutputFromSnapshot,
+}));
+
+vi.mock('@/core/snapshot', () => ({
+  isRawSnapshotV2: mockedIsRawSnapshotV2,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -29,6 +34,7 @@ import { runAnalyze } from '../analyze';
 describe('runAnalyze', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedIsRawSnapshotV2.mockReturnValue(true);
   });
 
   it('should show error when raw data is missing', async () => {
@@ -38,14 +44,14 @@ describe('runAnalyze', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('testuser'));
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('v2er fetch'));
-    expect(mockedBuildAnalyzerOutput).not.toHaveBeenCalled();
+    expect(mockedBuildAnalyzerOutputFromSnapshot).not.toHaveBeenCalled();
     expect(result.status).toBe('failed');
     expect(result.reasonCode).toBe('ANALYZE_INPUT_MISSING');
     expect(result.recoverable).toBe(true);
   });
 
-  it('should call buildAnalyzerOutput with raw data', async () => {
-    const rawData = { profile: {}, topics: [], replies: [] };
+  it('should call buildAnalyzerOutputFromSnapshot with validated raw data', async () => {
+    const rawData = { capturedAt: '2026-07-12T03:04:05.000Z' };
     const analyzerOutput = {
       userOverview: {
         joinDate: '2020-01-01',
@@ -58,11 +64,12 @@ describe('runAnalyze', () => {
       contents: ['chunk1'],
     };
     mockedReadDataFile.mockReturnValue(rawData);
-    mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
+    mockedBuildAnalyzerOutputFromSnapshot.mockReturnValue(analyzerOutput);
 
     const result = await runAnalyze('testuser');
 
-    expect(mockedBuildAnalyzerOutput).toHaveBeenCalledWith(rawData);
+    expect(mockedIsRawSnapshotV2).toHaveBeenCalledWith(rawData);
+    expect(mockedBuildAnalyzerOutputFromSnapshot).toHaveBeenCalledWith(rawData);
     expect(result).toMatchObject({
       step: 'analyze',
       status: 'success',
@@ -71,7 +78,7 @@ describe('runAnalyze', () => {
   });
 
   it('should persist analyzed output', async () => {
-    const rawData = { profile: {}, topics: [], replies: [] };
+    const rawData = { capturedAt: '2026-07-12T03:04:05.000Z' };
     const analyzerOutput = {
       userOverview: {
         joinDate: '2020-01-01',
@@ -84,7 +91,7 @@ describe('runAnalyze', () => {
       contents: ['chunk1'],
     };
     mockedReadDataFile.mockReturnValue(rawData);
-    mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
+    mockedBuildAnalyzerOutputFromSnapshot.mockReturnValue(analyzerOutput);
 
     const result = await runAnalyze('testuser');
 
@@ -106,7 +113,7 @@ describe('runAnalyze', () => {
       contents: ['chunk1', 'chunk2'],
     };
     mockedReadDataFile.mockReturnValue({ profile: {} });
-    mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
+    mockedBuildAnalyzerOutputFromSnapshot.mockReturnValue(analyzerOutput);
 
     const result = await runAnalyze('testuser');
 
@@ -130,7 +137,7 @@ describe('runAnalyze', () => {
       contents: ['chunk1'],
     };
     mockedReadDataFile.mockReturnValue({ profile: {} });
-    mockedBuildAnalyzerOutput.mockReturnValue(analyzerOutput);
+    mockedBuildAnalyzerOutputFromSnapshot.mockReturnValue(analyzerOutput);
 
     const result = await runAnalyze('testuser', { pipeline: true });
 
@@ -141,7 +148,7 @@ describe('runAnalyze', () => {
 
   it('should return ANALYZE_FAILED when analyzer throws', async () => {
     mockedReadDataFile.mockReturnValue({ profile: {}, topics: [], replies: [] });
-    mockedBuildAnalyzerOutput.mockImplementation(() => {
+    mockedBuildAnalyzerOutputFromSnapshot.mockImplementation(() => {
       throw new Error('broken analyzer output');
     });
 
@@ -153,5 +160,19 @@ describe('runAnalyze', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('broken analyzer output'),
     );
+  });
+
+  it('should reject invalid or unsupported raw snapshots', async () => {
+    mockedReadDataFile.mockReturnValue({ profile: {}, topics: [], replies: [] });
+    mockedIsRawSnapshotV2.mockReturnValue(false);
+
+    const result = await runAnalyze('testuser');
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      reasonCode: 'ANALYZE_FAILED',
+    });
+    expect(mockedBuildAnalyzerOutputFromSnapshot).not.toHaveBeenCalled();
+    expect(mockedWriteDataFile).not.toHaveBeenCalled();
   });
 });

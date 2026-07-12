@@ -18,13 +18,13 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   FETCH_PARTIAL_FAILED: [
     {
       type: 'instruction',
-      content: '当前版本暂不支持仅重试失败页',
-      description: '建议先执行全量重抓，后续阶段会接入 --retry 能力',
+      content: '当前版本暂不支持局部修复不完整抓取',
+      description: '建议执行全量重抓以恢复完整快照',
     },
     {
       type: 'command',
       content: 'v2er fetch <username> --force',
-      description: '强制重新抓取，替换现有 raw 数据',
+      description: '强制重新抓取，替换不完整的 raw 数据',
     },
   ],
   ANALYZE_INPUT_MISSING: [

@@ -17,6 +17,8 @@ import { calculateTopicStats } from './stats/topic-stats';
 import { calculateReplyStats } from './stats/reply-stats';
 import { chunkPeriodContent } from './content';
 import { parseAbsoluteDate, parseRelativeTime } from './utils';
+import type { RawSnapshotV2 } from '@/core/snapshot';
+import { createAnalyzerInput } from './adapters/snapshot';
 
 /**
  * 构建完整的 Analyzer 输出
@@ -66,6 +68,16 @@ export function buildAnalyzerOutput(
     summary,
     contents,
   };
+}
+
+/**
+ * Build Analyzer output from a validated versioned snapshot.
+ *
+ * @param snapshot - Validated Raw Snapshot V2.
+ * @returns Analyzer output using the snapshot capture time as the time reference.
+ */
+export function buildAnalyzerOutputFromSnapshot(snapshot: RawSnapshotV2): AnalyzerOutput {
+  return buildAnalyzerOutput(createAnalyzerInput(snapshot), new Date(snapshot.capturedAt));
 }
 
 /**

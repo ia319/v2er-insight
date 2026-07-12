@@ -13,15 +13,18 @@ import {
   type TopicSnapshot,
 } from './types';
 
-type RequestedData<T> = { requested: false; result?: never } | { requested: true; result: T };
+/** Requested scope paired with its required fetch result. */
+export type SnapshotRequest<T> =
+  | { requested: false; result?: never }
+  | { requested: true; result: T };
 
 /** Inputs captured during one fetch command execution. */
 export interface BuildRawSnapshotInput {
   username: string;
   capturedAt: Date;
   profile: UserProfileParseResult;
-  topics: RequestedData<UserTopicsDetailResult>;
-  replies: RequestedData<UserRepliesResult>;
+  topics: SnapshotRequest<UserTopicsDetailResult>;
+  replies: SnapshotRequest<UserRepliesResult>;
 }
 
 function createNotRequestedCollection<T>(): SnapshotCollection<T> {
@@ -51,7 +54,7 @@ function mapTopic(topic: V2exTopicDetail): TopicSnapshot {
 }
 
 function buildTopicsCollection(
-  data: RequestedData<UserTopicsDetailResult>,
+  data: SnapshotRequest<UserTopicsDetailResult>,
 ): RawSnapshotV2['topics'] {
   if (!data.requested) {
     return {
@@ -111,7 +114,9 @@ function mapReply(
   };
 }
 
-function buildRepliesCollection(data: RequestedData<UserRepliesResult>): RawSnapshotV2['replies'] {
+function buildRepliesCollection(
+  data: SnapshotRequest<UserRepliesResult>,
+): RawSnapshotV2['replies'] {
   if (!data.requested) {
     return createNotRequestedCollection<ReplySnapshot>();
   }

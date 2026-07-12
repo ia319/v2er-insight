@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockedGetUserProfile = vi.hoisted(() => vi.fn());
 const mockedGetAllUserTopicsDetail = vi.hoisted(() => vi.fn());
@@ -66,6 +66,8 @@ const reply = {
 describe('runFetch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-12T03:04:05.000Z'));
     mockedReadDataFile.mockReturnValue(null);
     mockedGetUserProfile.mockResolvedValue(profile);
     mockedGetAllUserTopicsDetail.mockResolvedValue({
@@ -87,6 +89,10 @@ describe('runFetch', () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should skip fetching when cached raw data exists', async () => {
     mockedReadDataFile.mockReturnValue({ profile });
 
@@ -99,17 +105,33 @@ describe('runFetch', () => {
     expect(mockedWriteDataFile).not.toHaveBeenCalled();
   });
 
-  it('should fetch both collections and persist the current raw shape by default', async () => {
+  it('should fetch both collections and persist Raw Snapshot V2 by default', async () => {
     const result = await runFetch('alice', { pipeline: true });
 
     expect(mockedGetAllUserTopicsDetail).toHaveBeenCalledOnce();
     expect(mockedGetAllUserReplies).toHaveBeenCalledOnce();
-    expect(mockedWriteDataFile).toHaveBeenCalledWith('alice', 'raw', {
-      profile,
-      topics: [topic],
-      replies: [reply],
-      isTopicsHidden: false,
-    });
+    expect(mockedWriteDataFile).toHaveBeenCalledWith(
+      'alice',
+      'raw',
+      expect.objectContaining({
+        schemaVersion: 2,
+        username: 'alice',
+        capturedAt: '2026-07-12T03:04:05.000Z',
+        profile,
+        topics: expect.objectContaining({
+          status: 'complete',
+          totalExpected: 1,
+          fetchedCount: 1,
+          items: [expect.objectContaining({ topicId: '200001' })],
+        }),
+        replies: expect.objectContaining({
+          status: 'complete',
+          totalExpected: 1,
+          fetchedCount: 1,
+          items: [expect.objectContaining({ replyId: '100001#reply1' })],
+        }),
+      }),
+    );
     expect(result).toMatchObject({
       status: 'success',
       meta: {
@@ -119,25 +141,38 @@ describe('runFetch', () => {
     });
   });
 
-  it('should represent an unrequested reply collection as an empty array', async () => {
+  it('should mark an unrequested reply collection explicitly', async () => {
     await runFetch('alice', { topics: true, pipeline: true });
 
     expect(mockedGetAllUserReplies).not.toHaveBeenCalled();
     expect(mockedWriteDataFile).toHaveBeenCalledWith(
       'alice',
       'raw',
-      expect.objectContaining({ replies: [] }),
+      expect.objectContaining({
+        replies: expect.objectContaining({
+          status: 'not_requested',
+          totalExpected: null,
+          items: [],
+        }),
+      }),
     );
   });
 
-  it('should represent an unrequested topic collection as an empty visible list', async () => {
+  it('should mark an unrequested topic collection explicitly', async () => {
     await runFetch('alice', { replies: true, pipeline: true });
 
     expect(mockedGetAllUserTopicsDetail).not.toHaveBeenCalled();
     expect(mockedWriteDataFile).toHaveBeenCalledWith(
       'alice',
       'raw',
-      expect.objectContaining({ topics: [], isTopicsHidden: false }),
+      expect.objectContaining({
+        topics: expect.objectContaining({
+          status: 'not_requested',
+          totalExpected: null,
+          hidden: false,
+          items: [],
+        }),
+      }),
     );
   });
 
@@ -169,8 +204,29 @@ describe('runFetch', () => {
       meta: {
         failedTopics: 1,
         failedPages: 2,
+        identityFailures: 0,
       },
     });
+  });
+
+  it('should return partial when a requested reply total is unknown', async () => {
+    mockedGetAllUserReplies.mockResolvedValue({
+      data: [reply],
+      totalReplies: null,
+      invalidReplyCount: 0,
+      totalPages: 1,
+      fetchedPages: 1,
+      failedPages: 0,
+    });
+
+    const result = await runFetch('alice', {});
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      reasonCode: 'FETCH_PARTIAL_FAILED',
+    });
+    expect(mockLogger.detail).toHaveBeenCalledWith('Replies: 1/?');
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('缺失记录不能解释为删除'));
   });
 
   it('should stop without writing data when the profile request fails', async () => {

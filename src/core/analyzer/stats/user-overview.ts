@@ -12,20 +12,25 @@ export function calculateUserOverview(
   data: RawUserData,
   referenceDate: Date = new Date(),
 ): UserOverview {
-  const { profile, topics, replies, isTopicsHidden } = data;
+  const { profile, topics, replies, topicsStatus, repliesStatus, isTopicsHidden } = data;
 
   // 计算最后活动时间
   const lastActiveTime = getLastActiveTime(topics, replies, referenceDate);
 
-  // 计算发帖/回复比率，无回复时为 null
-  const topicReplyRatio = replies.length > 0 ? topics.length / replies.length : null;
+  // Calculate the ratio only when both collections were requested and replies exist.
+  const hasRequestedTopics = topicsStatus !== 'not_requested';
+  const hasRequestedReplies = repliesStatus !== 'not_requested';
+  const topicReplyRatio =
+    hasRequestedTopics && hasRequestedReplies && replies.length > 0
+      ? topics.length / replies.length
+      : null;
 
   return {
     joinDate: profile.joinDate,
     lastActiveTime,
     topicReplyRatio,
-    totalTopics: isTopicsHidden ? null : topics.length,
-    totalReplies: replies.length,
+    totalTopics: isTopicsHidden || !hasRequestedTopics ? null : topics.length,
+    totalReplies: hasRequestedReplies ? replies.length : null,
     isTopicsHidden,
     dailyRanking: profile.dailyRanking,
   };

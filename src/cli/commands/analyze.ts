@@ -4,8 +4,9 @@
  * 读取 raw.json，执行 Analyzer，输出 analyzed.json。
  */
 
-import type { RawUserData, AnalyzerOutput } from '@/core/analyzer';
-import { buildAnalyzerOutput } from '@/core/analyzer';
+import type { AnalyzerOutput } from '@/core/analyzer';
+import { buildAnalyzerOutputFromSnapshot } from '@/core/analyzer';
+import { isRawSnapshotV2 } from '@/core/snapshot';
 import { readDataFile, writeDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { getRecoveryActions } from '../workflow/recovery';
@@ -24,7 +25,9 @@ function printStats(output: AnalyzerOutput): void {
   if (userOverview.totalTopics !== null) {
     logger.detail(`帖子总数: ${userOverview.totalTopics}`);
   }
-  logger.detail(`回复总数: ${userOverview.totalReplies}`);
+  if (userOverview.totalReplies !== null) {
+    logger.detail(`回复总数: ${userOverview.totalReplies}`);
+  }
 
   if (userOverview.topicReplyRatio !== null) {
     logger.detail(`帖/回比: ${userOverview.topicReplyRatio.toFixed(2)}`);
@@ -35,16 +38,20 @@ function printStats(output: AnalyzerOutput): void {
 }
 
 /**
- * 执行 analyze 命令
+ * Analyze a validated Raw Snapshot V2 and persist Analyzer output.
+ *
+ * @param username - V2EX member name used to resolve data files.
+ * @param options - Command output behavior.
+ * @returns Structured analyze step status and output metadata.
  */
 export async function runAnalyze(
   username: string,
   options: { pipeline?: boolean } = {},
 ): Promise<StepRunResult> {
   // 读取原始数据
-  const rawData = readDataFile<RawUserData>(username, 'raw');
+  const rawData = readDataFile<unknown>(username, 'raw');
 
-  if (!rawData) {
+  if (rawData === null) {
     logger.error(`未找到 ${username} 的抓取数据`);
     logger.info('请先运行: v2er fetch <username>');
     return {
@@ -57,10 +64,22 @@ export async function runAnalyze(
     };
   }
 
+  if (!isRawSnapshotV2(rawData)) {
+    logger.error(`${username} 的 raw.json 格式无效或不受支持`);
+    return {
+      step: 'analyze',
+      status: 'failed',
+      reasonCode: 'ANALYZE_FAILED',
+      message: 'raw.json 格式无效或不受支持，无法执行分析',
+      recoverable: true,
+      recoverActions: getRecoveryActions('ANALYZE_FAILED', { username }),
+    };
+  }
+
   logger.info(`\n分析用户数据: ${username}`);
 
   try {
-    const output = buildAnalyzerOutput(rawData);
+    const output = buildAnalyzerOutputFromSnapshot(rawData);
 
     writeDataFile(username, 'analyzed', output);
 

@@ -52,6 +52,8 @@ describe('calculateUserOverview', () => {
           replyTo: 'user',
         },
       ],
+      topicsStatus: 'complete',
+      repliesStatus: 'complete',
       isTopicsHidden: false,
     };
 
@@ -70,6 +72,8 @@ describe('calculateUserOverview', () => {
       profile: { joinDate: '2020-01-01', dailyRanking: null },
       topics: [],
       replies: [],
+      topicsStatus: 'complete',
+      repliesStatus: 'complete',
       isTopicsHidden: true,
     };
 
@@ -79,5 +83,23 @@ describe('calculateUserOverview', () => {
     expect(result.totalReplies).toBe(0);
     expect(result.topicReplyRatio).toBeNull();
     expect(result.lastActiveTime).toBe('unknown');
+  });
+
+  it('should preserve unknown totals for unrequested collections', () => {
+    const data: RawUserData = {
+      profile: { joinDate: '2020-01-01', dailyRanking: null },
+      topics: [],
+      replies: [],
+      topicsStatus: 'not_requested',
+      repliesStatus: 'not_requested',
+      isTopicsHidden: false,
+    };
+
+    const result = calculateUserOverview(data);
+
+    expect(result.totalTopics).toBeNull();
+    expect(result.totalReplies).toBeNull();
+    expect(result.topicReplyRatio).toBeNull();
+    expect(result.isTopicsHidden).toBe(false);
   });
 });
