@@ -54,6 +54,13 @@ describe('storage/paths', () => {
         path.join(mockDataBase, 'livid', 'result.json'),
       );
     });
+
+    it('should return analysis-state.json path', async () => {
+      const { getDataFilePath } = await import('../paths');
+      expect(getDataFilePath('livid', 'analysisState')).toBe(
+        path.join(mockDataBase, 'livid', 'analysis-state.json'),
+      );
+    });
   });
 
   describe('username validation', () => {
@@ -115,6 +122,14 @@ describe('storage/reader', () => {
       const { readDataFile } = await import('../reader');
 
       expect(readDataFile('livid', 'raw')).toBeNull();
+    });
+
+    it('should preserve invalid JSON as a distinct detailed read result', async () => {
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readFileSync.mockReturnValue('invalid json');
+      const { readDataFileResult } = await import('../reader');
+
+      expect(readDataFileResult('livid', 'analysisState')).toEqual({ status: 'invalid' });
     });
   });
 });

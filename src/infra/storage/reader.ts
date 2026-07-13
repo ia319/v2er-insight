@@ -9,6 +9,28 @@ import fs from 'fs';
 import type { DataFileType } from './types';
 import { getDataFilePath } from './paths';
 
+export type DataFileReadResult =
+  | { status: 'missing' }
+  | { status: 'invalid' }
+  | { status: 'success'; data: unknown };
+
+/** Read one JSON data file while preserving missing and invalid states. */
+export function readDataFileResult(username: string, type: DataFileType): DataFileReadResult {
+  const filePath = getDataFilePath(username, type);
+
+  if (!fs.existsSync(filePath)) {
+    return { status: 'missing' };
+  }
+
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const data: unknown = JSON.parse(content);
+    return { status: 'success', data };
+  } catch {
+    return { status: 'invalid' };
+  }
+}
+
 /**
  * 读取指定用户的数据文件
  * @param username - V2EX 用户名
@@ -16,16 +38,6 @@ import { getDataFilePath } from './paths';
  * @returns 解析后的对象，文件不存在或解析失败返回 null
  */
 export function readDataFile<T>(username: string, type: DataFileType): T | null {
-  const filePath = getDataFilePath(username, type);
-
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
-  }
+  const result = readDataFileResult(username, type);
+  return result.status === 'success' ? (result.data as T) : null;
 }
