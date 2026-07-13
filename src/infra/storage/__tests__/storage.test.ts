@@ -135,9 +135,10 @@ describe('storage/writer', () => {
   });
 
   describe('writeDataFile', () => {
-    it('should always create directory and write formatted JSON', async () => {
+    it('should atomically replace the target with formatted JSON', async () => {
       mockedFs.mkdirSync.mockImplementation(() => '' as never);
       mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
       const { writeDataFile } = await import('../writer');
 
       const data = { topics: [1, 2, 3] };
@@ -147,27 +148,49 @@ describe('storage/writer', () => {
       expect(mockedFs.mkdirSync).toHaveBeenCalledWith(path.join(mockDataBase, 'livid'), {
         recursive: true,
       });
-      // 应写入格式化 JSON
-      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
+      const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
+      expect(tempPath).toEqual(expect.stringContaining('.raw.json.'));
+      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(tempPath, JSON.stringify(data, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600,
+        flag: 'wx',
+      });
+      expect(mockedFs.renameSync).toHaveBeenCalledWith(
+        tempPath,
         path.join(mockDataBase, 'livid', 'raw.json'),
-        JSON.stringify(data, null, 2),
-        { encoding: 'utf-8', mode: 0o600 },
       );
     });
 
     it('should write compact JSON when pretty is false', async () => {
       mockedFs.mkdirSync.mockImplementation(() => '' as never);
       mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
       const { writeDataFile } = await import('../writer');
 
       const data = { a: 1 };
       writeDataFile('livid', 'raw', data, { pretty: false });
 
-      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
-        path.join(mockDataBase, 'livid', 'raw.json'),
-        JSON.stringify(data),
-        { encoding: 'utf-8', mode: 0o600 },
-      );
+      const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
+      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(tempPath, JSON.stringify(data), {
+        encoding: 'utf-8',
+        mode: 0o600,
+        flag: 'wx',
+      });
+    });
+
+    it('should remove the temporary file and preserve the error when replacement fails', async () => {
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {
+        throw new Error('rename failed');
+      });
+      mockedFs.unlinkSync.mockImplementation(() => {});
+      const { writeDataFile } = await import('../writer');
+
+      expect(() => writeDataFile('livid', 'raw', { a: 1 })).toThrow('rename failed');
+
+      const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
+      expect(mockedFs.unlinkSync).toHaveBeenCalledWith(tempPath);
     });
   });
 });
