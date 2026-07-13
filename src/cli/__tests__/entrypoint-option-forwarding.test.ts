@@ -51,8 +51,8 @@ describe('cli option forwarding', () => {
     process.argv = originalArgv;
   });
 
-  it('should forward --thinking-level to ai subcommand', async () => {
-    process.argv = ['node', 'v2er', 'ai', 'alice', '--thinking-level', 'low'];
+  it('should forward AI options to the ai subcommand', async () => {
+    process.argv = ['node', 'v2er', 'ai', 'alice', '--thinking-level', 'low', '--resend'];
 
     await import('../index');
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -62,6 +62,7 @@ describe('cli option forwarding', () => {
       'alice',
       expect.objectContaining({
         thinkingLevel: 'low',
+        resend: true,
       }),
     );
   });

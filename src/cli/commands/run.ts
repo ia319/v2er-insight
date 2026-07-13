@@ -34,6 +34,7 @@ export function resolveWorkflowOptions(
     force: options.force,
     model,
     thinkingLevel,
+    resend: options.resend,
     verbose: options.verbose,
   };
 }

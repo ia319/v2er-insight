@@ -40,6 +40,7 @@ program
   .option('--force', 'Force re-fetch from scratch')
   .option('--model [name]', 'Specify AI model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level (or select interactively)')
+  .option('--resend', 'Send unchanged analyzed data again')
   .option('-v, --verbose', 'Show debug output')
   .action(async (username, options, command) => {
     if (!username) {
@@ -87,6 +88,7 @@ program
   .argument('<username>', 'V2EX username')
   .option('--model [name]', 'Specify Gemini model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level: minimal | low | medium | high')
+  .option('--resend', 'Send unchanged analyzed data again')
   .option('-v, --verbose', 'Show debug output')
   .action(async (username, _, command) => {
     const opts = command.optsWithGlobals();

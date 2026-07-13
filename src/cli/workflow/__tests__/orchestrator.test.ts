@@ -64,6 +64,7 @@ describe('runWorkflow', () => {
       force: true,
       model: 'gemini-2.0-flash',
       thinkingLevel: 'high',
+      resend: true,
     });
 
     expect(outcome.overallStatus).toBe('success');
@@ -74,6 +75,7 @@ describe('runWorkflow', () => {
     expect(mockRunAi).toHaveBeenCalledWith('alice', {
       model: 'gemini-2.0-flash',
       thinkingLevel: 'high',
+      resend: true,
       pipeline: true,
     });
     expect(mockRunShow).toHaveBeenCalledWith('alice', { pipeline: true });

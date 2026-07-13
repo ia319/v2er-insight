@@ -71,6 +71,7 @@ export interface RunWorkflowOptions {
   force?: boolean;
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  resend?: boolean;
   verbose?: boolean;
 }
 
