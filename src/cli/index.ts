@@ -18,6 +18,7 @@ import {
   configReset,
 } from './commands';
 import { logger } from '@/infra/logger';
+import { renderNotices } from './workflow/notices';
 import packageJson from '../../package.json';
 
 // 从配置文件初始化日志级别（必须在其他初始化之前）
@@ -94,6 +95,7 @@ program
     const opts = command.optsWithGlobals();
     if (opts.verbose) logger.setLevel('debug');
     const result = await runAi(username, opts);
+    renderNotices(result.notices);
     if (result.status === 'failed') process.exitCode = 1;
   });
 

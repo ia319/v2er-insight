@@ -12,19 +12,21 @@ export function renderNotice(notice: UserNotice): void {
   if (notice.severity === 'warning') {
     logger.warn(summary);
   } else {
-    logger.info(summary);
+    logger.diagnostic('info', summary);
   }
 
+  const diagnosticLevel = notice.severity === 'warning' ? 'warn' : 'info';
+
   for (const detail of notice.details ?? []) {
-    logger.detail(detail);
+    logger.diagnostic(diagnosticLevel, `  ${detail}`);
   }
   for (const action of notice.actions ?? []) {
     const label = action.type === 'command' ? '恢复命令' : '恢复操作';
-    logger.detail(`${label}: ${action.content}`);
-    logger.detail(`说明: ${action.description}`);
+    logger.diagnostic(diagnosticLevel, `  ${label}: ${action.content}`);
+    logger.diagnostic(diagnosticLevel, `  说明: ${action.description}`);
   }
   if (notice.documentation) {
-    logger.detail(`文档: ${notice.documentation}`);
+    logger.diagnostic(diagnosticLevel, `  文档: ${notice.documentation}`);
   }
 }
 

@@ -16,6 +16,7 @@ const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
   detail: vi.fn(),
+  diagnostic: vi.fn(),
 }));
 
 vi.mock('../../commands', () => ({
@@ -155,5 +156,25 @@ describe('runWorkflow', () => {
     expect(mockRunAnalyze).toHaveBeenCalled();
     expect(mockRunAi).toHaveBeenCalled();
     expect(mockRunShow).toHaveBeenCalled();
+  });
+
+  it('renders notices returned by workflow steps', async () => {
+    mockBuildExecutionPlan.mockReturnValue(['ai']);
+    mockRunAi.mockResolvedValue({
+      step: 'ai',
+      status: 'success',
+      notices: [
+        {
+          code: 'DATA_FILES_CLEANED',
+          severity: 'warning',
+          summary: '源数据已清理',
+        },
+      ],
+    });
+
+    const outcome = await runWorkflow({ username: 'alice' });
+
+    expect(outcome.overallStatus).toBe('success');
+    expect(mockLogger.warn).toHaveBeenCalledWith('[DATA_FILES_CLEANED] 源数据已清理');
   });
 });

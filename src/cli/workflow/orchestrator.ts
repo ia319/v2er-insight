@@ -10,6 +10,7 @@ import type {
   StepRunResult,
   WorkflowStep,
 } from './types';
+import { renderNotices } from './notices';
 
 type StepExecutor = () => Promise<StepRunResult>;
 type WorkflowExecutorSet = Record<WorkflowStep, StepExecutor>;
@@ -73,6 +74,7 @@ export async function runWorkflow(options: RunWorkflowOptions): Promise<RunOutco
       results.push(result);
 
       printStepLine(result, index, plan.length);
+      renderNotices(result.notices);
 
       if (result.status === 'partial') {
         hasPartial = true;

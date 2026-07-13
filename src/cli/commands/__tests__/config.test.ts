@@ -1,6 +1,9 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/config', () => ({
+  DEFAULT_CONFIG: {
+    data: { keepRaw: true, rawRetention: 1 },
+  },
   readConfig: vi.fn(),
   writeConfig: vi.fn(),
   getConfig: vi.fn(),
@@ -9,6 +12,8 @@ vi.mock('@/config', () => ({
 
 const mockLogger = {
   info: vi.fn(),
+  warn: vi.fn(),
+  diagnostic: vi.fn(),
   detail: vi.fn(),
   error: vi.fn(),
 };
@@ -170,6 +175,31 @@ describe('configShow command', () => {
     expect(output.model).toBe('test-model');
   });
 
+  it('should show derived disabled retention status for data config', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    mockedGetConfig.mockReturnValue({ data: { keepRaw: true, rawRetention: 1 } });
+
+    const { configShow } = await import('../config');
+    configShow('data');
+
+    expect(consoleSpy).toHaveBeenCalledOnce();
+    expect(mockLogger.info).toHaveBeenCalledWith('自动清理: 未启用');
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('should show retention warning and documentation when cleanup is enabled', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    mockedGetConfig.mockReturnValue({ data: { keepRaw: false, rawRetention: 3 } });
+
+    const { configShow } = await import('../config');
+    configShow('data');
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      '[DATA_RETENTION_ENABLED] 已启用 3 天源数据自动清理',
+    );
+    expect(mockLogger.diagnostic).toHaveBeenCalledWith('warn', '  文档: docs/data-lifecycle.md');
+  });
+
   it('should display proxy when configured', async () => {
     mockedGetConfig.mockReturnValue({ proxy: 'http://test:8080' });
 
@@ -240,6 +270,42 @@ describe('configSet command', () => {
     expect(mockedWriteConfig).toHaveBeenCalledWith({
       data: { keepRaw: true },
     });
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('should warn when automatic source-data cleanup is enabled', async () => {
+    mockedReadConfig.mockReturnValue({ data: { rawRetention: 7 } });
+
+    const { configSet } = await import('../config');
+    configSet('data.keepRaw', 'false');
+
+    expect(mockedWriteConfig).toHaveBeenCalledWith({
+      data: { keepRaw: false, rawRetention: 7 },
+    });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      '[DATA_RETENTION_ENABLED] 已启用 7 天源数据自动清理',
+    );
+    expect(mockLogger.diagnostic).toHaveBeenCalledWith(
+      'warn',
+      '  恢复命令: v2er <username> --force',
+    );
+  });
+
+  it('should warn on retention changes only while cleanup remains enabled', async () => {
+    mockedReadConfig.mockReturnValue({ data: { keepRaw: false } });
+    const { configSet } = await import('../config');
+
+    configSet('data.rawRetention', '2');
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      '[DATA_RETENTION_ENABLED] 已启用 2 天源数据自动清理',
+    );
+
+    vi.clearAllMocks();
+    mockedReadConfig.mockReturnValue({});
+    configSet('data.rawRetention', '4');
+
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
   it('should validate enum values for thinkingLevel', async () => {

@@ -34,6 +34,7 @@ import type { AiCommandOptions } from '../types';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
 import { extractErrorDetails } from '../utils/error';
+import { createDataFilesCleanedNotice } from '../workflow/data-retention-notices';
 
 const GEMINI_LOGICAL_SESSION_KEY = 'default';
 
@@ -330,12 +331,10 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
 
   const cleanup = cleanExpiredData(username);
   const cleaned = cleanup.deleted;
+  const cleanupNotice = createDataFilesCleanedNotice(username, cleanup);
 
   if (!options.pipeline) {
     logger.success('分析结果已保存');
-    if (cleaned.length > 0) {
-      logger.detail(`已清理中间数据: ${cleaned.join(', ')}`);
-    }
   }
 
   return {
@@ -348,5 +347,6 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       cleanedFiles: cleaned,
       deliveryMode: options.resend ? 'resend' : 'change',
     },
+    notices: cleanupNotice ? [cleanupNotice] : undefined,
   };
 }

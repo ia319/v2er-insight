@@ -4,12 +4,16 @@ import type { UserNotice } from '../types';
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
   warn: vi.fn(),
-  detail: vi.fn(),
+  diagnostic: vi.fn(),
 }));
 
 vi.mock('@/infra/logger', () => ({ logger: mockLogger }));
 
 import { renderNotice, renderNotices } from '../notices';
+import {
+  createDataFilesCleanedNotice,
+  createDataRetentionEnabledNotice,
+} from '../data-retention-notices';
 
 describe('notice rendering', () => {
   beforeEach(() => {
@@ -35,9 +39,12 @@ describe('notice rendering', () => {
     renderNotice(notice);
 
     expect(mockLogger.warn).toHaveBeenCalledWith('[DATA_RETENTION_ENABLED] 自动清理已启用');
-    expect(mockLogger.detail).toHaveBeenCalledWith('raw.json 和 analyzed.json 可能被删除');
-    expect(mockLogger.detail).toHaveBeenCalledWith('恢复命令: v2er alice --force');
-    expect(mockLogger.detail).toHaveBeenCalledWith('文档: docs/data-lifecycle.md');
+    expect(mockLogger.diagnostic).toHaveBeenCalledWith(
+      'warn',
+      '  raw.json 和 analyzed.json 可能被删除',
+    );
+    expect(mockLogger.diagnostic).toHaveBeenCalledWith('warn', '  恢复命令: v2er alice --force');
+    expect(mockLogger.diagnostic).toHaveBeenCalledWith('warn', '  文档: docs/data-lifecycle.md');
   });
 
   it('renders empty and informational notice lists without warnings', () => {
@@ -51,6 +58,47 @@ describe('notice rendering', () => {
     ]);
 
     expect(mockLogger.warn).not.toHaveBeenCalled();
-    expect(mockLogger.info).toHaveBeenCalledWith('[DATA_FILES_CLEANED] 没有需要恢复的影响');
+    expect(mockLogger.diagnostic).toHaveBeenCalledWith(
+      'info',
+      '[DATA_FILES_CLEANED] 没有需要恢复的影响',
+    );
+  });
+});
+
+describe('data retention notices', () => {
+  it('describes cleanup scope and recovery when retention is enabled', () => {
+    const notice = createDataRetentionEnabledNotice(7);
+
+    expect(notice).toMatchObject({
+      code: 'DATA_RETENTION_ENABLED',
+      severity: 'warning',
+      summary: expect.stringContaining('7 天'),
+      documentation: 'docs/data-lifecycle.md',
+    });
+    expect(notice.details?.join(' ')).toContain('result.json');
+    expect(notice.details?.join(' ')).toContain('外部会话');
+    expect(notice.actions?.[0]?.content).toBe('v2er <username> --force');
+  });
+
+  it('creates a cleanup notice only when source files were deleted', () => {
+    expect(
+      createDataFilesCleanedNotice('alice', {
+        enabled: true,
+        retentionDays: 1,
+        deleted: [],
+        skipped: [],
+      }),
+    ).toBeNull();
+
+    const notice = createDataFilesCleanedNotice('alice', {
+      enabled: true,
+      retentionDays: 1,
+      deleted: ['raw', 'analyzed'],
+      skipped: [],
+    });
+
+    expect(notice?.code).toBe('DATA_FILES_CLEANED');
+    expect(notice?.summary).toContain('raw.json、analyzed.json');
+    expect(notice?.actions?.[0]?.content).toBe('v2er alice --force');
   });
 });

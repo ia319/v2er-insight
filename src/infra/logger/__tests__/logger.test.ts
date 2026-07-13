@@ -107,5 +107,12 @@ describe('infra/logger', () => {
       expect(output).toContain('[ERROR]');
       expect(output).toContain('错误内容');
     });
+
+    it('structured diagnostic details should use stderr without a severity label', () => {
+      logger.diagnostic('warn', '恢复命令: v2er alice --force');
+
+      expect(console.warn).toHaveBeenCalledWith('恢复命令: v2er alice --force');
+      expect(console.log).not.toHaveBeenCalled();
+    });
   });
 });

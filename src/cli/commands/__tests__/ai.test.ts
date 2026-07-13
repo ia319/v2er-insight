@@ -39,13 +39,17 @@ const mockLogger = vi.hoisted(() => ({
   progress: vi.fn(),
 }));
 
-vi.mock('@/infra/storage', () => ({
-  readDataFile: mockedReadDataFile,
-  writeDataFile: mockedWriteDataFile,
-  cleanExpiredData: mockedCleanExpiredData,
-  readAnalysisState: mockedReadAnalysisState,
-  updateAnalysisState: mockedUpdateAnalysisState,
-}));
+vi.mock('@/infra/storage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/infra/storage')>();
+  return {
+    ...actual,
+    readDataFile: mockedReadDataFile,
+    writeDataFile: mockedWriteDataFile,
+    cleanExpiredData: mockedCleanExpiredData,
+    readAnalysisState: mockedReadAnalysisState,
+    updateAnalysisState: mockedUpdateAnalysisState,
+  };
+});
 
 vi.mock('@/core/ai', () => ({
   GeminiProvider: MockGeminiProvider,
@@ -603,6 +607,14 @@ describe('runAi', () => {
     const result = await runAi('testuser', { pipeline: true });
 
     expect(result.status).toBe('success');
+    expect(result.notices).toMatchObject([
+      {
+        code: 'DATA_FILES_CLEANED',
+        severity: 'warning',
+        summary: expect.stringContaining('raw.json'),
+      },
+    ]);
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(expect.stringContaining('DATA_FILES_CLEANED'));
     expect(mockLogger.success).not.toHaveBeenCalled();
     expect(mockLogger.detail).not.toHaveBeenCalledWith(expect.stringContaining('已清理中间数据'));
   });
