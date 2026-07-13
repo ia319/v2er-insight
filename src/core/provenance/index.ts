@@ -6,6 +6,8 @@ export {
   computePayloadHash,
 } from './analysis-hash';
 export type { AnalysisFingerprintInput } from './analysis-hash';
+export { computeProviderStateKey } from './provider-state-key';
+export type { ProviderStateKeyInput } from './provider-state-key';
 export { ANALYSIS_STATE_SCHEMA_VERSION } from './state-types';
 export type {
   AnalysisStateV1,
