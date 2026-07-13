@@ -19,6 +19,7 @@ const snapshot: RawSnapshotV2 = {
     failedCount: 0,
     failedPageCount: 0,
     identityFailureCount: 0,
+    duplicateConflictCount: 0,
     hidden: false,
     items: [
       {
@@ -41,6 +42,7 @@ const snapshot: RawSnapshotV2 = {
     failedCount: 0,
     failedPageCount: 0,
     identityFailureCount: 0,
+    duplicateConflictCount: 0,
     items: [
       {
         replyId: '100#reply2',
@@ -138,6 +140,7 @@ describe('createAnalyzerInput', () => {
         failedCount: 0,
         failedPageCount: 0,
         identityFailureCount: 0,
+        duplicateConflictCount: 0,
         items: [],
       },
     };

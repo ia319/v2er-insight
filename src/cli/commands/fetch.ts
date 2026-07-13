@@ -44,12 +44,14 @@ function printSummary(snapshot: RawSnapshotV2): void {
   const failedPageCount = snapshot.topics.failedPageCount + snapshot.replies.failedPageCount;
   const identityFailureCount =
     snapshot.topics.identityFailureCount + snapshot.replies.identityFailureCount;
+  const duplicateConflictCount =
+    snapshot.topics.duplicateConflictCount + snapshot.replies.duplicateConflictCount;
   const isPartial = snapshot.topics.status === 'partial' || snapshot.replies.status === 'partial';
 
   if (isPartial) {
     logger.detail(
       `Completeness: failed=${failedCount}, failedPages=${failedPageCount}, ` +
-        `identityFailures=${identityFailureCount}`,
+        `identityFailures=${identityFailureCount}, duplicateConflicts=${duplicateConflictCount}`,
     );
     logger.warn('抓取数据不完整：缺失记录不能解释为删除，后续分析可能受影响');
   }
@@ -167,6 +169,8 @@ export async function runFetch(
   const failedPages = rawData.topics.failedPageCount + rawData.replies.failedPageCount;
   const identityFailures =
     rawData.topics.identityFailureCount + rawData.replies.identityFailureCount;
+  const duplicateConflicts =
+    rawData.topics.duplicateConflictCount + rawData.replies.duplicateConflictCount;
   const isPartial = rawData.topics.status === 'partial' || rawData.replies.status === 'partial';
 
   if (isPartial) {
@@ -181,6 +185,7 @@ export async function runFetch(
         failedTopics,
         failedPages,
         identityFailures,
+        duplicateConflicts,
       },
     };
   }

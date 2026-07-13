@@ -87,10 +87,12 @@ function isSnapshotCollection<T>(
     !isNonNegativeInteger(value.failedCount) ||
     !isNonNegativeInteger(value.failedPageCount) ||
     !isNonNegativeInteger(value.identityFailureCount) ||
+    !isNonNegativeInteger(value.duplicateConflictCount) ||
     !Array.isArray(value.items) ||
     !value.items.every(isItem) ||
     value.fetchedCount !== value.items.length ||
     value.failedCount < value.identityFailureCount ||
+    value.duplicateConflictCount > value.fetchedCount ||
     (value.totalExpected !== null && value.fetchedCount + value.failedCount < value.totalExpected)
   ) {
     return false;
@@ -102,7 +104,8 @@ function isSnapshotCollection<T>(
       value.fetchedCount === 0 &&
       value.failedCount === 0 &&
       value.failedPageCount === 0 &&
-      value.identityFailureCount === 0
+      value.identityFailureCount === 0 &&
+      value.duplicateConflictCount === 0
     );
   }
 
@@ -111,7 +114,8 @@ function isSnapshotCollection<T>(
       value.totalExpected === value.fetchedCount &&
       value.failedCount === 0 &&
       value.failedPageCount === 0 &&
-      value.identityFailureCount === 0
+      value.identityFailureCount === 0 &&
+      value.duplicateConflictCount === 0
     );
   }
 
@@ -119,7 +123,8 @@ function isSnapshotCollection<T>(
     value.totalExpected === null ||
     value.failedCount > 0 ||
     value.failedPageCount > 0 ||
-    value.identityFailureCount > 0
+    value.identityFailureCount > 0 ||
+    value.duplicateConflictCount > 0
   );
 }
 

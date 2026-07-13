@@ -100,6 +100,7 @@ describe('buildRawSnapshot', () => {
         failedCount: 0,
         failedPageCount: 0,
         identityFailureCount: 0,
+        duplicateConflictCount: 0,
         hidden: false,
         items: [
           {
@@ -122,6 +123,7 @@ describe('buildRawSnapshot', () => {
         failedCount: 0,
         failedPageCount: 0,
         identityFailureCount: 0,
+        duplicateConflictCount: 0,
         items: [
           {
             replyId: '100#reply2',
@@ -281,22 +283,65 @@ describe('buildRawSnapshot', () => {
     });
   });
 
-  it('keeps the last successfully parsed record for duplicate stable identities', () => {
-    const snapshot = buildSnapshot(
+  it('selects conflicting duplicate identities independently of input order', () => {
+    const topics = [createTopic({ title: 'Old topic' }), createTopic({ title: 'New topic' })];
+    const replies = [createReply({ content: 'Old reply' }), createReply({ content: 'New reply' })];
+    const forward = buildSnapshot(
       createTopicsResult({
-        topics: [createTopic({ title: 'Old topic' }), createTopic({ title: 'New topic' })],
+        topics,
         totalTopics: 1,
         fetchedTopics: 2,
       }),
       createRepliesResult({
-        data: [createReply({ content: 'Old reply' }), createReply({ content: 'New reply' })],
+        data: replies,
       }),
     );
+    const reversed = buildSnapshot(
+      createTopicsResult({
+        topics: [...topics].reverse(),
+        totalTopics: 1,
+        fetchedTopics: 2,
+      }),
+      createRepliesResult({ data: [...replies].reverse() }),
+    );
 
-    expect(snapshot.topics.items).toHaveLength(1);
-    expect(snapshot.topics.items[0]?.title).toBe('New topic');
-    expect(snapshot.replies.items).toHaveLength(1);
-    expect(snapshot.replies.items[0]?.content).toBe('New reply');
+    expect(forward.topics).toMatchObject({
+      status: 'partial',
+      duplicateConflictCount: 1,
+    });
+    expect(forward.replies).toMatchObject({
+      status: 'partial',
+      duplicateConflictCount: 1,
+    });
+    expect(forward.topics.items).toEqual(reversed.topics.items);
+    expect(forward.replies.items).toEqual(reversed.replies.items);
+    expect(forward.topics.items[0]?.title).toBe('New topic');
+    expect(forward.replies.items[0]?.content).toBe('New reply');
+  });
+
+  it('deduplicates equivalent records without treating display-time drift as a conflict', () => {
+    const topic = createTopic();
+    const replies = [createReply(), createReply({ replyTime: '4 小时前' })];
+    const forward = buildSnapshot(
+      createTopicsResult({ topics: [topic, topic], totalTopics: 1, fetchedTopics: 2 }),
+      createRepliesResult({ data: replies }),
+    );
+    const reversed = buildSnapshot(
+      createTopicsResult({ topics: [topic, topic], totalTopics: 1, fetchedTopics: 2 }),
+      createRepliesResult({ data: [...replies].reverse() }),
+    );
+
+    expect(forward.topics).toMatchObject({
+      status: 'complete',
+      fetchedCount: 1,
+      duplicateConflictCount: 0,
+    });
+    expect(forward.replies).toMatchObject({
+      status: 'complete',
+      fetchedCount: 1,
+      duplicateConflictCount: 0,
+    });
+    expect(forward.replies.items).toEqual(reversed.replies.items);
   });
 
   it('sorts topics and replies by stable numeric identities', () => {

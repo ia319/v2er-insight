@@ -36,6 +36,7 @@ function createNotRequestedCollection<T>(): SnapshotCollection<T> {
     failedCount: 0,
     failedPageCount: 0,
     identityFailureCount: 0,
+    duplicateConflictCount: 0,
     items: [],
   };
 }
@@ -75,6 +76,94 @@ function compareNumericIds(left: string, right: string): number {
   return compareStrings(normalizedLeft, normalizedRight) || compareStrings(left, right);
 }
 
+interface DeduplicatedRecords<T> {
+  records: T[];
+  duplicateConflictCount: number;
+}
+
+interface SelectedRecord<T> {
+  record: T;
+  conflictKey: string;
+  selectionKey: string;
+}
+
+/**
+ * Deduplicate records without allowing input order to select a conflicting value.
+ *
+ * All duplicate candidates use a fixed-field selection key. Candidates whose
+ * semantic conflict keys differ report the affected stable identity once.
+ */
+function deduplicateRecords<T>(
+  records: T[],
+  getIdentity: (record: T) => string,
+  getConflictKey: (record: T) => string,
+  getSelectionKey: (record: T) => string = getConflictKey,
+): DeduplicatedRecords<T> {
+  const selectedByIdentity = new Map<string, SelectedRecord<T>>();
+  const conflictingIdentities = new Set<string>();
+
+  for (const record of records) {
+    const identity = getIdentity(record);
+    const conflictKey = getConflictKey(record);
+    const selectionKey = getSelectionKey(record);
+    const existing = selectedByIdentity.get(identity);
+
+    if (!existing) {
+      selectedByIdentity.set(identity, { record, conflictKey, selectionKey });
+      continue;
+    }
+
+    if (existing.conflictKey !== conflictKey) {
+      conflictingIdentities.add(identity);
+    }
+
+    if (selectionKey < existing.selectionKey) {
+      selectedByIdentity.set(identity, { record, conflictKey, selectionKey });
+    }
+  }
+
+  return {
+    records: Array.from(selectedByIdentity.values(), (selected) => selected.record),
+    duplicateConflictCount: conflictingIdentities.size,
+  };
+}
+
+function getTopicConflictKey(topic: TopicSnapshot): string {
+  return JSON.stringify([
+    topic.sourceUrl,
+    topic.title,
+    topic.nodeName,
+    topic.createdAt,
+    topic.content,
+    topic.replyCount,
+    topic.lastReplyAt,
+    topic.clickCount,
+  ]);
+}
+
+function getReplyConflictKey(reply: ReplySnapshot): string {
+  return JSON.stringify([
+    reply.topicTitle,
+    reply.nodeName,
+    reply.content,
+    reply.isDirectReply,
+    reply.replyTo,
+  ]);
+}
+
+function getReplySelectionKey(reply: ReplySnapshot): string {
+  return JSON.stringify([
+    reply.topicTitle,
+    reply.nodeName,
+    reply.content,
+    reply.isDirectReply,
+    reply.replyTo,
+    reply.displayReplyTime,
+    reply.occurredAt,
+    reply.timePrecision,
+  ]);
+}
+
 function buildTopicsCollection(
   data: SnapshotRequest<UserTopicsDetailResult>,
 ): RawSnapshotV2['topics'] {
@@ -86,17 +175,21 @@ function buildTopicsCollection(
   }
 
   const { result } = data;
-  const topicsById = new Map<string, TopicSnapshot>();
-  for (const topic of result.topics) {
-    topicsById.set(topic.topicId, mapTopic(topic));
-  }
-
-  const items = Array.from(topicsById.values()).sort((left, right) =>
+  const deduplicated = deduplicateRecords(
+    result.topics.map(mapTopic),
+    (topic) => topic.topicId,
+    getTopicConflictKey,
+  );
+  const items = deduplicated.records.sort((left, right) =>
     compareNumericIds(left.topicId, right.topicId),
   );
   const failedCount = Math.max(result.failedTopics, result.totalTopics - items.length);
   const totalExpected = result.failedPages > 0 ? null : result.totalTopics;
-  const isPartial = result.failedPages > 0 || failedCount > 0 || result.invalidTopicCount > 0;
+  const isPartial =
+    result.failedPages > 0 ||
+    failedCount > 0 ||
+    result.invalidTopicCount > 0 ||
+    deduplicated.duplicateConflictCount > 0;
 
   return {
     status: isPartial ? 'partial' : 'complete',
@@ -105,6 +198,7 @@ function buildTopicsCollection(
     failedCount,
     failedPageCount: result.failedPages,
     identityFailureCount: result.invalidTopicCount,
+    duplicateConflictCount: deduplicated.duplicateConflictCount,
     items,
     hidden: result.isHidden,
   };
@@ -150,7 +244,7 @@ function buildRepliesCollection(
   }
 
   const { result } = data;
-  const repliesById = new Map<string, ReplySnapshot>();
+  const identifiedReplies: ReplySnapshot[] = [];
   let detectedIdentityFailures = 0;
 
   for (const reply of result.data) {
@@ -159,10 +253,16 @@ function buildRepliesCollection(
       continue;
     }
 
-    repliesById.set(reply.replyId, mapReply(reply, capturedAt));
+    identifiedReplies.push(mapReply(reply, capturedAt));
   }
 
-  const items = Array.from(repliesById.values()).sort((left, right) => {
+  const deduplicated = deduplicateRecords(
+    identifiedReplies,
+    (reply) => reply.replyId,
+    getReplyConflictKey,
+    getReplySelectionKey,
+  );
+  const items = deduplicated.records.sort((left, right) => {
     const topicComparison = compareNumericIds(left.topicId, right.topicId);
     if (topicComparison !== 0) {
       return topicComparison;
@@ -179,7 +279,8 @@ function buildRepliesCollection(
     result.totalReplies === null ||
     result.failedPages > 0 ||
     failedCount > 0 ||
-    identityFailureCount > 0;
+    identityFailureCount > 0 ||
+    deduplicated.duplicateConflictCount > 0;
 
   return {
     status: isPartial ? 'partial' : 'complete',
@@ -188,6 +289,7 @@ function buildRepliesCollection(
     failedCount,
     failedPageCount: result.failedPages,
     identityFailureCount,
+    duplicateConflictCount: deduplicated.duplicateConflictCount,
     items,
   };
 }

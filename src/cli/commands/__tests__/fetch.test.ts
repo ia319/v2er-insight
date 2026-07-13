@@ -229,6 +229,29 @@ describe('runFetch', () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('缺失记录不能解释为删除'));
   });
 
+  it('should report conflicting duplicate identities as partial', async () => {
+    mockedGetAllUserTopicsDetail.mockResolvedValue({
+      topics: [topic, { ...topic, title: 'Conflicting snapshot design' }],
+      totalTopics: 1,
+      fetchedTopics: 2,
+      failedTopics: 0,
+      failedPages: 0,
+      invalidTopicCount: 0,
+      isHidden: false,
+    });
+
+    const result = await runFetch('alice', {});
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      reasonCode: 'FETCH_PARTIAL_FAILED',
+      meta: {
+        duplicateConflicts: 1,
+      },
+    });
+    expect(mockLogger.detail).toHaveBeenCalledWith(expect.stringContaining('duplicateConflicts=1'));
+  });
+
   it('should stop without writing data when the profile request fails', async () => {
     mockedGetUserProfile.mockResolvedValue(null);
 

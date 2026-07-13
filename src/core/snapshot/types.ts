@@ -12,6 +12,7 @@ export interface SnapshotCollection<T> {
   failedCount: number;
   failedPageCount: number;
   identityFailureCount: number;
+  duplicateConflictCount: number;
   items: T[];
 }
 

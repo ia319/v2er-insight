@@ -182,4 +182,34 @@ describe('isRawSnapshotV2', () => {
       }),
     ).toBe(false);
   });
+
+  it('accepts a duplicate conflict as a partial collection reason', () => {
+    const snapshot = createSnapshot();
+
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        replies: {
+          ...snapshot.replies,
+          status: 'partial',
+          duplicateConflictCount: 1,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects duplicate conflict counts larger than the retained collection', () => {
+    const snapshot = createSnapshot();
+
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        replies: {
+          ...snapshot.replies,
+          status: 'partial',
+          duplicateConflictCount: 2,
+        },
+      }),
+    ).toBe(false);
+  });
 });
