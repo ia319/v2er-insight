@@ -27,6 +27,30 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '强制重新抓取，替换不完整的 raw 数据',
     },
   ],
+  PROVENANCE_STATE_INVALID: [
+    {
+      type: 'instruction',
+      content: '先备份并移出损坏的 analysis-state.json，保留原文件用于诊断',
+      description: '状态文件无法验证，不能自动覆盖或猜测已有 provenance',
+    },
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '移出损坏状态文件后，全量重建 raw 数据与 provenance',
+    },
+  ],
+  PROVENANCE_UPDATE_FAILED: [
+    {
+      type: 'instruction',
+      content: '检查数据目录权限和可用磁盘空间后重试',
+      description: '数据文件可能已写入，但 provenance 状态没有同步完成',
+    },
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '重新生成一致的 raw 数据与 provenance 状态',
+    },
+  ],
   ANALYZE_INPUT_MISSING: [
     {
       type: 'command',

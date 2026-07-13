@@ -5,6 +5,8 @@ const mockedGetAllUserTopicsDetail = vi.hoisted(() => vi.fn());
 const mockedGetAllUserReplies = vi.hoisted(() => vi.fn());
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedWriteDataFile = vi.hoisted(() => vi.fn());
+const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
+const mockedUpdateAnalysisState = vi.hoisted(() => vi.fn());
 
 const mockLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -26,6 +28,8 @@ vi.mock('@/core/v2ex', () => ({
 vi.mock('@/infra/storage', () => ({
   readDataFile: mockedReadDataFile,
   writeDataFile: mockedWriteDataFile,
+  readAnalysisState: mockedReadAnalysisState,
+  updateAnalysisState: mockedUpdateAnalysisState,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -69,6 +73,11 @@ describe('runFetch', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-12T03:04:05.000Z'));
     mockedReadDataFile.mockReturnValue(null);
+    mockedReadAnalysisState.mockReturnValue({ status: 'missing' });
+    mockedUpdateAnalysisState.mockImplementation(
+      (_username: string, update: (state: { schemaVersion: 1 }) => unknown) =>
+        update({ schemaVersion: 1 }),
+    );
     mockedGetUserProfile.mockResolvedValue(profile);
     mockedGetAllUserTopicsDetail.mockResolvedValue({
       topics: [topic],
@@ -139,6 +148,27 @@ describe('runFetch', () => {
         fetchedReplies: 1,
       },
     });
+    expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
+    expect(mockedUpdateAnalysisState.mock.results[0]?.value).toMatchObject({
+      raw: {
+        semanticDataHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        captureStatus: 'complete',
+      },
+    });
+  });
+
+  it('should stop before network access when analysis state is invalid', async () => {
+    mockedReadAnalysisState.mockReturnValue({ status: 'invalid' });
+
+    const result = await runFetch('alice', { force: true, pipeline: true });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      reasonCode: 'PROVENANCE_STATE_INVALID',
+    });
+    expect(mockedGetUserProfile).not.toHaveBeenCalled();
+    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
   });
 
   it('should mark an unrequested reply collection explicitly', async () => {
@@ -264,5 +294,20 @@ describe('runFetch', () => {
     expect(mockedGetAllUserTopicsDetail).not.toHaveBeenCalled();
     expect(mockedGetAllUserReplies).not.toHaveBeenCalled();
     expect(mockedWriteDataFile).not.toHaveBeenCalled();
+  });
+
+  it('should report provenance update failure after preserving raw data', async () => {
+    mockedUpdateAnalysisState.mockImplementation(() => {
+      throw new Error('state write failed');
+    });
+
+    const result = await runFetch('alice', { pipeline: true });
+
+    expect(mockedWriteDataFile).toHaveBeenCalledWith('alice', 'raw', expect.any(Object));
+    expect(result).toMatchObject({
+      status: 'failed',
+      reasonCode: 'PROVENANCE_UPDATE_FAILED',
+      message: expect.stringContaining('raw.json 已保存'),
+    });
   });
 });

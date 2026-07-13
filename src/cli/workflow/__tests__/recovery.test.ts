@@ -37,4 +37,11 @@ describe('getRecoveryActions', () => {
     expect(actions[0]?.content).not.toContain('失败页');
     expect(actions[1]?.content).toContain('alice');
   });
+
+  it('should preserve invalid provenance evidence before rebuilding', () => {
+    const actions = getRecoveryActions('PROVENANCE_STATE_INVALID', { username: 'alice' });
+
+    expect(actions[0]?.content).toContain('备份');
+    expect(actions[1]?.content).toContain('alice');
+  });
 });

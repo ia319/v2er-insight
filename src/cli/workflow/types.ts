@@ -14,6 +14,8 @@ export type StepStatus = 'success' | 'partial' | 'failed' | 'skipped';
 export type ReasonCode =
   | 'FETCH_PROFILE_FAILED'
   | 'FETCH_PARTIAL_FAILED'
+  | 'PROVENANCE_STATE_INVALID'
+  | 'PROVENANCE_UPDATE_FAILED'
   | 'ANALYZE_INPUT_MISSING'
   | 'ANALYZE_FAILED'
   | 'AI_INPUT_MISSING'

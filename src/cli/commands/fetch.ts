@@ -9,7 +9,13 @@ import { getUserProfile, getAllUserReplies, getAllUserTopicsDetail } from '@/cor
 import type { UserTopicsDetailResult, UserRepliesResult } from '@/core/v2ex';
 import { buildRawSnapshot } from '@/core/snapshot';
 import type { RawSnapshotV2, SnapshotCollection, SnapshotRequest } from '@/core/snapshot';
-import { readDataFile, writeDataFile } from '@/infra/storage';
+import { recordRawProvenance } from '@/core/provenance';
+import {
+  readAnalysisState,
+  readDataFile,
+  updateAnalysisState,
+  writeDataFile,
+} from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
@@ -83,6 +89,19 @@ export async function runFetch(
         message: 'raw.json 已存在，跳过抓取',
       };
     }
+  }
+
+  const analysisState = readAnalysisState(username);
+  if (analysisState.status === 'invalid') {
+    logger.error(`${username} 的 analysis-state.json 无效或不可读`);
+    return {
+      step: 'fetch',
+      status: 'failed',
+      reasonCode: 'PROVENANCE_STATE_INVALID',
+      message: 'analysis-state.json 无效或不可读，已停止抓取以保留现有证据',
+      recoverable: true,
+      recoverActions: getRecoveryActions('PROVENANCE_STATE_INVALID', { username }),
+    };
   }
 
   logger.info(`\n抓取用户数据: ${username}`);
@@ -159,6 +178,21 @@ export async function runFetch(
   });
 
   writeDataFile(username, 'raw', rawData);
+
+  try {
+    updateAnalysisState(username, (state) => recordRawProvenance(state, rawData));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`更新 provenance 状态失败: ${message}`);
+    return {
+      step: 'fetch',
+      status: 'failed',
+      reasonCode: 'PROVENANCE_UPDATE_FAILED',
+      message: `raw.json 已保存，但 provenance 状态更新失败: ${message}`,
+      recoverable: true,
+      recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+    };
+  }
 
   if (!options.pipeline) {
     logger.success('数据已保存');
