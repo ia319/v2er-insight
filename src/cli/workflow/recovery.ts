@@ -58,6 +58,20 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '先生成 raw.json，再执行 analyze',
     },
   ],
+  ANALYZE_PROVENANCE_MISSING: [
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '重新抓取并建立 raw.json 对应的 provenance 状态',
+    },
+  ],
+  ANALYZE_SOURCE_MISMATCH: [
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '重新生成相互匹配的 raw 数据与 provenance 状态',
+    },
+  ],
   ANALYZE_FAILED: [
     {
       type: 'command',

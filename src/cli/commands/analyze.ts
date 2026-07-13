@@ -6,8 +6,16 @@
 
 import type { AnalyzerOutput } from '@/core/analyzer';
 import { buildAnalyzerOutputFromSnapshot } from '@/core/analyzer';
+import type { RawProvenanceState } from '@/core/provenance';
+import { recordAnalyzedProvenance, recordRawProvenance } from '@/core/provenance';
 import { isRawSnapshotV2 } from '@/core/snapshot';
-import { readDataFile, writeDataFile } from '@/infra/storage';
+import { getConfig } from '@/config';
+import {
+  readAnalysisState,
+  readDataFile,
+  updateAnalysisState,
+  writeDataFile,
+} from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
@@ -76,12 +84,92 @@ export async function runAnalyze(
     };
   }
 
+  const analysisState = readAnalysisState(username);
+  if (analysisState.status === 'invalid') {
+    logger.error(`${username} 的 analysis-state.json 无效或不可读`);
+    return {
+      step: 'analyze',
+      status: 'failed',
+      reasonCode: 'PROVENANCE_STATE_INVALID',
+      message: 'analysis-state.json 无效或不可读，无法验证分析来源',
+      recoverable: true,
+      recoverActions: getRecoveryActions('PROVENANCE_STATE_INVALID', { username }),
+    };
+  }
+
+  if (analysisState.status === 'missing' || !analysisState.state.raw) {
+    logger.error(`${username} 的 raw.json 缺少 provenance 状态`);
+    return {
+      step: 'analyze',
+      status: 'failed',
+      reasonCode: 'ANALYZE_PROVENANCE_MISSING',
+      message: 'raw.json 缺少 provenance，无法安全执行变化检测',
+      recoverable: true,
+      recoverActions: getRecoveryActions('ANALYZE_PROVENANCE_MISSING', { username }),
+    };
+  }
+
+  let expectedRawState: RawProvenanceState;
+  try {
+    expectedRawState = recordRawProvenance(analysisState.state, rawData).raw;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`计算 raw provenance 失败: ${message}`);
+    return {
+      step: 'analyze',
+      status: 'failed',
+      reasonCode: 'ANALYZE_FAILED',
+      message: `计算 raw provenance 失败: ${message}`,
+      recoverable: true,
+      recoverActions: getRecoveryActions('ANALYZE_FAILED', { username }),
+    };
+  }
+
+  if (
+    analysisState.state.raw.semanticDataHash !== expectedRawState.semanticDataHash ||
+    analysisState.state.raw.captureStatus !== expectedRawState.captureStatus
+  ) {
+    logger.error(`${username} 的 raw.json 与 provenance 状态不匹配`);
+    return {
+      step: 'analyze',
+      status: 'failed',
+      reasonCode: 'ANALYZE_SOURCE_MISMATCH',
+      message: 'raw.json 与 provenance 状态不匹配，无法确认分析来源',
+      recoverable: true,
+      recoverActions: getRecoveryActions('ANALYZE_SOURCE_MISMATCH', { username }),
+    };
+  }
+
   logger.info(`\n分析用户数据: ${username}`);
 
   try {
     const output = buildAnalyzerOutputFromSnapshot(rawData);
 
     writeDataFile(username, 'analyzed', output);
+
+    try {
+      updateAnalysisState(username, (state) => {
+        if (
+          state.raw?.semanticDataHash !== expectedRawState.semanticDataHash ||
+          state.raw?.captureStatus !== expectedRawState.captureStatus
+        ) {
+          throw new Error('raw provenance changed during analysis');
+        }
+
+        return recordAnalyzedProvenance(state, rawData, output, getConfig().analyzer);
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`更新 provenance 状态失败: ${message}`);
+      return {
+        step: 'analyze',
+        status: 'failed',
+        reasonCode: 'PROVENANCE_UPDATE_FAILED',
+        message: `analyzed.json 已保存，但 provenance 状态更新失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+      };
+    }
 
     if (!options.pipeline) {
       logger.success('分析结果已保存');
