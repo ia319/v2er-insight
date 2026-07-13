@@ -90,6 +90,47 @@ describe('recordRawProvenance', () => {
       expect(recordRawProvenance({ schemaVersion: 1 }, snapshot).raw.captureStatus).toBe('partial');
     },
   );
+
+  it('marks the current result stale when a new raw identity replaces its analyzed source', () => {
+    const existing = recordAnalyzedProvenance(
+      recordRawProvenance({ schemaVersion: 1 }, createSnapshot()),
+      createSnapshot(),
+      createOutput(),
+    );
+    const state: AnalysisStateV1 = {
+      ...existing,
+      currentResult: {
+        analysisFingerprint: existing.analyzed.analysisFingerprint,
+        stale: false,
+        basedOnPartial: false,
+      },
+    };
+    const changedSnapshot = createSnapshot();
+    changedSnapshot.profile.joinDate = '2021-01-01 00:00:00 +08:00';
+
+    const next = recordRawProvenance(state, changedSnapshot);
+
+    expect(next.currentResult?.stale).toBe(true);
+  });
+
+  it('keeps the current result freshness when a repeated raw identity is recorded', () => {
+    const snapshot = createSnapshot();
+    const existing = recordAnalyzedProvenance(
+      recordRawProvenance({ schemaVersion: 1 }, snapshot),
+      snapshot,
+      createOutput(),
+    );
+    const state: AnalysisStateV1 = {
+      ...existing,
+      currentResult: {
+        analysisFingerprint: existing.analyzed.analysisFingerprint,
+        stale: false,
+        basedOnPartial: false,
+      },
+    };
+
+    expect(recordRawProvenance(state, snapshot).currentResult?.stale).toBe(false);
+  });
 });
 
 describe('recordAnalyzedProvenance', () => {

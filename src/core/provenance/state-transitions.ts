@@ -25,13 +25,26 @@ export function recordRawProvenance(
   state: AnalysisStateV1,
   snapshot: RawSnapshotV2,
 ): AnalysisStateV1 & { raw: RawProvenanceState } {
-  return {
-    ...state,
-    raw: {
-      semanticDataHash: computeSemanticDataHash(snapshot),
-      captureStatus: deriveCaptureStatus(snapshot),
-    },
+  const raw: RawProvenanceState = {
+    semanticDataHash: computeSemanticDataHash(snapshot),
+    captureStatus: deriveCaptureStatus(snapshot),
   };
+  const next = {
+    ...state,
+    raw,
+  };
+
+  return state.currentResult &&
+    state.analyzed &&
+    state.analyzed.sourceSemanticHash !== raw.semanticDataHash
+    ? {
+        ...next,
+        currentResult: {
+          ...state.currentResult,
+          stale: true,
+        },
+      }
+    : next;
 }
 
 /** Record Analyzer provenance and recompute current-result freshness. */
