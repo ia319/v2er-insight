@@ -17,7 +17,7 @@ import { calculateUserOverview } from './stats/user-overview';
 import { calculateTopicStats } from './stats/topic-stats';
 import { calculateReplyStats } from './stats/reply-stats';
 import { chunkPeriodContent } from './content';
-import { parseAbsoluteDate, parseRelativeTime } from './utils';
+import { parseAbsoluteDate } from './utils';
 import type { RawSnapshotV2 } from '@/core/snapshot';
 import { createAnalyzerInput } from './adapters/snapshot';
 
@@ -25,27 +25,25 @@ import { createAnalyzerInput } from './adapters/snapshot';
  * Build the core metrics and content fields used by AnalyzerOutput.
  *
  * @param data - Internal input adapted from a validated raw snapshot.
- * @param referenceDate - Shared reference for relative reply times.
  * @returns User overview, period summary, and content chunks.
  */
 function buildAnalyzerCoreOutput(
   data: RawUserData,
-  referenceDate: Date = new Date(),
 ): Pick<AnalyzerOutput, 'userOverview' | 'summary' | 'contents'> {
   // 1. 计算用户总览
-  const userOverview = calculateUserOverview(data, referenceDate);
+  const userOverview = calculateUserOverview(data);
 
   // 2. 提取所有活动日期并排序
-  const activities = extractActivities(data, referenceDate);
+  const activities = extractActivities(data);
 
   // 3. 检测活跃期边界
   const boundaries = detectPeriodBoundaries(activities);
 
   // 4. 将数据分割到各活跃期
-  const periods = splitByPeriods(boundaries, data.topics, data.replies, referenceDate);
+  const periods = splitByPeriods(boundaries, data.topics, data.replies);
 
   // 5. 计算每个活跃期的统计
-  const periodStats = periods.map((period) => calculatePeriodStats(period, referenceDate));
+  const periodStats = periods.map((period) => calculatePeriodStats(period));
 
   // 6. 构建 PeriodsSummary
   const summary: PeriodsSummary = {
@@ -67,13 +65,10 @@ function buildAnalyzerCoreOutput(
  * Build Analyzer output from a validated versioned snapshot.
  *
  * @param snapshot - Validated Raw Snapshot V2.
- * @returns Analyzer output using the snapshot capture time as the time reference.
+ * @returns Analyzer output using normalized reply occurrences from the snapshot.
  */
 export function buildAnalyzerOutputFromSnapshot(snapshot: RawSnapshotV2): AnalyzerOutput {
-  const coreOutput = buildAnalyzerCoreOutput(
-    createAnalyzerInput(snapshot),
-    new Date(snapshot.capturedAt),
-  );
+  const coreOutput = buildAnalyzerCoreOutput(createAnalyzerInput(snapshot));
 
   return {
     schemaVersion: ANALYZER_OUTPUT_SCHEMA_VERSION,
@@ -100,7 +95,7 @@ export function buildAnalyzerOutputFromSnapshot(snapshot: RawSnapshotV2): Analyz
  * 从原始数据中提取所有活动日期
  * 用于检测活跃期边界
  */
-function extractActivities(data: RawUserData, referenceDate: Date): Array<{ date: Date }> {
+function extractActivities(data: RawUserData): Array<{ date: Date }> {
   const activities: Array<{ date: Date }> = [];
 
   // 从帖子提取日期（绝对时间）
@@ -111,11 +106,10 @@ function extractActivities(data: RawUserData, referenceDate: Date): Array<{ date
     }
   }
 
-  // 从回复提取日期（相对时间）
+  // 从回复提取 Snapshot 已规范化的日期
   for (const reply of data.replies) {
-    const parsed = parseRelativeTime(reply.replyTime, referenceDate);
-    if (parsed) {
-      activities.push({ date: parsed.date });
+    if (reply.occurredAt) {
+      activities.push({ date: reply.occurredAt });
     }
   }
 
@@ -128,7 +122,7 @@ function extractActivities(data: RawUserData, referenceDate: Date): Array<{ date
 /**
  * 计算单个活跃期的统计
  */
-function calculatePeriodStats(period: ActivePeriod, referenceDate: Date): SinglePeriodStats {
+function calculatePeriodStats(period: ActivePeriod): SinglePeriodStats {
   const topicStats = calculateTopicStats({
     topics: period.topics,
     startDate: period.startDate,
@@ -137,7 +131,6 @@ function calculatePeriodStats(period: ActivePeriod, referenceDate: Date): Single
 
   const replyStats = calculateReplyStats({
     replies: period.replies,
-    referenceDate,
   });
 
   return {

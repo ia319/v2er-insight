@@ -3,19 +3,16 @@
  */
 
 import type { RawUserData, UserOverview } from '../types';
-import { parseAbsoluteDate, parseRelativeTime } from '../utils';
+import { parseAbsoluteDate } from '../utils';
 
 /**
  * 计算用户总览
  */
-export function calculateUserOverview(
-  data: RawUserData,
-  referenceDate: Date = new Date(),
-): UserOverview {
+export function calculateUserOverview(data: RawUserData): UserOverview {
   const { profile, topics, replies, topicsStatus, repliesStatus, isTopicsHidden } = data;
 
   // 计算最后活动时间
-  const lastActiveTime = getLastActiveTime(topics, replies, referenceDate);
+  const lastActiveTime = getLastActiveTime(topics, replies);
 
   // Calculate the ratio only when both collections were requested and replies exist.
   const hasRequestedTopics = topicsStatus !== 'not_requested';
@@ -39,11 +36,7 @@ export function calculateUserOverview(
 /**
  * 获取最后活动时间
  */
-function getLastActiveTime(
-  topics: RawUserData['topics'],
-  replies: RawUserData['replies'],
-  referenceDate: Date,
-): string {
+function getLastActiveTime(topics: RawUserData['topics'], replies: RawUserData['replies']): string {
   let lastDate: Date | null = null;
 
   // 检查帖子的最后时间
@@ -56,9 +49,8 @@ function getLastActiveTime(
 
   // 检查回复的最后时间
   for (const reply of replies) {
-    const parsed = parseRelativeTime(reply.replyTime, referenceDate);
-    if (parsed && (!lastDate || parsed.date > lastDate)) {
-      lastDate = parsed.date;
+    if (reply.occurredAt && (!lastDate || reply.occurredAt > lastDate)) {
+      lastDate = reply.occurredAt;
     }
   }
 

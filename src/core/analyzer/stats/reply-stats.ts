@@ -2,14 +2,12 @@
  * 回复统计计算
  */
 
-import type { V2exReply } from '@/core/v2ex/types/entities';
-import type { SinglePeriodStats } from '../types';
+import type { AnalyzerReply, SinglePeriodStats } from '../types';
 import { getConfig } from '@/config';
-import { parseRelativeTime, average, topN, weekdayDistribution } from '../utils';
+import { average, topN, weekdayDistribution } from '../utils';
 
 interface ReplyStatsInput {
-  replies: V2exReply[];
-  referenceDate?: Date;
+  replies: AnalyzerReply[];
 }
 
 /**
@@ -26,7 +24,7 @@ export function calculateReplyStats(
   | 'replyWeekdayDistribution'
   | 'replyNodeDistribution'
 > {
-  const { replies, referenceDate = new Date() } = input;
+  const { replies } = input;
 
   if (replies.length === 0) {
     return {
@@ -46,14 +44,12 @@ export function calculateReplyStats(
   const directReplies = replies.filter((r) => r.isDirectReply).length;
 
   // Reply anchors encode floor positions, not the final heat of a topic.
-  const replyPositions = replies
-    .map((reply) => reply.replyNumber)
-    .filter((replyNumber): replyNumber is number => replyNumber !== null);
+  const replyPositions = replies.map((reply) => reply.replyNumber);
 
   // 计算星期分布
   const replyDates = replies
-    .map((r) => parseRelativeTime(r.replyTime, referenceDate)?.date)
-    .filter((d): d is Date => d !== undefined);
+    .map((reply) => reply.occurredAt)
+    .filter((occurredAt): occurredAt is Date => occurredAt !== null);
 
   // 只有足够的解析成功才计算星期分布
   const weekdayDist =

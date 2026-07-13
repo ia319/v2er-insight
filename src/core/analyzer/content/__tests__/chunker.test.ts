@@ -4,8 +4,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { chunkPeriodContent } from '../chunker';
-import type { ActivePeriod } from '../../types';
-import type { V2exTopicDetail, V2exReply } from '@/core/v2ex/types/entities';
+import type { ActivePeriod, AnalyzerReply } from '../../types';
+import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
 
 // Create topics for testing
 function createTopic(index: number): V2exTopicDetail {
@@ -23,7 +23,7 @@ function createTopic(index: number): V2exTopicDetail {
 }
 
 // Create replies for testing
-function createReply(index: number): V2exReply {
+function createReply(index: number): AnalyzerReply {
   return {
     replyId: `100001#reply${index}`,
     topicId: '100001',
@@ -31,7 +31,7 @@ function createReply(index: number): V2exReply {
     topicTitle: `Reply Topic ${index}`,
     nodeName: 'Q&A',
     content: `Reply Content ${index}`,
-    replyTime: '1 day ago',
+    occurredAt: new Date(2024, 0, 1),
     isDirectReply: true,
     replyTo: null,
   };

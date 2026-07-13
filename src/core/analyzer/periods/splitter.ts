@@ -3,9 +3,9 @@
  * 将帖子和回复分配到对应的活跃期
  */
 
-import type { V2exReply, V2exTopicDetail } from '@/core/v2ex/types/entities';
-import type { ActivePeriod, PeriodBoundary } from '../types';
-import { parseAbsoluteDate, parseRelativeTime } from '../utils';
+import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
+import type { ActivePeriod, AnalyzerReply, PeriodBoundary } from '../types';
+import { parseAbsoluteDate } from '../utils';
 
 /**
  * 将帖子和回复分配到各活跃期
@@ -13,8 +13,7 @@ import { parseAbsoluteDate, parseRelativeTime } from '../utils';
 export function splitByPeriods(
   boundaries: PeriodBoundary[],
   topics: V2exTopicDetail[],
-  replies: V2exReply[],
-  referenceDate: Date = new Date(),
+  replies: AnalyzerReply[],
 ): ActivePeriod[] {
   return boundaries.map((boundary, index) => {
     const periodTopics = topics.filter((topic) => {
@@ -24,9 +23,8 @@ export function splitByPeriods(
     });
 
     const periodReplies = replies.filter((reply) => {
-      const parsed = parseRelativeTime(reply.replyTime, referenceDate);
-      if (!parsed) return false;
-      return parsed.date >= boundary.startDate && parsed.date <= boundary.endDate;
+      if (reply.occurredAt === null) return false;
+      return reply.occurredAt >= boundary.startDate && reply.occurredAt <= boundary.endDate;
     });
 
     return {

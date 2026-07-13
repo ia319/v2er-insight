@@ -55,15 +55,14 @@ describe('splitByPeriods', () => {
         replyNumber: 10,
         topicTitle: 'Topic',
         nodeName: 'test',
-        replyTime: '5 天前',
+        occurredAt: new Date(2024, 0, 5),
         content: 'reply',
         isDirectReply: true,
         replyTo: null,
       },
     ];
 
-    // referenceDate 设为 2024-01-10，5天前是 2024-01-05
-    const result = splitByPeriods(boundaries, [], replies, new Date(2024, 0, 10));
+    const result = splitByPeriods(boundaries, [], replies);
 
     expect(result[0]?.replies).toHaveLength(1);
     expect(result[1]?.replies).toHaveLength(0);

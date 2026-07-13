@@ -48,9 +48,9 @@ const snapshot: RawSnapshotV2 = {
         replyNumber: 2,
         topicTitle: 'Topic title',
         nodeName: 'create',
-        displayReplyTime: '3 小时前',
-        occurredAt: null,
-        timePrecision: 'unknown',
+        displayReplyTime: 'unparseable display time',
+        occurredAt: '2026-07-12T00:04:05.000Z',
+        timePrecision: 'hour',
         content: 'Reply content',
         isDirectReply: false,
         replyTo: 'bob',
@@ -83,7 +83,7 @@ describe('createAnalyzerInput', () => {
           replyNumber: 2,
           topicTitle: 'Topic title',
           nodeName: 'create',
-          replyTime: '3 小时前',
+          occurredAt: new Date('2026-07-12T00:04:05.000Z'),
           content: 'Reply content',
           isDirectReply: false,
           replyTo: 'bob',
@@ -95,7 +95,7 @@ describe('createAnalyzerInput', () => {
     });
   });
 
-  it('uses capturedAt as the relative reply time reference', () => {
+  it('uses the normalized reply occurrence instead of reparsing display text', () => {
     expect(buildAnalyzerOutputFromSnapshot(snapshot).userOverview.lastActiveTime).toBe(
       '2026-07-12T00:04:05.000Z',
     );

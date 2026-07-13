@@ -27,7 +27,7 @@ export function createAnalyzerInput(snapshot: RawSnapshotV2): RawUserData {
       replyNumber: reply.replyNumber,
       topicTitle: reply.topicTitle,
       nodeName: reply.nodeName,
-      replyTime: reply.displayReplyTime,
+      occurredAt: reply.occurredAt === null ? null : new Date(reply.occurredAt),
       content: reply.content,
       isDirectReply: reply.isDirectReply,
       replyTo: reply.replyTo,

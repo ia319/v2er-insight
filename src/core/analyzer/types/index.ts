@@ -3,7 +3,7 @@
  */
 
 // 输入类型
-export type { RawUserData } from './input';
+export type { AnalyzerReply, RawUserData } from './input';
 
 // 内部类型
 export type { ActivePeriod, TopicWithDate, ReplyWithDate, PeriodBoundary } from './internal';

@@ -4,7 +4,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { transformTopics, transformReplies } from '../transformer';
-import type { V2exTopicDetail, V2exReply } from '@/core/v2ex/types/entities';
+import type { AnalyzerReply } from '../../types';
+import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
 
 describe('transformTopics', () => {
   it('should transform V2exTopicDetail to ContentTopic', () => {
@@ -38,8 +39,8 @@ describe('transformTopics', () => {
 });
 
 describe('transformReplies', () => {
-  it('should transform V2exReply to ContentReply', () => {
-    const replies: V2exReply[] = [
+  it('should transform AnalyzerReply to ContentReply', () => {
+    const replies: AnalyzerReply[] = [
       {
         replyId: '100001#reply50',
         topicId: '100001',
@@ -47,7 +48,7 @@ describe('transformReplies', () => {
         topicTitle: 'Reply Topic Title',
         nodeName: 'Q&A',
         content: 'Reply Content',
-        replyTime: '1 day ago',
+        occurredAt: new Date(2024, 0, 1),
         isDirectReply: true,
         replyTo: null,
       },
