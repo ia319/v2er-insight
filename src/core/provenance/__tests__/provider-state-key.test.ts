@@ -34,4 +34,14 @@ describe('computeProviderStateKey', () => {
     expect(otherProviderKey).not.toBe(key);
     expect(otherProviderKey).toMatch(/^codex:/);
   });
+
+  it('supports targets without optional thinking or session identity', () => {
+    expect(
+      computeProviderStateKey({
+        provider: 'gemini',
+        model: 'gemini-3.1-pro-preview',
+        systemPrompt: 'Analyze the supplied profile.',
+      }),
+    ).toMatch(/^gemini:[a-f0-9]{64}$/);
+  });
 });
