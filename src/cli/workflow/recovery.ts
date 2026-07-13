@@ -91,6 +91,32 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '先生成 analyzed.json，再执行 AI 分析',
     },
   ],
+  AI_INPUT_INVALID: [
+    {
+      type: 'command',
+      content: 'v2er <username> --force',
+      description: '重新抓取并生成受支持的 AnalyzerOutput V2',
+    },
+  ],
+  AI_PROVENANCE_MISSING: [
+    {
+      type: 'command',
+      content: 'v2er <username> --force',
+      description: '重新抓取、分析并建立完整 provenance 状态',
+    },
+  ],
+  AI_SOURCE_MISMATCH: [
+    {
+      type: 'command',
+      content: 'v2er analyze <username>',
+      description: '根据当前 raw 数据和 Analyzer 配置重新生成 analyzed 数据',
+    },
+    {
+      type: 'command',
+      content: 'v2er <username> --force',
+      description: '若 raw provenance 也不一致，执行全量重抓和分析',
+    },
+  ],
   AI_API_KEY_MISSING: [
     {
       type: 'instruction',
@@ -140,6 +166,18 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       type: 'command',
       content: 'v2er ai <username> --model gemini-2.0-flash',
       description: '若当前模型不稳定，可切换模型后重试',
+    },
+  ],
+  AI_RESULT_WRITE_FAILED: [
+    {
+      type: 'instruction',
+      content: '检查数据目录权限和可用磁盘空间后重试',
+      description: 'AI 已返回结果，但 result.json 未成功写入且发送状态未推进',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '存储问题修复后重新发送并保存结果',
     },
   ],
   SHOW_RESULT_MISSING: [
