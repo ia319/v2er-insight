@@ -425,6 +425,21 @@ describe('configReset command', () => {
     expect(mockLogger.info).toHaveBeenCalledWith('Reset: ai');
   });
 
+  it('should remove explicit cleanup settings when resetting data', async () => {
+    mockedReadConfig.mockReturnValue({
+      data: { keepRaw: false, rawRetention: 7 },
+      log: { level: 'debug' },
+    });
+
+    const { configReset } = await import('../config');
+    configReset('data');
+
+    expect(mockedWriteConfig).toHaveBeenCalledWith({
+      log: { level: 'debug' },
+    });
+    expect(mockLogger.info).toHaveBeenCalledWith('Reset: data');
+  });
+
   it('should reset proxy as special top-level key', async () => {
     mockedReadConfig.mockReturnValue({
       proxy: 'http://test:8080',

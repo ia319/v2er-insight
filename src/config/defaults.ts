@@ -46,7 +46,7 @@ export const DEFAULT_CONFIG = {
     nodeDistributionTopN: 3,
   },
   data: {
-    keepRaw: false,
+    keepRaw: true,
     rawRetention: 1,
   },
   log: {
