@@ -5,6 +5,12 @@ export type { DataFileReadResult } from './reader';
 export { readDataFile, readDataFileResult } from './reader';
 export { writeDataFile } from './writer';
 export { cleanExpiredData } from './cleaner';
+export type {
+  CleanableDataFileType,
+  CleanupResult,
+  CleanupSkippedFile,
+  CleanupSkipReason,
+} from './cleaner';
 export type { AnalysisStateReadResult } from './analysis-state';
 export {
   AnalysisStateCorruptError,

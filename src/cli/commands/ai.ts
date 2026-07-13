@@ -328,7 +328,8 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     };
   }
 
-  const cleaned = cleanExpiredData(username);
+  const cleanup = cleanExpiredData(username);
+  const cleaned = cleanup.deleted;
 
   if (!options.pipeline) {
     logger.success('分析结果已保存');

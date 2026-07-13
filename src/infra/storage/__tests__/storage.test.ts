@@ -229,9 +229,13 @@ describe('storage/cleaner', () => {
    * 辅助函数：mock getConfig 返回指定配置
    */
   function mockConfig(data: { keepRaw?: boolean; rawRetention?: number }) {
-    vi.doMock('@/config', () => ({
-      getConfig: () => ({ data }),
-    }));
+    vi.doMock('@/config', async () => {
+      const actual = await vi.importActual<typeof import('@/config')>('@/config');
+      return {
+        ...actual,
+        getConfig: () => ({ data }),
+      };
+    });
   }
 
   /**
@@ -247,7 +251,15 @@ describe('storage/cleaner', () => {
 
     const result = cleanExpiredData('livid');
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({
+      enabled: false,
+      retentionDays: 1,
+      deleted: [],
+      skipped: [
+        { type: 'raw', reason: 'retention_disabled' },
+        { type: 'analyzed', reason: 'retention_disabled' },
+      ],
+    });
     expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
   });
 
@@ -262,7 +274,12 @@ describe('storage/cleaner', () => {
 
     const result = cleanExpiredData('livid');
 
-    expect(result).toEqual(['raw', 'analyzed']);
+    expect(result).toEqual({
+      enabled: true,
+      retentionDays: 1,
+      deleted: ['raw', 'analyzed'],
+      skipped: [],
+    });
     expect(mockedFs.unlinkSync).toHaveBeenCalledTimes(2);
   });
 
@@ -275,8 +292,52 @@ describe('storage/cleaner', () => {
 
     const result = cleanExpiredData('livid');
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({
+      enabled: true,
+      retentionDays: 3,
+      deleted: [],
+      skipped: [
+        { type: 'raw', reason: 'not_expired' },
+        { type: 'analyzed', reason: 'not_expired' },
+      ],
+    });
     expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
+  });
+
+  it('should report missing source files without deleting anything', async () => {
+    mockConfig({ keepRaw: false, rawRetention: 1 });
+    mockedFs.existsSync.mockReturnValue(false);
+    const { cleanExpiredData } = await import('../cleaner');
+
+    const result = cleanExpiredData('livid');
+
+    expect(result.skipped).toEqual([
+      { type: 'raw', reason: 'missing' },
+      { type: 'analyzed', reason: 'missing' },
+    ]);
+    expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
+  });
+
+  it('should preserve diagnostics when metadata or deletion fails', async () => {
+    mockConfig({ keepRaw: false, rawRetention: 1 });
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.statSync
+      .mockImplementationOnce(() => {
+        throw new Error('stat failed');
+      })
+      .mockReturnValueOnce({ mtimeMs: mtimeOfDaysAgo(2).getTime() } as fs.Stats);
+    mockedFs.unlinkSync.mockImplementation(() => {
+      throw new Error('delete failed');
+    });
+    const { cleanExpiredData } = await import('../cleaner');
+
+    const result = cleanExpiredData('livid');
+
+    expect(result.skipped).toEqual([
+      { type: 'raw', reason: 'metadata_unavailable' },
+      { type: 'analyzed', reason: 'delete_failed' },
+    ]);
+    expect(result.deleted).toEqual([]);
   });
 
   it('should never delete result.json', async () => {
@@ -289,7 +350,7 @@ describe('storage/cleaner', () => {
     const result = cleanExpiredData('livid');
 
     // 只应清理 raw 和 analyzed，不包含 result
-    expect(result).not.toContain('result');
+    expect(result.deleted).not.toContain('result');
     // unlinkSync 最多被调用 2 次（raw + analyzed）
     expect(mockedFs.unlinkSync).toHaveBeenCalledTimes(2);
   });

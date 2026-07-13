@@ -84,6 +84,12 @@ const defaultRequest = {
   systemPrompt: 'You are an analyst',
   payload: '{"schemaVersion":2}',
 };
+const noCleanupResult = {
+  enabled: false,
+  retentionDays: 1,
+  deleted: [],
+  skipped: [],
+};
 
 function createAnalyzedData(partial = false): AnalyzerOutput {
   return {
@@ -190,7 +196,7 @@ describe('runAi', () => {
     mockedWriteDataFile.mockReset();
     mockInput();
     mockedBuildAnalysisRequest.mockReturnValue(defaultRequest);
-    mockedCleanExpiredData.mockReturnValue([]);
+    mockedCleanExpiredData.mockReturnValue(noCleanupResult);
   });
 
   it('should show error when analyzed data is missing', async () => {
@@ -334,7 +340,7 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('raw response');
     mockedParseResponse.mockReturnValue({ data: aiResult, warnings: [] });
-    mockedCleanExpiredData.mockReturnValue([]);
+    mockedCleanExpiredData.mockReturnValue(noCleanupResult);
 
     const result = await runAi('testuser', {});
 
@@ -445,7 +451,7 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({ data: { summary: 'r' }, warnings: [] });
-    mockedCleanExpiredData.mockReturnValue([]);
+    mockedCleanExpiredData.mockReturnValue(noCleanupResult);
 
     await runAi('testuser', {
       model: 'gemini-custom-model',
@@ -469,7 +475,7 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({ data: { summary: 'r' }, warnings: [] });
-    mockedCleanExpiredData.mockReturnValue([]);
+    mockedCleanExpiredData.mockReturnValue(noCleanupResult);
 
     await runAi('testuser', { model: true, thinkingLevel: true });
 
@@ -567,7 +573,7 @@ describe('runAi', () => {
       data: { summary: 'result' },
       warnings: ['Missing field: social'],
     });
-    mockedCleanExpiredData.mockReturnValue([]);
+    mockedCleanExpiredData.mockReturnValue(noCleanupResult);
 
     await runAi('testuser', {});
 
@@ -587,7 +593,12 @@ describe('runAi', () => {
       data: { summary: 'result' },
       warnings: [],
     });
-    mockedCleanExpiredData.mockReturnValue(['raw.json']);
+    mockedCleanExpiredData.mockReturnValue({
+      enabled: true,
+      retentionDays: 1,
+      deleted: ['raw'],
+      skipped: [{ type: 'analyzed', reason: 'not_expired' }],
+    });
 
     const result = await runAi('testuser', { pipeline: true });
 
