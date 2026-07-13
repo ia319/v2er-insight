@@ -2,6 +2,7 @@
 export const ANALYSIS_STATE_SCHEMA_VERSION = 1 as const;
 
 export type CaptureStatus = 'complete' | 'partial';
+export type ResultDeliveryMode = 'change' | 'resend';
 
 export interface RawProvenanceState {
   semanticDataHash: string;
@@ -20,6 +21,7 @@ export interface CurrentResultState {
   analysisFingerprint: string;
   stale: boolean;
   basedOnPartial: boolean;
+  deliveryMode?: ResultDeliveryMode;
 }
 
 export interface ProviderProvenanceState {

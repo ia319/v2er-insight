@@ -24,6 +24,7 @@ function createState(): AnalysisStateV1 {
       analysisFingerprint: HASH_A,
       stale: false,
       basedOnPartial: false,
+      deliveryMode: 'change',
     },
     providers: {
       gemini: {
@@ -60,6 +61,15 @@ describe('isAnalysisStateV1', () => {
         analysisFingerprint: HASH_A,
         stale: 'false',
         basedOnPartial: false,
+      },
+    },
+    {
+      schemaVersion: 1,
+      currentResult: {
+        analysisFingerprint: HASH_A,
+        stale: false,
+        basedOnPartial: false,
+        deliveryMode: 'retry',
       },
     },
     {

@@ -40,7 +40,10 @@ function isCurrentResultState(value: unknown): value is CurrentResultState {
     isRecord(value) &&
     isSha256Hash(value.analysisFingerprint) &&
     typeof value.stale === 'boolean' &&
-    typeof value.basedOnPartial === 'boolean'
+    typeof value.basedOnPartial === 'boolean' &&
+    (value.deliveryMode === undefined ||
+      value.deliveryMode === 'change' ||
+      value.deliveryMode === 'resend')
   );
 }
 
