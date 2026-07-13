@@ -16,3 +16,4 @@ export type {
   RawProvenanceState,
 } from './state-types';
 export { isAnalysisStateV1 } from './state-validator';
+export { recordAnalyzedProvenance, recordRawProvenance } from './state-transitions';
