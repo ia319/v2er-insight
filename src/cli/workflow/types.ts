@@ -41,6 +41,19 @@ export interface RecoveryAction {
   description: string;
 }
 
+export type NoticeCode = 'DATA_RETENTION_ENABLED' | 'DATA_FILES_CLEANED';
+export type NoticeSeverity = 'info' | 'warning';
+
+/** A non-fatal user-facing effect that should remain machine-identifiable. */
+export interface UserNotice {
+  code: NoticeCode;
+  severity: NoticeSeverity;
+  summary: string;
+  details?: string[];
+  actions?: RecoveryAction[];
+  documentation?: string;
+}
+
 /** 单个步骤的结构化执行结果 */
 export interface StepRunResult {
   /** 当前结果对应的步骤 */
@@ -57,6 +70,8 @@ export interface StepRunResult {
   recoverActions?: RecoveryAction[];
   /** 额外元数据，用于编排判断或后续重试 */
   meta?: Record<string, unknown>;
+  /** 仍允许步骤继续，但需要向用户说明的结构化影响 */
+  notices?: UserNotice[];
 }
 
 /** 本地中间产物状态 */
