@@ -111,6 +111,7 @@ program
     const opts = command.optsWithGlobals();
     if (opts.verbose) logger.setLevel('debug');
     const result = await runShow(username, opts);
+    renderNotices(result.notices);
     if (result.status === 'failed') process.exitCode = 1;
   });
 

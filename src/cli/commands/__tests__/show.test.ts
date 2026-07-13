@@ -2,6 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AIAnalysisResult } from '@/core/ai';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
+const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
@@ -9,6 +10,7 @@ const mockLogger = vi.hoisted(() => ({
 
 vi.mock('@/infra/storage', () => ({
   readDataFile: mockedReadDataFile,
+  readAnalysisState: mockedReadAnalysisState,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -66,6 +68,7 @@ describe('runShow', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedReadAnalysisState.mockReturnValue({ status: 'missing' });
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -85,6 +88,41 @@ describe('runShow', () => {
     await runShow('testuser', { json: true });
 
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+  });
+
+  it('should return stale and partial notices from valid result provenance', async () => {
+    const result = createMockResult();
+    mockedReadDataFile.mockReturnValue(result);
+    mockedReadAnalysisState.mockReturnValue({
+      status: 'valid',
+      state: {
+        schemaVersion: 1,
+        currentResult: {
+          analysisFingerprint: 'a'.repeat(64),
+          stale: true,
+          basedOnPartial: true,
+        },
+      },
+    });
+
+    const outcome = await runShow('testuser', { json: true });
+
+    expect(outcome.notices?.map((notice) => notice.code)).toEqual([
+      'DATA_RESULT_STALE',
+      'DATA_SNAPSHOT_PARTIAL',
+    ]);
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+  });
+
+  it('should display legacy results without guessing provenance notices', async () => {
+    mockedReadDataFile.mockReturnValue(createMockResult());
+    mockedReadAnalysisState.mockReturnValue({ status: 'invalid' });
+
+    const outcome = await runShow('testuser', {});
+
+    expect(outcome.status).toBe('success');
+    expect(outcome.notices).toEqual([]);
   });
 
   it('should output brief format with --brief flag', async () => {

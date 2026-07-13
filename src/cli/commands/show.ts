@@ -6,12 +6,13 @@
  */
 
 import type { AIAnalysisResult, PsychologicalProfile } from '@/core/ai';
-import { readDataFile } from '@/infra/storage';
+import { readAnalysisState, readDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { COLORS } from '@/infra/logger/colors';
 import type { ShowCommandOptions } from '../types';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
+import { createResultStateNotices } from '../workflow/result-state-notices';
 
 // -- 格式化工具 --------------------------------------------------------------
 
@@ -123,7 +124,11 @@ function printFull(result: AIAnalysisResult): void {
 // -- 命令入口 ----------------------------------------------------------------
 
 /**
- * 执行 show 命令
+ * Display the latest persisted AI result.
+ *
+ * @param username - User whose result should be displayed.
+ * @param options - JSON, brief, and pipeline output options.
+ * @returns Structured show status with any result-provenance notices.
  */
 export async function runShow(
   username: string,
@@ -144,6 +149,12 @@ export async function runShow(
     };
   }
 
+  const analysisState = readAnalysisState(username);
+  const notices =
+    analysisState.status === 'valid'
+      ? createResultStateNotices(username, analysisState.state.currentResult)
+      : [];
+
   // --json: 原始 JSON 输出
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -152,6 +163,7 @@ export async function runShow(
       status: 'success',
       message: '已输出 JSON 结果',
       meta: { mode: 'json' },
+      notices,
     };
   }
 
@@ -163,6 +175,7 @@ export async function runShow(
       status: 'success',
       message: '已输出简略报告',
       meta: { mode: 'brief' },
+      notices,
     };
   }
 
@@ -173,5 +186,6 @@ export async function runShow(
     status: 'success',
     message: '已输出完整报告',
     meta: { mode: 'full' },
+    notices,
   };
 }

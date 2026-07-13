@@ -14,6 +14,7 @@ import {
   createDataFilesCleanedNotice,
   createDataRetentionEnabledNotice,
 } from '../data-retention-notices';
+import { createResultStateNotices } from '../result-state-notices';
 
 describe('notice rendering', () => {
   beforeEach(() => {
@@ -100,5 +101,26 @@ describe('data retention notices', () => {
     expect(notice?.code).toBe('DATA_FILES_CLEANED');
     expect(notice?.summary).toContain('raw.json、analyzed.json');
     expect(notice?.actions?.[0]?.content).toBe('v2er alice --force');
+  });
+});
+
+describe('result state notices', () => {
+  it('returns no notice without current-result provenance', () => {
+    expect(createResultStateNotices('alice')).toEqual([]);
+  });
+
+  it('keeps stale and partial effects as separate stable notices', () => {
+    const notices = createResultStateNotices('alice', {
+      analysisFingerprint: 'a'.repeat(64),
+      stale: true,
+      basedOnPartial: true,
+    });
+
+    expect(notices.map((notice) => notice.code)).toEqual([
+      'DATA_RESULT_STALE',
+      'DATA_SNAPSHOT_PARTIAL',
+    ]);
+    expect(notices[0]?.actions?.[0]?.content).toBe('v2er alice --force');
+    expect(notices[1]?.details?.[0]).toContain('不能解释为删除');
   });
 });

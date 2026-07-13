@@ -41,7 +41,11 @@ export interface RecoveryAction {
   description: string;
 }
 
-export type NoticeCode = 'DATA_RETENTION_ENABLED' | 'DATA_FILES_CLEANED';
+export type NoticeCode =
+  | 'DATA_RETENTION_ENABLED'
+  | 'DATA_FILES_CLEANED'
+  | 'DATA_RESULT_STALE'
+  | 'DATA_SNAPSHOT_PARTIAL';
 export type NoticeSeverity = 'info' | 'warning';
 
 /** A non-fatal user-facing effect that should remain machine-identifiable. */
