@@ -14,6 +14,7 @@
 
 // 主入口函数
 export { buildAnalyzerOutputFromSnapshot } from './builder';
+export { isAnalyzerOutput } from './validator';
 export { ANALYZER_OUTPUT_SCHEMA_VERSION } from './types';
 
 // 类型导出
