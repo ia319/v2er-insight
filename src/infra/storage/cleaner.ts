@@ -40,7 +40,7 @@ const CLEANABLE_TYPES: readonly CleanableDataFileType[] = ['raw', 'analyzed'];
  * 判断文件是否已过期
  * @param filePath - 文件路径
  * @param retentionDays - 保留天数
- * @returns true 表示文件已过期，应被清理
+ * @returns 文件的过期状态；元数据不可读时返回 metadata_unavailable
  */
 function getExpirationStatus(
   filePath: string,
