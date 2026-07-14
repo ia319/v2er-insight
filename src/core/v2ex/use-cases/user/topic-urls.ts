@@ -16,6 +16,8 @@ export interface UserTopicUrlsResult extends PagedResult<string> {
   isHidden: boolean;
   /** Number of links without a stable topic ID. */
   invalidTopicCount: number;
+  /** Number of collected topic URLs discarded after the list became hidden. */
+  discardedTopicCount: number;
 }
 
 /**
@@ -46,11 +48,13 @@ export async function getAllUserTopicUrls(
 
   // 将相对路径转换为完整 URL
   const fullUrls = result.data.map((path) => getTopicUrl(path));
+  const discardedTopicCount = isHidden ? fullUrls.length : 0;
 
   return {
     ...result,
-    data: fullUrls,
+    data: isHidden ? [] : fullUrls,
     isHidden,
     invalidTopicCount,
+    discardedTopicCount,
   };
 }

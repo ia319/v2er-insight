@@ -87,6 +87,7 @@ describe('getAllUserTopicUrls', () => {
 
     expect(result.data).toEqual([]);
     expect(result.isHidden).toBe(true);
+    expect(result.discardedTopicCount).toBe(0);
   });
 
   it('should preserve an explicitly visible empty topic list', async () => {
@@ -146,6 +147,46 @@ describe('getAllUserTopicUrls', () => {
     expect(result.data).toEqual(['https://www.v2ex.com/t/page1', 'https://www.v2ex.com/t/page2']);
     expect(result.totalPages).toBe(2);
     expect(result.fetchedPages).toBe(2);
+  });
+
+  it('should discard collected URLs when a later page reports hidden topics', async () => {
+    const page1: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>page1</html>',
+      statusCode: 200,
+    };
+    const page2: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=2',
+      success: true,
+      content: '<html>hidden</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValueOnce(mockGenerator([page1]));
+    mockFetch.mockReturnValueOnce(mockGenerator([page2]));
+    mockParseTopicsListPage
+      .mockReturnValueOnce({
+        isHidden: false,
+        invalidTopicCount: 0,
+        topicUrls: ['/t/123'],
+        currentPage: 1,
+        totalPages: 2,
+      })
+      .mockReturnValueOnce({
+        isHidden: true,
+        invalidTopicCount: 0,
+        topicUrls: [],
+        currentPage: 1,
+        totalPages: 1,
+      });
+
+    const result = await getAllUserTopicUrls('testuser');
+
+    expect(result.data).toEqual([]);
+    expect(result.isHidden).toBe(true);
+    expect(result.invalidTopicCount).toBe(0);
+    expect(result.discardedTopicCount).toBe(1);
   });
 
   it('should count failures when page fetch fails', async () => {

@@ -67,14 +67,15 @@ export async function getAllUserTopicsDetail(
 ): Promise<UserTopicsDetailResult> {
   // 获取用户所有帖子完整 URL
   const urlsResult = await getAllUserTopicUrls(username, options);
-  const totalTopics = urlsResult.data.length + urlsResult.invalidTopicCount;
+  const totalTopics =
+    urlsResult.data.length + urlsResult.invalidTopicCount + urlsResult.discardedTopicCount;
 
   if (urlsResult.isHidden || urlsResult.data.length === 0) {
     return {
       topics: [],
       totalTopics,
       fetchedTopics: 0,
-      failedTopics: urlsResult.invalidTopicCount,
+      failedTopics: urlsResult.invalidTopicCount + urlsResult.discardedTopicCount,
       failedPages: urlsResult.failedPages,
       invalidTopicCount: urlsResult.invalidTopicCount,
       isHidden: urlsResult.isHidden,

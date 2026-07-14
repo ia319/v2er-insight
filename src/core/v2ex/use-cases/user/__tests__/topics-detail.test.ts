@@ -140,6 +140,50 @@ describe('getAllUserTopicsDetail', () => {
     expect(result.isHidden).toBe(true);
   });
 
+  it('should count topics discarded when a later list page becomes hidden', async () => {
+    const page1: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>page1</html>',
+      statusCode: 200,
+    };
+    const page2: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=2',
+      success: true,
+      content: '<html>hidden</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValueOnce(mockGenerator([page1]));
+    mockFetch.mockReturnValueOnce(mockGenerator([page2]));
+    mockParseTopicsListPage
+      .mockReturnValueOnce({
+        isHidden: false,
+        invalidTopicCount: 0,
+        topicUrls: ['/t/123'],
+        currentPage: 1,
+        totalPages: 2,
+      })
+      .mockReturnValueOnce({
+        isHidden: true,
+        invalidTopicCount: 0,
+        topicUrls: [],
+        currentPage: 1,
+        totalPages: 1,
+      });
+
+    const result = await getAllUserTopicsDetail('testuser');
+
+    expect(result).toMatchObject({
+      topics: [],
+      totalTopics: 1,
+      fetchedTopics: 0,
+      failedTopics: 1,
+      invalidTopicCount: 0,
+      isHidden: true,
+    });
+  });
+
   it('should return empty when no topics', async () => {
     const listPage: FetchResult = {
       url: 'https://www.v2ex.com/member/testuser/topics?p=1',
