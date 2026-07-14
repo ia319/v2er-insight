@@ -85,6 +85,35 @@ describe('calculateUserOverview', () => {
     expect(result.lastActiveTime).toBe('unknown');
   });
 
+  it('should keep the topic-reply ratio unknown when topics are hidden', () => {
+    const data: RawUserData = {
+      profile: { joinDate: '2020-01-01', dailyRanking: null },
+      topics: [],
+      replies: [
+        {
+          replyId: '100001#reply1',
+          topicId: '100001',
+          replyNumber: 1,
+          topicTitle: 'Topic',
+          nodeName: 'node',
+          occurredAt: new Date('2024-01-03T02:00:00.000Z'),
+          content: 'reply',
+          isDirectReply: false,
+          replyTo: null,
+        },
+      ],
+      topicsStatus: 'complete',
+      repliesStatus: 'complete',
+      isTopicsHidden: true,
+    };
+
+    const result = calculateUserOverview(data);
+
+    expect(result.totalTopics).toBeNull();
+    expect(result.totalReplies).toBe(1);
+    expect(result.topicReplyRatio).toBeNull();
+  });
+
   it('should preserve unknown totals for unrequested collections', () => {
     const data: RawUserData = {
       profile: { joinDate: '2020-01-01', dailyRanking: null },

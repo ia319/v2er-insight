@@ -18,7 +18,7 @@ export function calculateUserOverview(data: RawUserData): UserOverview {
   const hasRequestedTopics = topicsStatus !== 'not_requested';
   const hasRequestedReplies = repliesStatus !== 'not_requested';
   const topicReplyRatio =
-    hasRequestedTopics && hasRequestedReplies && replies.length > 0
+    !isTopicsHidden && hasRequestedTopics && hasRequestedReplies && replies.length > 0
       ? topics.length / replies.length
       : null;
 
