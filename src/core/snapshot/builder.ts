@@ -183,13 +183,14 @@ function buildTopicsCollection(
   const items = deduplicated.records.sort((left, right) =>
     compareNumericIds(left.topicId, right.topicId),
   );
-  const failedCount = Math.max(result.failedTopics, result.totalTopics - items.length);
+  const failedCount = Math.max(
+    result.failedTopics,
+    result.totalTopics - items.length,
+    result.invalidTopicCount,
+  );
   const totalExpected = result.failedPages > 0 ? null : result.totalTopics;
   const isPartial =
-    result.failedPages > 0 ||
-    failedCount > 0 ||
-    result.invalidTopicCount > 0 ||
-    deduplicated.duplicateConflictCount > 0;
+    result.failedPages > 0 || failedCount > 0 || deduplicated.duplicateConflictCount > 0;
 
   return {
     status: isPartial ? 'partial' : 'complete',
@@ -271,15 +272,13 @@ function buildRepliesCollection(
     return left.replyNumber - right.replyNumber || compareStrings(left.replyId, right.replyId);
   });
   const identityFailureCount = Math.max(result.invalidReplyCount, detectedIdentityFailures);
-  const failedCount =
-    result.totalReplies === null
-      ? identityFailureCount
-      : Math.max(result.totalReplies - items.length, identityFailureCount);
+  const countDifference =
+    result.totalReplies === null ? 0 : Math.abs(result.totalReplies - items.length);
+  const failedCount = Math.max(countDifference, identityFailureCount);
   const isPartial =
     result.totalReplies === null ||
     result.failedPages > 0 ||
     failedCount > 0 ||
-    identityFailureCount > 0 ||
     deduplicated.duplicateConflictCount > 0;
 
   return {

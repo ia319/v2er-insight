@@ -8,6 +8,7 @@ import type {
   V2exTopicDetail,
 } from '@/core/v2ex';
 import { buildRawSnapshot } from '../builder';
+import { isRawSnapshotV2 } from '../validator';
 
 const profile: UserProfileParseResult = {
   joinDate: '2020-01-02 03:04:05 +08:00',
@@ -236,6 +237,26 @@ describe('buildRawSnapshot', () => {
     });
   });
 
+  it('keeps topic failures at least as large as identity failures', () => {
+    const snapshot = buildSnapshot(
+      createTopicsResult({
+        totalTopics: 1,
+        fetchedTopics: 1,
+        failedTopics: 0,
+        invalidTopicCount: 2,
+      }),
+    );
+
+    expect(snapshot.topics).toMatchObject({
+      status: 'partial',
+      totalExpected: 1,
+      fetchedCount: 1,
+      failedCount: 2,
+      identityFailureCount: 2,
+    });
+    expect(isRawSnapshotV2(snapshot)).toBe(true);
+  });
+
   it('filters invalid reply identities and reports identity failures once', () => {
     const invalidReply = createReply({ replyId: null, topicId: null, replyNumber: null });
     const snapshot = buildSnapshot(
@@ -269,6 +290,28 @@ describe('buildRawSnapshot', () => {
       fetchedCount: 1,
       failedCount: 0,
     });
+  });
+
+  it('marks replies partial when fetched items exceed the declared total', () => {
+    const snapshot = buildSnapshot(
+      createTopicsResult(),
+      createRepliesResult({
+        data: [
+          createReply(),
+          createReply({ replyId: '101#reply1', topicId: '101', replyNumber: 1 }),
+        ],
+        totalReplies: 1,
+      }),
+    );
+
+    expect(snapshot.replies).toMatchObject({
+      status: 'partial',
+      totalExpected: 1,
+      fetchedCount: 2,
+      failedCount: 1,
+      identityFailureCount: 0,
+    });
+    expect(isRawSnapshotV2(snapshot)).toBe(true);
   });
 
   it('preserves reply page failures independently from missing item counts', () => {
