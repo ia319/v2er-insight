@@ -33,6 +33,11 @@ describe('notice rendering', () => {
           content: 'v2er alice --force',
           description: '重新生成源数据',
         },
+        {
+          type: 'instruction',
+          content: '确认外部会话仍保留完整数据',
+          description: '避免把已清理的本地文件解释为数据缺失',
+        },
       ],
       documentation: 'docs/data-lifecycle.md',
     };
@@ -45,6 +50,10 @@ describe('notice rendering', () => {
       '  raw.json 和 analyzed.json 可能被删除',
     );
     expect(mockLogger.diagnostic).toHaveBeenCalledWith('warn', '  恢复命令: v2er alice --force');
+    expect(mockLogger.diagnostic).toHaveBeenCalledWith(
+      'warn',
+      '  恢复操作: 确认外部会话仍保留完整数据',
+    );
     expect(mockLogger.diagnostic).toHaveBeenCalledWith('warn', '  文档: docs/data-lifecycle.md');
   });
 
