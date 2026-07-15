@@ -65,6 +65,13 @@ const CONFIG_PATHS: Record<string, ConfigPathMeta> = {
 const CONFIG_GROUPS = ['ai', 'fetch', 'analyzer', 'data', 'log'] as const;
 type ConfigGroup = (typeof CONFIG_GROUPS)[number];
 
+type DataRetentionStatus =
+  | { enabled: false }
+  | {
+      enabled: true;
+      retentionDays: number;
+    };
+
 // -- 工具函数 -----------------------------------------------------------------
 
 /**
@@ -92,16 +99,27 @@ function formatConfigForDisplay(config: V2erConfig): V2erConfig {
   return display;
 }
 
-function renderRetentionStatus(config: V2erConfig): void {
+function resolveDataRetentionStatus(config: V2erConfig): DataRetentionStatus {
   const keepRaw = config.data?.keepRaw ?? DEFAULT_CONFIG.data.keepRaw;
   if (keepRaw) {
+    return { enabled: false };
+  }
+
+  return {
+    enabled: true,
+    retentionDays: Math.max(0, config.data?.rawRetention ?? DEFAULT_CONFIG.data.rawRetention),
+  };
+}
+
+function renderRetentionStatus(config: V2erConfig): void {
+  const retention = resolveDataRetentionStatus(config);
+  if (!retention.enabled) {
     logger.info('自动清理: 未启用');
     logger.diagnostic('info', '文档: docs/data-lifecycle.md');
     return;
   }
 
-  const retentionDays = Math.max(0, config.data?.rawRetention ?? DEFAULT_CONFIG.data.rawRetention);
-  renderNotice(createDataRetentionEnabledNotice(retentionDays));
+  renderNotice(createDataRetentionEnabledNotice(retention.retentionDays));
 }
 
 /**
@@ -283,13 +301,9 @@ export function configSet(dotPath: string, rawValue: string): void {
   logger.info(`Set ${dotPath} = ${displayValue}`);
 
   if (dotPath === 'data.keepRaw' || dotPath === 'data.rawRetention') {
-    const keepRaw = config.data?.keepRaw ?? DEFAULT_CONFIG.data.keepRaw;
-    if (!keepRaw) {
-      const retentionDays = Math.max(
-        0,
-        config.data?.rawRetention ?? DEFAULT_CONFIG.data.rawRetention,
-      );
-      renderNotice(createDataRetentionEnabledNotice(retentionDays));
+    const retention = resolveDataRetentionStatus(config);
+    if (retention.enabled) {
+      renderNotice(createDataRetentionEnabledNotice(retention.retentionDays));
     }
   }
 }
