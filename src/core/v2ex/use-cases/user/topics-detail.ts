@@ -52,6 +52,32 @@ function parseIdentifiedTopic(sourceUrl: string, html: string): V2exTopicDetail 
 }
 
 /**
+ * Contain parser failures so one malformed topic cannot abort the batch.
+ *
+ * @param topicsById - Successfully parsed topics keyed by stable identity.
+ * @param sourceUrl - URL returned by the topic list use case.
+ * @param html - Topic page HTML.
+ * @returns Whether the topic was parsed and retained.
+ */
+function tryStoreIdentifiedTopic(
+  topicsById: Map<string, V2exTopicDetail>,
+  sourceUrl: string,
+  html: string,
+): boolean {
+  try {
+    const topic = parseIdentifiedTopic(sourceUrl, html);
+    if (!topic) {
+      return false;
+    }
+
+    topicsById.set(topic.topicId, topic);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 获取用户所有发帖的完整详情
  *
  * 第一轮批量抓取所有帖子，收集失败项（HTTP 失败或解析失败）；
@@ -93,19 +119,11 @@ export async function getAllUserTopicsDetail(
 
   // 第一轮：批量抓取并解析帖子详情
   for await (const result of fetcher.fetch(urlsResult.data, fetchOptions, options?.events)) {
-    if (result.success && result.content) {
-      try {
-        const topic = parseIdentifiedTopic(result.url, result.content);
-        if (!topic) {
-          failedUrls.push(result.url);
-          continue;
-        }
-        topicsById.set(topic.topicId, topic);
-      } catch {
-        // 解析失败，记录 URL 用于二次重试
-        failedUrls.push(result.url);
-      }
-    } else {
+    if (
+      !result.success ||
+      !result.content ||
+      !tryStoreIdentifiedTopic(topicsById, result.url, result.content)
+    ) {
       failedUrls.push(result.url);
     }
   }
@@ -114,17 +132,12 @@ export async function getAllUserTopicsDetail(
   if (failedUrls.length > 0) {
     const recoveredUrls = new Set<string>();
     for await (const result of fetcher.fetch(failedUrls, fetchOptions, options?.events)) {
-      if (result.success && result.content) {
-        try {
-          const topic = parseIdentifiedTopic(result.url, result.content);
-          if (!topic) {
-            continue;
-          }
-          topicsById.set(topic.topicId, topic);
-          recoveredUrls.add(result.url);
-        } catch {
-          // 二次重试解析仍失败
-        }
+      if (
+        result.success &&
+        result.content &&
+        tryStoreIdentifiedTopic(topicsById, result.url, result.content)
+      ) {
+        recoveredUrls.add(result.url);
       }
     }
     // 最终失败数 = 原失败列表 - 已恢复
