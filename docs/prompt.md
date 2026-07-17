@@ -7,7 +7,8 @@ a technical community) and generate a comprehensive, objective user profile in *
 
 ## Input Data Context
 
-You will receive a JSON object structured as `AnalyzerOutput`. This structure contains three main parts:
+You will receive a JSON object structured as `AnalyzerOutput`. This structure contains version and data quality
+metadata plus three analysis parts:
 
 1. **UserOverview**: Global user metrics.
 2. **Summary (PeriodsSummary)**: Statistical summary of detected activity periods.
@@ -28,9 +29,9 @@ You will receive a JSON object structured as `AnalyzerOutput`. This structure co
 interface UserOverview {
   joinDate: string; // Account creation date
   lastActiveTime: string; // Last activity timestamp
-  topicReplyRatio: number | null; // Topic/Reply ratio, null if topics hidden
-  totalTopics: number | null; // Total topics count, null if topics hidden or 0
-  totalReplies: number; // Total replies count
+  topicReplyRatio: number | null; // null when unavailable or no replies exist
+  totalTopics: number | null; // null when topics are hidden or not requested
+  totalReplies: number | null; // null when replies were not requested
   isTopicsHidden: boolean; // Whether topic list is hidden by user
   dailyRanking: number | null; // Daily activity ranking
 }
@@ -52,7 +53,7 @@ interface SinglePeriodStats {
   replyCount: number;
   avgReplyLength: number; // Effort: Average reply length (chars)
   directReplyRatio: number; // Interaction style: Direct reply ratio
-  avgRepliedTopicHeat: number; // Interest: Average heat of replied topics
+  avgReplyPosition: number; // Average reply floor position, not topic heat
   replyWeekdayDistribution: Record<string, number> | null; // Weekly distribution
   replyNodeDistribution: Record<string, number>; // Top nodes for replies
 }
@@ -93,8 +94,23 @@ interface PeriodContentChunk {
   replies: ContentReply[];
 }
 
+type SnapshotStatus = 'complete' | 'partial' | 'not_requested';
+
+interface SnapshotQuality {
+  status: SnapshotStatus;
+  totalExpected: number | null;
+  fetchedCount: number;
+  failedCount: number;
+}
+
 /** Root Analyzer Output Structure */
 interface AnalyzerOutput {
+  schemaVersion: 2;
+  dataQuality: {
+    capturedAt: string;
+    topics: SnapshotQuality;
+    replies: SnapshotQuality;
+  };
   userOverview: UserOverview;
   summary: PeriodsSummary;
   contents: Array<PeriodContent | PeriodContentChunk>;
@@ -102,6 +118,13 @@ interface AnalyzerOutput {
 ```
 
 ### Data Structure Logic
+
+Interpret `dataQuality` before drawing conclusions:
+
+- `complete`: Treat the visible collection as the complete captured fact set.
+- `partial`: Analyze visible records, lower confidence, and never infer deletion from missing records.
+- `not_requested`: Do not infer absence, deletion, or inactivity from the empty collection.
+- Produce one complete analysis from all visible data even when a collection is incomplete.
 
 The `contents` array contains elements of either `PeriodContent` (complete) or `PeriodContentChunk` (partial).
 
@@ -120,7 +143,7 @@ Map the provided metrics to the following psychological and behavioral dimension
 | :--------------------------------------------- | :----------------------------------- | :------------------------------------------------------------------------- |
 | `topicInteractionRatio` & `avgTopicReplyCount` | **Social: Content Appeal**           | High = Influential/Engaging; Low = Self-expression/Niche.                  |
 | `avgTopicLifecycleDays`                        | **Social: Discussion Depth**         | Long = Deep discussions; Short = Q&A or News.                              |
-| `avgRepliedTopicHeat`                          | **Behavioral: Heat Sensitivity**     | High = Trend Follower (Eating Melons); Low = Independent/Niche.            |
+| `replyNodeDistribution` & reply content        | **Behavioral: Heat Sensitivity**     | Infer trend focus from recurring nodes and content themes.                 |
 | `topicNodeDistribution`                        | **Professional: Focus**              | Identify tech stack and expertise areas.                                   |
 | `replyWeekdayDistribution`                     | **Behavioral: Work Pattern**         | Weekday high = Professional/Work-related; Weekend high = Hobbyist/Student. |
 | `avgReplyLength`                               | **Psychological: Conscientiousness** | Long = Serious/Detail-oriented; Short = Casual/Quick.                      |

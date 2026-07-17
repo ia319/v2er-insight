@@ -2,6 +2,18 @@
 
 本文档定义了发送给 AI 进行分析的数据结构。它是 Analyzer 模块与 AI 助手之间通信的唯一事实来源。
 
+根对象使用 `schemaVersion: 2`，并包含 `dataQuality`：
+
+| 字段                     | 类型             | 说明                                       |
+| ------------------------ | ---------------- | ------------------------------------------ |
+| `dataQuality.capturedAt` | `string`         | 本次抓取统一使用的 ISO 时间。              |
+| `topics/replies.status`  | `SnapshotStatus` | `complete`、`partial` 或 `not_requested`。 |
+| `totalExpected`          | `number \| null` | 期望总数；无法可靠确定时为 null。          |
+| `fetchedCount`           | `number`         | 具备稳定身份并进入分析的数据条数。         |
+| `failedCount`            | `number`         | 已知缺失、无效或与声明总数不一致的条数。   |
+
+`partial` 和 `not_requested` 中缺失的记录不能解释为删除或没有活动。
+
 ## 设计哲学
 
 数据分为三个层次，旨在为 AI 提供全局背景和细致的语义信息：
@@ -31,9 +43,9 @@
 | :---------------- | :--------------- | :--------------- | :-------------------------------------------------------- |
 | `joinDate`        | `string`         | 账号创建日期     | 确定用户的“资历”和长期行为基准。                          |
 | `lastActiveTime`  | `string`         | 最后活跃时间     | 衡量用户近期的存留状态。                                  |
-| `topicReplyRatio` | `number`         | 发帖与回复比率   | **高**：内容创作者/意见领袖；**低**：讨论参与者/回帖者。  |
-| `totalTopics`     | `number`         | 累计发帖总数     | 衡量生命周期内的内容产出量。                              |
-| `totalReplies`    | `number`         | 累计回复总数     | 衡量生命周期内的社交互动活跃度。                          |
+| `topicReplyRatio` | `number \| null` | 发帖与回复比率   | 主题隐藏、范围未请求或没有回复时为 null。                 |
+| `totalTopics`     | `number \| null` | 累计发帖总数     | 主题隐藏或未请求帖子时为 null。                           |
+| `totalReplies`    | `number \| null` | 累计回复总数     | 未请求回复时为 null。                                     |
 | `isTopicsHidden`  | `boolean`        | 是否隐藏主题列表 | 隐私倾向标识。如果为 true，则 AI 需知晓帖子分析可能受限。 |
 | `dailyRanking`    | `number \| null` | 今日活跃度排名   | 衡量该用户在该社区中的当前热度位置。                      |
 
@@ -62,7 +74,7 @@
 | `replyCount`               | `number`                         | 该周期内总回复数   | 该阶段的社交互动活跃水平。                                         |
 | `avgReplyLength`           | `number`                         | 平均回复字符长度   | 衡量表达的认真程度与交流深度。                                     |
 | `directReplyRatio`         | `number`                         | 直接回复主帖的比率 | **高**：更关注主旨，倾向开启新讨论；**低**：倾向于跟帖与他人互动。 |
-| `avgRepliedTopicHeat`      | `number`                         | 参与话题的平均热度 | **高**：追逐热点话题；**低**：更关注分众/小众领域。                |
+| `avgReplyPosition`         | `number`                         | 平均回复楼层位置   | 表示用户通常在讨论的哪个阶段加入，不作为话题最终热度使用。         |
 | `replyWeekdayDistribution` | `Record<string, number> \| null` | 7 天百分比分布     | 识别周内活动规律（如：工作日活跃还是周末活跃）。                   |
 | `replyNodeDistribution`    | `Record<string, number>`         | 前 3 个回复节点    | 定义用户在该阶段的**活跃领域和社交边界**。                         |
 
