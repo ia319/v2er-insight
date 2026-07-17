@@ -41,6 +41,7 @@ root
 ├── vitest-env.d.ts           # Vitest global type declarations
 ├── docs/                     # Documentation & Specifications
 │   ├── prompt.md             # AI system prompt template (copy)
+│   ├── data-lifecycle.md     # Source-data retention, cleanup, and recovery
 │   ├── analyzer-output/      # [Analyzer -> AI] Input data schema
 │   │   ├── output-schema.md      # Field-level specification
 │   │   └── output-types.ts      # Reference type definitions
@@ -66,6 +67,9 @@ root
 │   │   │   ├── types.ts      # StepRunResult, WorkflowStep, RunOutcome
 │   │   │   ├── state.ts      # detectWorkflowState, buildExecutionPlan
 │   │   │   ├── recovery.ts   # ReasonCode -> RecoveryAction mapping
+│   │   │   ├── notices.ts    # Structured user-notice rendering
+│   │   │   ├── data-retention-notices.ts # Cleanup notice builders
+│   │   │   ├── result-state-notices.ts # Stale and partial result warnings
 │   │   │   └── orchestrator.ts # runWorkflow: Step dispatch & state machine
 │   │
 │   ├── config/               # [Shared] Configuration management
@@ -106,16 +110,36 @@ root
 │   │   │       └── utils/        # Shared utilities
 │   │   │           └── page-orchestrator.ts # Generic pagination logic
 │   │   │
-│   │   └── analyzer/         # [Complete] Data analysis for AI input
-│   │       ├── index.ts          # Public API (buildAnalyzerOutput)
-│   │       ├── builder.ts        # Output builder
-│   │       ├── config.ts         # Analyzer constants
-│   │       ├── types/            # Type definitions
-│   │       ├── utils/            # Utility functions (date-parser, stats)
-│   │       ├── periods/          # Active period detection
-│   │       ├── stats/            # Statistics calculation
-│   │       └── content/          # Content processing
+│   │   ├── snapshot/         # [Complete] Versioned raw snapshot contract
+│   │   │   ├── index.ts          # Public API exports
+│   │   │   ├── types.ts          # RawSnapshotV2 and collection types
+│   │   │   ├── builder.ts        # Fetch result to snapshot builder
+│   │   │   ├── reply-time.ts     # V2EX reply time normalization
+│   │   │   └── __tests__/        # Snapshot contract tests
+│   │   │
+│   │   ├── analyzer/         # [Complete] Data analysis for AI input
+│   │   │   ├── index.ts          # Public Analyzer APIs
+│   │   │   ├── builder.ts        # Snapshot and internal output builders
+│   │   │   ├── validator.ts      # Persisted AnalyzerOutput V2 validation
+│   │   │   ├── adapters/         # Raw snapshot to Analyzer input mapping
+│   │   │   ├── types/            # Type definitions
+│   │   │   ├── utils/            # Utility functions (date-parser, stats)
+│   │   │   ├── periods/          # Active period detection
+│   │   │   ├── stats/            # Statistics calculation
+│   │   │   └── content/          # Content processing
 │   │
+│   │   ├── provenance/       # [Domain] Canonical hashing and provenance identities
+│   │   │   ├── index.ts          # Public provenance exports
+│   │   │   ├── canonical-json.ts # Recursive key ordering and SHA-256 hashing
+│   │   │   ├── semantic-hash.ts  # Raw Snapshot semantic identity
+│   │   │   ├── analysis-hash.ts  # Analysis config, fingerprint, and payload hashes
+│   │   │   ├── provider-state-key.ts # Stable provider delivery target identity
+│   │   │   ├── ai-delivery.ts    # Analyzed verification and delivery state transitions
+│   │   │   ├── state-types.ts     # AnalysisStateV1 durable state contract
+│   │   │   ├── state-validator.ts # Runtime state boundary validation
+│   │   │   ├── state-transitions.ts # Pure raw/analyzed provenance transitions
+│   │   │   └── __tests__/        # Canonicalization and hash contract tests
+│   │   │
 │   │   └── ai/              # [Complete] AI integration module
 │   │       ├── index.ts         # Public API exports
 │   │       ├── config.ts        # AI model constants
@@ -154,7 +178,8 @@ root
 │       │   ├── types.ts      # DataFileType, WriteOptions
 │       │   ├── paths.ts      # User data dir/file path resolution
 │       │   ├── reader.ts     # JSON file reading
-│       │   ├── writer.ts     # JSON file writing (auto-mkdir)
+│       │   ├── writer.ts     # Atomic JSON replacement (auto-mkdir, 0600 temp file)
+│       │   ├── analysis-state.ts # Validated sidecar reads and protected updates
 │       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
 │           ├── index.ts      # Public API exports
@@ -179,9 +204,9 @@ root
 
 **Types** (`types/`):
 
-- `V2exReply`: Single reply data structure
-- `V2exTopicDetail`: Topic detail data structure
-- `*ParseResult`: Page parse results with pagination
+- `V2exReply`: Reply data with nullable `replyId`, `topicId`, and `replyNumber` parsed from the source anchor
+- `V2exTopicDetail`: Topic detail with stable `topicId` and canonical `sourceUrl`
+- `*ParseResult`: Page parse results with pagination and explicit topic visibility/identity diagnostics
 
 **URL Generators** (`urls/`):
 
@@ -189,6 +214,8 @@ root
 - `getUserRepliesUrl(username, page?)` → User replies list
 - `getUserTopicsUrl(username, page?)` → User topics list
 - `getTopicUrl(topicIdOrPath)` → Single topic page (supports ID or path; throws on invalid)
+- `extractTopicIdFromPath(path)` → Stable topic ID from a relative or absolute topic URL
+- `extractReplyIdentityFromPath(path)` → Stable topic ID, reply number, and reply ID from a reply URL
 
 **Parsers** (`parsers/`):
 
@@ -201,9 +228,11 @@ root
 
 - **Parsers Breakdown**:
   - `src/core/v2ex/parsers/replies-page.ts`: Handles nested reply content (traverses `.inner` wrappers).
+  - `src/core/v2ex/parsers/topics-list-page.ts`: Deduplicates links by topic ID and reports invalid identity counts.
   - `src/core/v2ex/parsers/utils/pagination.ts`: Robust pagination parser using `.first()` to handle dual pagination bars.
 - **Date Handling**:
-  - `src/core/analyzer/utils/date-parser.ts`: Supports V2EX's legacy Chinese date formats (YYYY年M月D日) alongside standard formats.
+  - `src/core/snapshot/reply-time.ts`: Normalizes relative and Chinese calendar reply times against one snapshot `capturedAt` in the V2EX `+08:00` timezone.
+  - `src/core/analyzer/utils/date-parser.ts`: Parses absolute topic timestamps; reply statistics consume normalized snapshot occurrences.
   - `src/core/analyzer/utils/stats.ts`: Implements `weekdayDistribution` returning full 7-day stats (sorted by frequency).
 
 ### 3. Use Case Layer (Complete)
@@ -218,9 +247,11 @@ root
 **User Use Cases** (`user/`):
 
 - `getUserProfile(username, options?)` → User profile or null
-- `getAllUserReplies(username, options?)` → PagedResult<V2exReply>
-- `getAllUserTopicUrls(username, options?)` → Full URLs + isHidden flag
-- `getAllUserTopicsDetail(username, options?)` → All topic contents
+- `getAllUserReplies(username, options?)` → `UserRepliesResult` with nullable declared total and invalid identity count
+- `getAllUserTopicUrls(username, options?)` → Full URLs, hidden state, invalid identities, and hidden-state discard count
+- `getAllUserTopicsDetail(username, options?)` → Identified topic contents with page and identity completeness metadata
+
+If any fetched list page reports hidden topics, discard topic URLs collected from earlier pages. Count those discarded URLs as failed topics while keeping `invalidTopicCount` limited to links without stable identities.
 
 **Utils** (`utils/`):
 
@@ -229,7 +260,55 @@ root
   - Triggers `onError` callback for both fetch and parse failures
   - Second-pass retry: collects failed pages and retries once after first round
 
-### 4. CLI Module (Complete)
+### 4. Raw Snapshot Module (Complete)
+
+- **Role**: Build the versioned boundary between V2EX fetch results and persisted analysis input.
+- **Location**: `src/core/snapshot/`
+
+**Public API**:
+
+- `buildRawSnapshot(input)` → Returns `RawSnapshotV2`
+- `isRawSnapshotV2(value)` → Validates parsed raw JSON and narrows it to `RawSnapshotV2`
+- `RAW_SNAPSHOT_SCHEMA_VERSION` → Literal schema version `2`
+
+**Data Contract**:
+
+- Record `username`, one ISO `capturedAt`, and profile data at the snapshot root.
+- Represent topics and replies as `complete`, `partial`, or `not_requested` collections.
+- Record expected, fetched, failed, failed-page, identity-failure, and duplicate-conflict counts per collection.
+- Keep `failedCount` at least as large as `identityFailureCount`.
+- Mark declared and fetched count mismatches as `partial`; record the absolute reply-count difference in `failedCount`.
+- Preserve explicit topic visibility independently from an empty topic collection.
+- Deduplicate stable topic and reply identities with a fixed-field selection key that is independent of input order.
+- Mark collections `partial` when duplicate identities contain conflicting semantic fields, and count each affected identity once.
+- Ignore reply display-time drift when classifying duplicate content conflicts while still selecting one complete record deterministically.
+- Sort topics by numeric topic ID and replies by topic ID, reply number, and reply ID.
+- Exclude replies with missing or internally inconsistent stable identities.
+- Validate schema, canonical identities, collection invariants, and unique IDs at the storage boundary.
+- Preserve reply display time and normalize supported relative or Chinese calendar values against the shared `capturedAt`.
+- Record normalized reply time precision as `minute`, `hour`, or `day`; retain `null` with `unknown` for unsupported or invalid values.
+- Interpret calendar dates in the V2EX `+08:00` timezone independently from the runtime machine timezone.
+
+**Provenance Hashing** (`src/core/provenance/`):
+
+- Use `canonicalJsonStringify(value)` to serialize plain JSON values with recursively sorted object keys.
+- Use `computeSemanticDataHash(snapshot)` to calculate the SHA-256 identity of stable Snapshot facts.
+- Include stable entities, content, interaction counts, visibility, and collection completeness diagnostics.
+- Exclude capture time, daily ranking, item order, reply display time, and normalized reply-time drift.
+- Use `computeAnalysisConfigHash(config)` to hash inactivity and TopN settings while excluding content chunk limits.
+- Use `computeAnalysisFingerprint(input)` to combine semantic data identity, Analyzer schema version, and semantic configuration identity.
+- Use `computePayloadHash(output)` to hash the complete Analyzer output for provenance and turn diagnostics.
+- Use `computeProviderStateKey(input)` to isolate delivery state by provider, model, system prompt, thinking level, and logical session.
+- Use `checkAnalyzedProvenance(state, output, config)` to verify raw identity, Analyzer schema, semantic configuration, payload identity, and capture quality before delivery.
+- Use `hasProviderReceivedAnalysis(state, providerKey, fingerprint)` for provider-target duplicate detection.
+- Use `recordProviderDelivery(state, input)` only after result persistence; it records provider hashes and a fresh current result with `change` or `resend` delivery mode.
+- Use `AnalysisStateV1` to represent raw identity, analyzed identity, current-result freshness, and provider delivery hashes.
+- Validate parsed state with `isAnalysisStateV1(value)` before workflow code consumes nested provenance fields.
+- Use `recordRawProvenance(state, snapshot)` to derive semantic identity, treat any partial or unrequested collection as a partial capture, and mark the current result stale when raw identity diverges from its analyzed source.
+- Use `recordAnalyzedProvenance(state, snapshot, output, config)` to record Analyzer hashes and set result freshness by analysis-fingerprint equality.
+- Reject unsupported, non-finite, non-plain, and circular values instead of producing an ambiguous digest.
+
+### 5. CLI Module (Complete)
 
 - **Role**: Command-line interface for user interaction and analysis pipeline.
 - **Entry**: `src/cli/index.ts` (Subcommand architecture).
@@ -237,8 +316,8 @@ root
 **Commands**:
 
 - `v2er <username>` → One-click pipeline (fetch → analyze → ai → show)
-- `v2er fetch <username>` → Fetch and save raw user data (raw.json)
-- `v2er analyze <username>` → Run statistics on raw data (analyzed.json)
+- `v2er fetch <username>` → Fetch and save Raw Snapshot V2 with collection diagnostics (raw.json)
+- `v2er analyze <username>` → Validate Raw Snapshot V2 and generate statistics (analyzed.json)
 - `v2er ai <username>` → Generate user profile via Gemini (result.json)
 - `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
 - `v2er config show [group]` → View config (with apiKey masking)
@@ -251,7 +330,10 @@ root
 - `--force` → Force re-fetch from scratch
 - `--model [name]` → Specify AI model (optional value)
 - `--thinking-level [level]` → Specify thinking level (optional value)
+- `--resend` → Send unchanged analyzed data again
 - `-v, --verbose` → Show debug output
+
+The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 
 **Shared Logic** (`utils.ts` and `utils/error.ts`):
 
@@ -259,7 +341,43 @@ root
 - `logFetchError(result)`: Unified error formatting with indentation alignment.
 - `extractErrorDetails(error)`: Normalizes error message/raw detail extraction for CLI command and workflow error paths.
 
-### 5. Config Module (Complete)
+**User Notices** (`workflow/notices.ts` and `workflow/types.ts`):
+
+- `UserNotice` carries a stable `NoticeCode`, severity, impact details, recovery actions, and an optional documentation path.
+- `StepRunResult.notices` keeps non-fatal effects separate from failure `ReasonCode` values.
+- `renderNotice()` and `renderNotices()` render stable notice codes and recovery details through stderr diagnostics.
+- Current notice codes are `DATA_RETENTION_ENABLED`, `DATA_FILES_CLEANED`, `DATA_RESULT_STALE`, and `DATA_SNAPSHOT_PARTIAL`.
+- Config changes and `config show data` emit `DATA_RETENTION_ENABLED` only while cleanup is enabled.
+- Successful AI cleanup emits `DATA_FILES_CLEANED` only when source files were actually removed; subcommands and pipelines render the returned notice once.
+
+**Fetch Provenance**:
+
+- Keep cache-hit fetches unchanged and skip provenance mutation with the cached command result.
+- Stop before network access when `analysis-state.json` is invalid or unreadable.
+- Atomically persist `raw.json` before recording its semantic hash and capture status in `analysis-state.json`.
+- Return `PROVENANCE_UPDATE_FAILED` when raw persistence succeeds but the sidecar cannot be advanced.
+
+**Analyze Provenance**:
+
+- Reject Raw Snapshot V2 files without raw provenance as legacy analysis input.
+- Recompute semantic hash and capture status before analysis and reject either mismatch before writing `analyzed.json`.
+- Atomically persist `analyzed.json` before recording config hash, analysis fingerprint, and payload hash.
+- Recheck raw provenance inside the protected state update so concurrent source changes cannot advance analyzed state.
+- Mark the current result fresh only when its analysis fingerprint equals the newly recorded Analyzer fingerprint.
+
+**AI Delivery Provenance**:
+
+- Validate persisted `AnalyzerOutput V2` and its raw, schema, config, fingerprint, payload, and capture-quality provenance before provider access.
+- Derive Gemini delivery identity from provider, model, system prompt, thinking level, and the default logical session.
+- Reuse an unchanged delivery only when the same target received the fingerprint and a matching fresh `result.json` remains available.
+- Let `--resend` bypass reuse and record `currentResult.deliveryMode = 'resend'`.
+- Warn before sending analysis based on partial capture data.
+- Persist `result.json` before updating provider last-sent state, and leave last-sent unchanged after provider, parse, or result-write failure.
+- Recheck analyzed provenance during the protected state update before cleaning intermediate files.
+- `runShow()` returns stale and partial notices from valid current-result provenance while continuing to display legacy results without sidecar assumptions.
+- JSON report content remains on stdout; command and workflow entrypoints render result notices on stderr.
+
+### 6. Config Module (Complete)
 
 - **Role**: Persistent configuration management.
 - **Config path**: `~/.v2er-insight/config.json`
@@ -297,37 +415,55 @@ root
 | `data.rawRetention`             | number  |                                       |
 | `log.level`                     | enum    | `error` / `warn` / `info` / `debug`   |
 
-### 6. Analyzer Module (Complete)
+### 7. Analyzer Module (Complete)
 
-- **Role**: Process raw user data into structured AI input (located in `src/core/analyzer`).
+- **Role**: Adapt validated raw snapshots into structured AI input (located in `src/core/analyzer`).
 
 **Public API**:
 
-- `buildAnalyzerOutput(rawData)` → Returns `AnalyzerOutput`
+- `buildAnalyzerOutputFromSnapshot(snapshot)` → Consumes normalized snapshot reply occurrences and returns `AnalyzerOutput`
+- `isAnalyzerOutput(value)` → Validates persisted AnalyzerOutput V2 before provider use
+- `ANALYZER_OUTPUT_SCHEMA_VERSION` → Literal Analyzer output version `2`
   - `userOverview` → User overview statistics
   - `summary` → All periods statistics summary
   - `contents` → Chunked content for AI consumption
 
 **Sub-modules Hierarchy**:
 
+- **Snapshot Adapter** (`adapters/snapshot.ts`): Maps versioned topic/reply fields and collection status into the Analyzer input model, converting canonical reply occurrence strings to `Date` values.
 - **Content Processing** (`content/`):
   - `transformer.ts`: Converts raw V2EX entities to `ContentTopic`/`ContentReply`.
   - `chunker.ts`: Implements smart content splitting based on token/item counts.
 - **Statistics** (`stats/`):
   - `user-overview.ts`: Aggregates global user metrics.
   - `topic-stats.ts`: Analyzes topic engagement and lifecycle.
-  - `reply-stats.ts`: Calculates reply frequency, node distribution, and full 7-day weekday distribution.
+  - `reply-stats.ts`: Calculates reply frequency, average reply position, node distribution, and full 7-day weekday distribution from normalized reply occurrences.
+  - `utils/stats.ts`: Resolves TopN count ties by stable key and stores counts in a `Map`.
 - **Period Detection** (`periods/`):
   - `detector.ts`: Identifies active periods based on 60-day inactivity threshold.
   - `splitter.ts`: Segments data into identified periods.
 
-**Configuration** (`config.ts`):
+**Configuration** (`getConfig().analyzer`):
 
-- `INACTIVITY_THRESHOLD_DAYS: 60` → Period split threshold
-- `CHUNK_MAX_TOPICS: 20` → Max topics per chunk
-- `CHUNK_MAX_REPLIES: 100` → Max replies per chunk
+- `inactivityThreshold: 60` → Period split threshold
+- `chunkMaxTopics: 20` → Max topics per chunk
+- `chunkMaxReplies: 100` → Max replies per chunk
+- `nodeDistributionTopN: 3` → Node distribution entry limit
 
-### 7. AI Module (Complete)
+**Overview Semantics**:
+
+- Keep `totalTopics` null when topics are hidden or were not requested.
+- Keep `totalReplies` null when replies were not requested.
+- Calculate `topicReplyRatio` only when topics are visible, both collections were requested, and replies exist.
+
+**Data Quality Contract**:
+
+- Add `schemaVersion: 2` and `dataQuality` to every `AnalyzerOutput`.
+- Project `capturedAt`, status, expected count, fetched count, and failed count from each snapshot collection.
+- Treat `complete` as a complete captured fact set.
+- Treat `partial` and `not_requested` missing records as unknown, not deleted.
+
+### 8. AI Module (Complete)
 
 - **Role**: Integrate with Google Gemini to generate deep user insights from analyzer output.
 
@@ -354,13 +490,14 @@ root
 **Analysis Data Contract**:
 
 - `AnalysisRequest` contains the system prompt and the normalized AnalyzerOutput payload.
-- `AnalysisRequest.payload` is the compact JSON serialization of `userOverview`, `summary`, and all `contents` entries.
+- `AnalysisRequest.payload` is the compact JSON serialization of `schemaVersion`, `dataQuality`, `userOverview`, `summary`, and all `contents` entries.
 - `result.json` stores the validated `AIAnalysisResult`.
 
 **Defaults** (from `config/defaults.ts`):
 
 - Model: `gemini-3.1-pro-preview` (via `getConfig().ai.model`)
 - ThinkingLevel: `high` (via `getConfig().ai.thinkingLevel`)
+- Source data retention: `data.keepRaw = true`; explicit `false` enables `data.rawRetention`
 - `maxRetries: 3`, `baseDelay: 1000`, `maxDelay: 10_000`
 - `runAi` resolves thinking level by priority:
   - CLI explicit value (e.g. `--thinking-level high`)
@@ -369,7 +506,7 @@ root
 - Invalid thinking level fails fast with reason code
   `AI_INVALID_THINKING_LEVEL` and skips provider calls.
 
-### 8. Retry Module (Complete)
+### 9. Retry Module (Complete)
 
 - **Role**: Generic retry utility with exponential backoff + jitter. Located in `src/infra/retry`.
 
@@ -403,7 +540,7 @@ root
 - Retry attempts logged at `warn` level (always visible)
 - Error details logged at `debug` level (visible with `-v`)
 
-### 9. Logger Module (Complete)
+### 10. Logger Module (Complete)
 
 - **Role**: Global level-based logger for all layers. Located in `src/infra/logger`.
 
@@ -422,7 +559,7 @@ root
 - Global singleton, set level once at program entry
 - Level priority: `error > warn > info > debug`
 
-### 9. Workflow Module (Complete)
+### 11. Workflow Module (Complete)
 
 - **Role**: One-click pipeline orchestration for `v2er <username>`. Located in `src/cli/workflow`.
 
@@ -444,7 +581,7 @@ root
   - `failed` → immediate halt, `partial` → continue with exitCode=1
   - Unified failure output with recovery suggestions
 
-### 10. Storage Module (Complete)
+### 12. Storage Module (Complete)
 
 - **Role**: User data file persistence and lifecycle management. Located in `src/infra/storage`.
 
@@ -454,22 +591,28 @@ root
 ~/.v2er-insight/data/{username}/
 ├── raw.json       # Raw data captured
 ├── analyzed.json   # Analyzer output
-└── result.json     # AI analysis results
+├── result.json     # AI analysis results
+└── analysis-state.json # Durable provenance and provider delivery state
 ```
 
 **Public API** (username must match `/^[a-zA-Z0-9_-]+$/`, otherwise throws Error):
 
 - `getUserDataDir(username)` → User data directory path
 - `getDataFilePath(username, type)` → Specific data file path
-- `readDataFile<T>(username, type)` → Read and parse JSON (returns `null` on missing/invalid)
-- `writeDataFile(username, type, data, options?)` → Write JSON with auto-mkdir and `mode: 0o600`
-- `cleanExpiredData(username)` → Remove expired `raw.json`/`analyzed.json` based on config
+- `readDataFile<T>(username, type)` → Read `raw`, `analyzed`, `result`, or `analysisState` JSON (returns `null` on missing/invalid)
+- `readDataFileResult(username, type)` → Preserve `missing`, `invalid`, and parsed-success states for every `DataFileType`
+- `writeDataFile(username, type, data, options?)` → Write JSON through a same-directory `0600` temporary file and atomically rename it over the target
+- `readAnalysisState(username)` → Validate `analysis-state.json` and preserve missing/invalid/valid distinctions
+- `updateAnalysisState(username, updater)` → Reject invalid existing or updated state before atomic persistence
+- `cleanExpiredData(username)` → Return cleanup enablement, retention, deleted files, and typed skip diagnostics
 
 **Cleanup Strategy**:
 
-- `data.keepRaw = true` → Never clean
-- `data.keepRaw = false` → Delete files older than `data.rawRetention` days (default: 1)
-- `result.json` is never cleaned
+- `data.keepRaw = true` → Never clean raw/analyzed source data (default)
+- `data.keepRaw = false` → Delete files older than `data.rawRetention` days (default retention: 1)
+- `result.json` and `analysis-state.json` are never cleaned
+- Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
+- See `docs/data-lifecycle.md` for user-facing retention effects and recovery commands.
 
 ## Proxy Configuration
 
@@ -501,4 +644,4 @@ If none are set, no proxy is used.
 - **Language**: All test descriptions, data, and assertions in English; comments may be Chinese.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: Use `vi.mock` for modules (Fetcher, parsers).
-- **Coverage**: 280+ tests covering parsers, URL generators, services, CLI, config, analyzer, AI, and retry.
+- **Coverage**: 450+ tests covering parsers, URL generators, services, CLI, config, analyzer, AI, and retry.
