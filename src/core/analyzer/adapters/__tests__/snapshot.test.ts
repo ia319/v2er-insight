@@ -45,9 +45,8 @@ const snapshot: RawSnapshotV2 = {
     duplicateConflictCount: 0,
     items: [
       {
-        replyId: '100#reply2',
         topicId: '100',
-        replyNumber: 2,
+        topicReplyCount: 2,
         topicTitle: 'Topic title',
         nodeName: 'create',
         displayReplyTime: 'unparseable display time',
@@ -62,7 +61,7 @@ const snapshot: RawSnapshotV2 = {
 };
 
 describe('createAnalyzerInput', () => {
-  it('maps snapshot records without losing stable identities', () => {
+  it('maps snapshot records without losing reply topic metadata', () => {
     expect(createAnalyzerInput(snapshot)).toEqual({
       profile: snapshot.profile,
       topics: [
@@ -80,9 +79,8 @@ describe('createAnalyzerInput', () => {
       ],
       replies: [
         {
-          replyId: '100#reply2',
           topicId: '100',
-          replyNumber: 2,
+          topicReplyCount: 2,
           topicTitle: 'Topic title',
           nodeName: 'create',
           occurredAt: new Date('2026-07-12T00:04:05.000Z'),

@@ -4,9 +4,4 @@
 
 export { V2EX_BASE } from './constants';
 export { getUserProfileUrl, getUserRepliesUrl, getUserTopicsUrl } from './user-urls';
-export {
-  getTopicUrl,
-  extractTopicIdFromPath,
-  extractReplyIdentityFromPath,
-  type ReplyIdentity,
-} from './topic-urls';
+export { getTopicUrl, extractTopicIdFromPath, extractTopicReplyCountFromPath } from './topic-urls';

@@ -56,9 +56,8 @@ const topic = {
 };
 
 const reply = {
-  replyId: '100001#reply1',
   topicId: '100001',
-  replyNumber: 1,
+  topicReplyCount: 1,
   topicTitle: 'Snapshot design',
   nodeName: 'programmer',
   replyTime: '1 天前',
@@ -137,7 +136,7 @@ describe('runFetch', () => {
           status: 'complete',
           totalExpected: 1,
           fetchedCount: 1,
-          items: [expect.objectContaining({ replyId: '100001#reply1' })],
+          items: [expect.objectContaining({ topicId: '100001', topicReplyCount: 1 })],
         }),
       }),
     );
@@ -259,7 +258,7 @@ describe('runFetch', () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('缺失记录不能解释为删除'));
   });
 
-  it('should report conflicting duplicate identities as partial', async () => {
+  it('should report conflicting duplicate topic identities as partial', async () => {
     mockedGetAllUserTopicsDetail.mockResolvedValue({
       topics: [topic, { ...topic, title: 'Conflicting snapshot design' }],
       totalTopics: 1,

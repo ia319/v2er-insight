@@ -76,6 +76,18 @@ function compareNumericIds(left: string, right: string): number {
   return compareStrings(normalizedLeft, normalizedRight) || compareStrings(left, right);
 }
 
+function compareNullableNumericIds(left: string | null, right: string | null): number {
+  if (left === null) {
+    return right === null ? 0 : 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return compareNumericIds(left, right);
+}
+
 interface DeduplicatedRecords<T> {
   records: T[];
   duplicateConflictCount: number;
@@ -141,23 +153,14 @@ function getTopicConflictKey(topic: TopicSnapshot): string {
   ]);
 }
 
-function getReplyConflictKey(reply: ReplySnapshot): string {
+function getReplySortKey(reply: ReplySnapshot): string {
   return JSON.stringify([
     reply.topicTitle,
     reply.nodeName,
     reply.content,
     reply.isDirectReply,
     reply.replyTo,
-  ]);
-}
-
-function getReplySelectionKey(reply: ReplySnapshot): string {
-  return JSON.stringify([
-    reply.topicTitle,
-    reply.nodeName,
-    reply.content,
-    reply.isDirectReply,
-    reply.replyTo,
+    reply.topicReplyCount,
     reply.displayReplyTime,
     reply.occurredAt,
     reply.timePrecision,
@@ -205,26 +208,12 @@ function buildTopicsCollection(
   };
 }
 
-function hasStableReplyIdentity(
-  reply: V2exReply,
-): reply is V2exReply & { replyId: string; topicId: string; replyNumber: number } {
-  if (reply.replyId === null || reply.topicId === null || reply.replyNumber === null) {
-    return false;
-  }
-
-  return reply.replyId === `${reply.topicId}#reply${reply.replyNumber}`;
-}
-
-function mapReply(
-  reply: V2exReply & { replyId: string; topicId: string; replyNumber: number },
-  capturedAt: Date,
-): ReplySnapshot {
+function mapReply(reply: V2exReply, capturedAt: Date): ReplySnapshot {
   const normalizedTime = normalizeReplyTime(reply.replyTime, capturedAt);
 
   return {
-    replyId: reply.replyId,
     topicId: reply.topicId,
-    replyNumber: reply.replyNumber,
+    topicReplyCount: reply.topicReplyCount,
     topicTitle: reply.topicTitle,
     nodeName: reply.nodeName,
     displayReplyTime: reply.replyTime,
@@ -245,41 +234,20 @@ function buildRepliesCollection(
   }
 
   const { result } = data;
-  const identifiedReplies: ReplySnapshot[] = [];
-  let detectedIdentityFailures = 0;
-
-  for (const reply of result.data) {
-    if (!hasStableReplyIdentity(reply)) {
-      detectedIdentityFailures++;
-      continue;
-    }
-
-    identifiedReplies.push(mapReply(reply, capturedAt));
-  }
-
-  const deduplicated = deduplicateRecords(
-    identifiedReplies,
-    (reply) => reply.replyId,
-    getReplyConflictKey,
-    getReplySelectionKey,
-  );
-  const items = deduplicated.records.sort((left, right) => {
-    const topicComparison = compareNumericIds(left.topicId, right.topicId);
-    if (topicComparison !== 0) {
-      return topicComparison;
-    }
-
-    return left.replyNumber - right.replyNumber || compareStrings(left.replyId, right.replyId);
-  });
-  const identityFailureCount = Math.max(result.invalidReplyCount, detectedIdentityFailures);
+  const items = result.data
+    .map((reply) => mapReply(reply, capturedAt))
+    .sort((left, right) => {
+      const topicComparison = compareNullableNumericIds(left.topicId, right.topicId);
+      return topicComparison || compareStrings(getReplySortKey(left), getReplySortKey(right));
+    });
+  const detectedMetadataFailures = result.data.filter(
+    (reply) => reply.topicId === null || reply.topicReplyCount === null,
+  ).length;
+  const identityFailureCount = result.data.filter((reply) => reply.topicId === null).length;
   const countDifference =
     result.totalReplies === null ? 0 : Math.abs(result.totalReplies - items.length);
-  const failedCount = Math.max(countDifference, identityFailureCount);
-  const isPartial =
-    result.totalReplies === null ||
-    result.failedPages > 0 ||
-    failedCount > 0 ||
-    deduplicated.duplicateConflictCount > 0;
+  const failedCount = Math.max(countDifference, result.invalidReplyCount, detectedMetadataFailures);
+  const isPartial = result.totalReplies === null || result.failedPages > 0 || failedCount > 0;
 
   return {
     status: isPartial ? 'partial' : 'complete',
@@ -288,7 +256,7 @@ function buildRepliesCollection(
     failedCount,
     failedPageCount: result.failedPages,
     identityFailureCount,
-    duplicateConflictCount: deduplicated.duplicateConflictCount,
+    duplicateConflictCount: 0,
     items,
   };
 }

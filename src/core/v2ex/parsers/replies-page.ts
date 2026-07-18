@@ -6,7 +6,7 @@ import * as cheerio from 'cheerio';
 
 import type { V2exReply } from '../types/entities';
 import type { RepliesPageParseResult } from '../types/parse-result';
-import { extractReplyIdentityFromPath } from '../urls/topic-urls';
+import { extractTopicIdFromPath, extractTopicReplyCountFromPath } from '../urls/topic-urls';
 import { parsePagination } from './utils';
 import { REPLIES_PAGE_SELECTORS } from './selectors';
 
@@ -48,12 +48,13 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     const replyContentWrapper = dockArea.next();
     const replyContent = replyContentWrapper.find(REPLY_CONTENT);
 
-    // Derive identity from the source link instead of mutable content.
+    // Parse both fields independently so one malformed value does not discard the other.
     const topicLink = dockArea.find(TOPIC_LINK);
     const topicTitle = topicLink.text().trim();
     const topicHref = topicLink.attr('href') ?? '';
-    const replyIdentity = extractReplyIdentityFromPath(topicHref);
-    if (!replyIdentity) {
+    const topicId = extractTopicIdFromPath(topicHref);
+    const topicReplyCount = extractTopicReplyCountFromPath(topicHref);
+    if (topicId === null || topicReplyCount === null) {
       invalidReplyCount++;
     }
 
@@ -86,9 +87,8 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     }
 
     replies.push({
-      replyId: replyIdentity?.replyId ?? null,
-      topicId: replyIdentity?.topicId ?? null,
-      replyNumber: replyIdentity?.replyNumber ?? null,
+      topicId,
+      topicReplyCount,
       topicTitle,
       nodeName,
       replyTime,

@@ -34,9 +34,10 @@ export type ReplyTimePrecision = 'minute' | 'hour' | 'day' | 'unknown';
 
 /** Reply data retained in the versioned raw snapshot. */
 export interface ReplySnapshot {
-  replyId: string;
-  topicId: string;
-  replyNumber: number;
+  /** Stable topic identity when the source topic path is valid. */
+  topicId: string | null;
+  /** Topic reply count encoded by the member-page last-reply anchor. */
+  topicReplyCount: number | null;
   topicTitle: string;
   nodeName: string;
   displayReplyTime: string;

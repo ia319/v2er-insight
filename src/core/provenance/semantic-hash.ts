@@ -31,15 +31,26 @@ function projectTopic(topic: TopicSnapshot) {
 
 function projectReply(reply: ReplySnapshot) {
   return {
-    replyId: reply.replyId,
     topicId: reply.topicId,
-    replyNumber: reply.replyNumber,
+    topicReplyCount: reply.topicReplyCount,
     topicTitle: reply.topicTitle,
     nodeName: reply.nodeName,
     content: reply.content,
     isDirectReply: reply.isDirectReply,
     replyTo: reply.replyTo,
   };
+}
+
+function getReplySemanticSortKey(reply: ReplySnapshot): string {
+  return JSON.stringify([
+    reply.topicId,
+    reply.topicReplyCount,
+    reply.topicTitle,
+    reply.nodeName,
+    reply.content,
+    reply.isDirectReply,
+    reply.replyTo,
+  ]);
 }
 
 function projectCollectionQuality(collection: CollectionQuality) {
@@ -67,9 +78,11 @@ function createSemanticProjection(snapshot: RawSnapshotV2) {
     },
     replies: {
       ...projectCollectionQuality(snapshot.replies),
-      items: snapshot.replies.items
-        .map(projectReply)
-        .sort((left, right) => compareStrings(left.replyId, right.replyId)),
+      items: [...snapshot.replies.items]
+        .sort((left, right) =>
+          compareStrings(getReplySemanticSortKey(left), getReplySemanticSortKey(right)),
+        )
+        .map(projectReply),
     },
   };
 }

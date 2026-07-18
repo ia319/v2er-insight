@@ -30,9 +30,8 @@ describe('calculateUserOverview', () => {
       ],
       replies: [
         {
-          replyId: '100001#reply50',
           topicId: '100001',
-          replyNumber: 50,
+          topicReplyCount: 50,
           topicTitle: 'Topic',
           nodeName: 'node',
           occurredAt: new Date('2024-01-03T02:00:00.000Z'),
@@ -41,9 +40,8 @@ describe('calculateUserOverview', () => {
           replyTo: null,
         },
         {
-          replyId: '100002#reply30',
           topicId: '100002',
-          replyNumber: 30,
+          topicReplyCount: 30,
           topicTitle: 'Topic2',
           nodeName: 'node2',
           occurredAt: new Date('2024-01-02T02:00:00.000Z'),
@@ -91,9 +89,8 @@ describe('calculateUserOverview', () => {
       topics: [],
       replies: [
         {
-          replyId: '100001#reply1',
           topicId: '100001',
-          replyNumber: 1,
+          topicReplyCount: 1,
           topicTitle: 'Topic',
           nodeName: 'node',
           occurredAt: new Date('2024-01-03T02:00:00.000Z'),

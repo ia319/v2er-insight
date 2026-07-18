@@ -11,6 +11,7 @@ import { fetchPagedData } from '../utils';
 /** Reply collection with item-level completeness metadata. */
 export interface UserRepliesResult extends PagedResult<V2exReply> {
   totalReplies: number | null;
+  /** Number of replies with incomplete topic link metadata. */
   invalidReplyCount: number;
 }
 

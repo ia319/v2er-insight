@@ -47,9 +47,8 @@ function isTopicSnapshot(value: unknown): value is TopicSnapshot {
 function isReplySnapshot(value: unknown): value is ReplySnapshot {
   if (
     !isRecord(value) ||
-    typeof value.replyId !== 'string' ||
-    !isStableTopicId(value.topicId) ||
-    !isNonNegativeInteger(value.replyNumber) ||
+    (value.topicId !== null && !isStableTopicId(value.topicId)) ||
+    (value.topicReplyCount !== null && !isNonNegativeInteger(value.topicReplyCount)) ||
     typeof value.topicTitle !== 'string' ||
     typeof value.nodeName !== 'string' ||
     typeof value.displayReplyTime !== 'string' ||
@@ -61,7 +60,7 @@ function isReplySnapshot(value: unknown): value is ReplySnapshot {
     return false;
   }
 
-  return value.replyId === `${value.topicId}#reply${value.replyNumber}`;
+  return true;
 }
 
 function hasValidNormalizedReplyTime(occurredAt: unknown, timePrecision: unknown): boolean {
@@ -136,6 +135,25 @@ function isTopicsCollection(value: unknown): value is RawSnapshotV2['topics'] {
   );
 }
 
+function isRepliesCollection(value: unknown): value is RawSnapshotV2['replies'] {
+  if (
+    !isRecord(value) ||
+    value.duplicateConflictCount !== 0 ||
+    !isSnapshotCollection(value, isReplySnapshot)
+  ) {
+    return false;
+  }
+
+  const identityFailureCount = value.items.filter((reply) => reply.topicId === null).length;
+  const metadataFailureCount = value.items.filter(
+    (reply) => reply.topicId === null || reply.topicReplyCount === null,
+  ).length;
+
+  return (
+    value.identityFailureCount >= identityFailureCount && value.failedCount >= metadataFailureCount
+  );
+}
+
 function hasUniqueItems<T>(items: T[], getIdentity: (item: T) => string): boolean {
   const identities = new Set<string>();
   for (const item of items) {
@@ -173,13 +191,10 @@ export function isRawSnapshotV2(value: unknown): value is RawSnapshotV2 {
     typeof value.profile.joinDate !== 'string' ||
     (value.profile.dailyRanking !== null && !isNonNegativeInteger(value.profile.dailyRanking)) ||
     !isTopicsCollection(value.topics) ||
-    !isSnapshotCollection(value.replies, isReplySnapshot)
+    !isRepliesCollection(value.replies)
   ) {
     return false;
   }
 
-  return (
-    hasUniqueItems(value.topics.items, (topic) => topic.topicId) &&
-    hasUniqueItems(value.replies.items, (reply) => reply.replyId)
-  );
+  return hasUniqueItems(value.topics.items, (topic) => topic.topicId);
 }

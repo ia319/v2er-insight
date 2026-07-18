@@ -42,9 +42,8 @@ describe('transformReplies', () => {
   it('should transform AnalyzerReply to ContentReply', () => {
     const replies: AnalyzerReply[] = [
       {
-        replyId: '100001#reply50',
         topicId: '100001',
-        replyNumber: 50,
+        topicReplyCount: 50,
         topicTitle: 'Reply Topic Title',
         nodeName: 'Q&A',
         content: 'Reply Content',

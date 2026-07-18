@@ -41,7 +41,7 @@ export interface SinglePeriodStats {
   replyCount: number;
   avgReplyLength: number;
   directReplyRatio: number;
-  avgReplyPosition: number;
+  avgRepliedTopicHeat: number;
   replyWeekdayDistribution: Record<string, number> | null;
   replyNodeDistribution: Record<string, number>;
 }

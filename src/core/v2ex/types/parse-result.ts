@@ -23,7 +23,7 @@ export interface UserProfileParseResult {
 export interface RepliesPageParseResult {
   /** Declared total reply count, or `null` when the page omits it. */
   totalReplies: number | null;
-  /** Number of replies without a stable source anchor. */
+  /** Number of replies with incomplete topic link metadata. */
   invalidReplyCount: number;
   /** 本页回复列表 */
   replies: V2exReply[];

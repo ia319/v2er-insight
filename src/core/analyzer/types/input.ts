@@ -8,9 +8,10 @@ import type { SnapshotCollectionStatus } from '@/core/snapshot';
 
 /** Reply record normalized at the Snapshot-to-Analyzer boundary. */
 export interface AnalyzerReply {
-  replyId: string;
-  topicId: string;
-  replyNumber: number;
+  /** Stable topic identity when the source topic path is valid. */
+  topicId: string | null;
+  /** Topic reply count captured from the member-page last-reply anchor. */
+  topicReplyCount: number | null;
   topicTitle: string;
   nodeName: string;
   occurredAt: Date | null;

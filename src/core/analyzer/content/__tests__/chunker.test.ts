@@ -25,9 +25,8 @@ function createTopic(index: number): V2exTopicDetail {
 // Create replies for testing
 function createReply(index: number): AnalyzerReply {
   return {
-    replyId: `100001#reply${index}`,
     topicId: '100001',
-    replyNumber: index,
+    topicReplyCount: index,
     topicTitle: `Reply Topic ${index}`,
     nodeName: 'Q&A',
     content: `Reply Content ${index}`,

@@ -56,9 +56,8 @@ function createSnapshot(): RawSnapshotV2 {
       duplicateConflictCount: 0,
       items: [
         {
-          replyId: '10#reply2',
           topicId: '10',
-          replyNumber: 2,
+          topicReplyCount: 2,
           topicTitle: 'Second topic',
           nodeName: 'create',
           displayReplyTime: '3 小时前',
@@ -69,9 +68,8 @@ function createSnapshot(): RawSnapshotV2 {
           replyTo: 'bob',
         },
         {
-          replyId: '2#reply1',
           topicId: '2',
-          replyNumber: 1,
+          topicReplyCount: 1,
           topicTitle: 'First topic',
           nodeName: 'programmer',
           displayReplyTime: '1 天前',
@@ -112,13 +110,39 @@ describe('computeSemanticDataHash', () => {
     expect(computeSemanticDataHash(reordered)).toBe(computeSemanticDataHash(snapshot));
   });
 
+  it('preserves the multiplicity of semantically identical replies', () => {
+    const single = createSnapshot();
+    const duplicate = createSnapshot();
+    const reply = duplicate.replies.items[0]!;
+
+    single.replies = {
+      ...single.replies,
+      status: 'partial',
+      totalExpected: null,
+      fetchedCount: 1,
+      items: [single.replies.items[0]!],
+    };
+    duplicate.replies = {
+      ...duplicate.replies,
+      status: 'partial',
+      totalExpected: null,
+      items: [reply, { ...reply }],
+    };
+
+    expect(computeSemanticDataHash(duplicate)).not.toBe(computeSemanticDataHash(single));
+  });
+
   it.each([
     ['topic content', (snapshot: RawSnapshotV2) => (snapshot.topics.items[0]!.content = 'edited')],
     ['topic clicks', (snapshot: RawSnapshotV2) => snapshot.topics.items[0]!.clickCount++],
     ['reply content', (snapshot: RawSnapshotV2) => (snapshot.replies.items[0]!.content = 'edited')],
+    [
+      'replied topic heat',
+      (snapshot: RawSnapshotV2) => (snapshot.replies.items[0]!.topicReplyCount = 3),
+    ],
     ['visibility', (snapshot: RawSnapshotV2) => (snapshot.topics.hidden = true)],
     ['completeness', (snapshot: RawSnapshotV2) => (snapshot.replies.status = 'partial')],
-    ['duplicate conflicts', (snapshot: RawSnapshotV2) => snapshot.replies.duplicateConflictCount++],
+    ['duplicate conflicts', (snapshot: RawSnapshotV2) => snapshot.topics.duplicateConflictCount++],
   ])('changes when %s changes', (_, mutate) => {
     const baseline = createSnapshot();
     const changed = createSnapshot();

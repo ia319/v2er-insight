@@ -41,7 +41,7 @@ function createOutput(): AnalyzerOutput {
           replyCount: 1,
           avgReplyLength: 5,
           directReplyRatio: 0,
-          avgReplyPosition: 1,
+          avgRepliedTopicHeat: 1,
           replyWeekdayDistribution: { Monday: 1 },
           replyNodeDistribution: { general: 1 },
         },

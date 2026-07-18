@@ -204,7 +204,7 @@ root
 
 **Types** (`types/`):
 
-- `V2exReply`: Reply data with nullable `replyId`, `topicId`, and `replyNumber` parsed from the source anchor
+- `V2exReply`: Reply data with nullable `topicId` and `topicReplyCount` parsed from the source topic link
 - `V2exTopicDetail`: Topic detail with stable `topicId` and canonical `sourceUrl`
 - `*ParseResult`: Page parse results with pagination and explicit topic visibility/identity diagnostics
 
@@ -215,7 +215,7 @@ root
 - `getUserTopicsUrl(username, page?)` → User topics list
 - `getTopicUrl(topicIdOrPath)` → Single topic page (supports ID or path; throws on invalid)
 - `extractTopicIdFromPath(path)` → Stable topic ID from a relative or absolute topic URL
-- `extractReplyIdentityFromPath(path)` → Stable topic ID, reply number, and reply ID from a reply URL
+- `extractTopicReplyCountFromPath(path)` → Current topic reply count encoded by a `#replyN` anchor
 
 **Parsers** (`parsers/`):
 
@@ -228,6 +228,7 @@ root
 
 - **Parsers Breakdown**:
   - `src/core/v2ex/parsers/replies-page.ts`: Handles nested reply content (traverses `.inner` wrappers).
+  - Member reply entries for the same topic can share one `#replyN` anchor; store the anchor value as topic reply-count metadata.
   - `src/core/v2ex/parsers/topics-list-page.ts`: Deduplicates links by topic ID and reports invalid identity counts.
   - `src/core/v2ex/parsers/utils/pagination.ts`: Robust pagination parser using `.first()` to handle dual pagination bars.
 - **Date Handling**:
@@ -247,7 +248,7 @@ root
 **User Use Cases** (`user/`):
 
 - `getUserProfile(username, options?)` → User profile or null
-- `getAllUserReplies(username, options?)` → `UserRepliesResult` with nullable declared total and invalid identity count
+- `getAllUserReplies(username, options?)` → `UserRepliesResult` with nullable declared total and invalid topic metadata count
 - `getAllUserTopicUrls(username, options?)` → Full URLs, hidden state, invalid identities, and hidden-state discard count
 - `getAllUserTopicsDetail(username, options?)` → Identified topic contents with page and identity completeness metadata
 
@@ -279,12 +280,13 @@ If any fetched list page reports hidden topics, discard topic URLs collected fro
 - Keep `failedCount` at least as large as `identityFailureCount`.
 - Mark declared and fetched count mismatches as `partial`; record the absolute reply-count difference in `failedCount`.
 - Preserve explicit topic visibility independently from an empty topic collection.
-- Deduplicate stable topic and reply identities with a fixed-field selection key that is independent of input order.
-- Mark collections `partial` when duplicate identities contain conflicting semantic fields, and count each affected identity once.
-- Ignore reply display-time drift when classifying duplicate content conflicts while still selecting one complete record deterministically.
-- Sort topics by numeric topic ID and replies by topic ID, reply number, and reply ID.
-- Exclude replies with missing or internally inconsistent stable identities.
-- Validate schema, canonical identities, collection invariants, and unique IDs at the storage boundary.
+- Deduplicate stable topic identities with a fixed-field selection key that is independent of input order.
+- Mark topic collections `partial` when duplicate identities contain conflicting semantic fields, and count each affected identity once.
+- Preserve every member reply entry because the source page does not expose a stable per-reply identity.
+- Sort topics by numeric topic ID and replies by nullable numeric topic ID plus fixed semantic fields.
+- Retain replies with incomplete topic metadata and mark the reply collection `partial` through its failure diagnostics.
+- Keep reply `duplicateConflictCount` at zero because reply records are not identity-deduplicated.
+- Validate schema, topic identities, reply metadata, collection invariants, and unique topic IDs at the storage boundary.
 - Preserve reply display time and normalize supported relative or Chinese calendar values against the shared `capturedAt`.
 - Record normalized reply time precision as `minute`, `hour`, or `day`; retain `null` with `unknown` for unsupported or invalid values.
 - Interpret calendar dates in the V2EX `+08:00` timezone independently from the runtime machine timezone.
@@ -293,7 +295,7 @@ If any fetched list page reports hidden topics, discard topic URLs collected fro
 
 - Use `canonicalJsonStringify(value)` to serialize plain JSON values with recursively sorted object keys.
 - Use `computeSemanticDataHash(snapshot)` to calculate the SHA-256 identity of stable Snapshot facts.
-- Include stable entities, content, interaction counts, visibility, and collection completeness diagnostics.
+- Include topic identities, reply semantic facts with multiplicity preserved, content, interaction counts, visibility, and collection completeness diagnostics.
 - Exclude capture time, daily ranking, item order, reply display time, and normalized reply-time drift.
 - Use `computeAnalysisConfigHash(config)` to hash inactivity and TopN settings while excluding content chunk limits.
 - Use `computeAnalysisFingerprint(input)` to combine semantic data identity, Analyzer schema version, and semantic configuration identity.
@@ -437,7 +439,7 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 - **Statistics** (`stats/`):
   - `user-overview.ts`: Aggregates global user metrics.
   - `topic-stats.ts`: Analyzes topic engagement and lifecycle.
-  - `reply-stats.ts`: Calculates reply frequency, average reply position, node distribution, and full 7-day weekday distribution from normalized reply occurrences.
+  - `reply-stats.ts`: Calculates reply frequency, average replied-topic heat, node distribution, and full 7-day weekday distribution from normalized reply occurrences.
   - `utils/stats.ts`: Resolves TopN count ties by stable key and stores counts in a `Map`.
 - **Period Detection** (`periods/`):
   - `detector.ts`: Identifies active periods based on 60-day inactivity threshold.

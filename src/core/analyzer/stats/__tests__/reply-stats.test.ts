@@ -9,9 +9,8 @@ describe('calculateReplyStats', () => {
   it('should calculate reply statistics', () => {
     const replies = [
       {
-        replyId: '100001#reply100',
         topicId: '100001',
-        replyNumber: 100,
+        topicReplyCount: 100,
         topicTitle: 'Topic 1',
         nodeName: 'go',
         occurredAt: new Date(2024, 0, 9),
@@ -20,9 +19,8 @@ describe('calculateReplyStats', () => {
         replyTo: null,
       },
       {
-        replyId: '100002#reply50',
         topicId: '100002',
-        replyNumber: 50,
+        topicReplyCount: 50,
         topicTitle: 'Topic 2',
         nodeName: 'go',
         occurredAt: new Date(2024, 0, 8),
@@ -31,9 +29,8 @@ describe('calculateReplyStats', () => {
         replyTo: 'user',
       },
       {
-        replyId: '100003#reply25',
         topicId: '100003',
-        replyNumber: 25,
+        topicReplyCount: 25,
         topicTitle: 'Topic 3',
         nodeName: 'python',
         occurredAt: new Date(2024, 0, 7),
@@ -47,7 +44,7 @@ describe('calculateReplyStats', () => {
 
     expect(result.replyCount).toBe(3);
     expect(result.directReplyRatio).toBeCloseTo(0.67, 1);
-    expect(result.avgReplyPosition).toBeCloseTo(58.33, 1);
+    expect(result.avgRepliedTopicHeat).toBeCloseTo(58.33, 1);
     expect(result.replyNodeDistribution).toEqual({ go: 2, python: 1 });
 
     // 验证星期分布：
@@ -76,7 +73,37 @@ describe('calculateReplyStats', () => {
 
     expect(result.replyCount).toBe(0);
     expect(result.avgReplyLength).toBe(0);
-    expect(result.avgReplyPosition).toBe(0);
+    expect(result.avgRepliedTopicHeat).toBe(0);
     expect(result.replyWeekdayDistribution).toBeNull();
+  });
+
+  it('should exclude replies without topic heat from the average', () => {
+    const result = calculateReplyStats({
+      replies: [
+        {
+          topicId: null,
+          topicReplyCount: null,
+          topicTitle: 'Unknown topic',
+          nodeName: 'go',
+          occurredAt: new Date(2024, 0, 9),
+          content: 'Reply without topic metadata',
+          isDirectReply: true,
+          replyTo: null,
+        },
+        {
+          topicId: '100001',
+          topicReplyCount: 100,
+          topicTitle: 'Known topic',
+          nodeName: 'go',
+          occurredAt: new Date(2024, 0, 8),
+          content: 'Reply with topic metadata',
+          isDirectReply: true,
+          replyTo: null,
+        },
+      ],
+    });
+
+    expect(result.replyCount).toBe(2);
+    expect(result.avgRepliedTopicHeat).toBe(100);
   });
 });

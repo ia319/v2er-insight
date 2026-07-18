@@ -9,7 +9,7 @@
 | `dataQuality.capturedAt` | `string`         | 本次抓取统一使用的 ISO 时间。              |
 | `topics/replies.status`  | `SnapshotStatus` | `complete`、`partial` 或 `not_requested`。 |
 | `totalExpected`          | `number \| null` | 期望总数；无法可靠确定时为 null。          |
-| `fetchedCount`           | `number`         | 具备稳定身份并进入分析的数据条数。         |
+| `fetchedCount`           | `number`         | 已抓取并进入分析的数据条数。               |
 | `failedCount`            | `number`         | 已知缺失、无效或与声明总数不一致的条数。   |
 
 `partial` 和 `not_requested` 中缺失的记录不能解释为删除或没有活动。
@@ -74,7 +74,7 @@
 | `replyCount`               | `number`                         | 该周期内总回复数   | 该阶段的社交互动活跃水平。                                         |
 | `avgReplyLength`           | `number`                         | 平均回复字符长度   | 衡量表达的认真程度与交流深度。                                     |
 | `directReplyRatio`         | `number`                         | 直接回复主帖的比率 | **高**：更关注主旨，倾向开启新讨论；**低**：倾向于跟帖与他人互动。 |
-| `avgReplyPosition`         | `number`                         | 平均回复楼层位置   | 表示用户通常在讨论的哪个阶段加入，不作为话题最终热度使用。         |
+| `avgRepliedTopicHeat`      | `number`                         | 参与话题的平均热度 | **高**：追逐热点话题；**低**：更关注分众/小众领域。                |
 | `replyWeekdayDistribution` | `Record<string, number> \| null` | 7 天百分比分布     | 识别周内活动规律（如：工作日活跃还是周末活跃）。                   |
 | `replyNodeDistribution`    | `Record<string, number>`         | 前 3 个回复节点    | 定义用户在该阶段的**活跃领域和社交边界**。                         |
 

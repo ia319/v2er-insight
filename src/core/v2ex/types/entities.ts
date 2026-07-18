@@ -8,12 +8,10 @@
  * 来源：/member/{username}/replies 页面中的单个回复项
  */
 export interface V2exReply {
-  /** Stable reply identity derived from the topic URL and reply anchor. */
-  replyId: string | null;
   /** Stable topic identity derived from `/t/{id}`. */
   topicId: string | null;
-  /** Reply floor number derived from `#reply{N}`. */
-  replyNumber: number | null;
+  /** Current topic reply count derived from the last-reply anchor. */
+  topicReplyCount: number | null;
   /** 主题标题 */
   topicTitle: string;
   /** 节点名称 */

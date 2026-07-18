@@ -112,11 +112,11 @@ export interface SinglePeriodStats {
    */
   directReplyRatio: number;
   /**
-   * 平均回复楼层位置
-   * 计算方式：Avg(replyNumber)，无法提取稳定楼层的回复不参与平均值
-   * 该字段表示用户通常在讨论的哪个阶段加入，不代表话题最终热度
+   * 参与话题的平均热度
+   * 计算方式：Avg(topicReplyCount)
+   * 高 = 追热点；低 = 关注小众话题
    */
-  avgReplyPosition: number;
+  avgRepliedTopicHeat: number;
   /**
    * 回复星期分布（全部 7 天，百分比）
    * 通过相对时间（如"3天前"）计算星期几

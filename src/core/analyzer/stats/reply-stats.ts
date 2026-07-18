@@ -20,7 +20,7 @@ export function calculateReplyStats(
   | 'replyCount'
   | 'avgReplyLength'
   | 'directReplyRatio'
-  | 'avgReplyPosition'
+  | 'avgRepliedTopicHeat'
   | 'replyWeekdayDistribution'
   | 'replyNodeDistribution'
 > {
@@ -31,7 +31,7 @@ export function calculateReplyStats(
       replyCount: 0,
       avgReplyLength: 0,
       directReplyRatio: 0,
-      avgReplyPosition: 0,
+      avgRepliedTopicHeat: 0,
       replyWeekdayDistribution: null,
       replyNodeDistribution: {},
     };
@@ -43,8 +43,10 @@ export function calculateReplyStats(
   // 计算直接回复率
   const directReplies = replies.filter((r) => r.isDirectReply).length;
 
-  // Reply anchors encode floor positions, not the final heat of a topic.
-  const replyPositions = replies.map((reply) => reply.replyNumber);
+  // The member reply page anchors point to each topic's current last reply.
+  const topicReplyCounts = replies
+    .map((reply) => reply.topicReplyCount)
+    .filter((replyCount): replyCount is number => replyCount !== null);
 
   // 计算星期分布
   const replyDates = replies
@@ -59,7 +61,7 @@ export function calculateReplyStats(
     replyCount: replies.length,
     avgReplyLength: average(lengths),
     directReplyRatio: directReplies / replies.length,
-    avgReplyPosition: average(replyPositions),
+    avgRepliedTopicHeat: average(topicReplyCounts),
     replyWeekdayDistribution: weekdayDist,
     replyNodeDistribution: topN(
       replies,

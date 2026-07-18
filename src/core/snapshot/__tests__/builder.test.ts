@@ -32,9 +32,8 @@ function createTopic(overrides: Partial<V2exTopicDetail> = {}): V2exTopicDetail 
 
 function createReply(overrides: Partial<V2exReply> = {}): V2exReply {
   return {
-    replyId: '100#reply2',
     topicId: '100',
-    replyNumber: 2,
+    topicReplyCount: 2,
     topicTitle: 'Topic title',
     nodeName: 'create',
     replyTime: '3 小时前',
@@ -86,7 +85,7 @@ function buildSnapshot(
 }
 
 describe('buildRawSnapshot', () => {
-  it('builds a complete snapshot with stable topic and reply identities', () => {
+  it('builds a complete snapshot with topic metadata for replies', () => {
     const snapshot = buildSnapshot();
 
     expect(snapshot).toEqual({
@@ -127,9 +126,8 @@ describe('buildRawSnapshot', () => {
         duplicateConflictCount: 0,
         items: [
           {
-            replyId: '100#reply2',
             topicId: '100',
-            replyNumber: 2,
+            topicReplyCount: 2,
             topicTitle: 'Topic title',
             nodeName: 'create',
             displayReplyTime: '3 小时前',
@@ -257,8 +255,8 @@ describe('buildRawSnapshot', () => {
     expect(isRawSnapshotV2(snapshot)).toBe(true);
   });
 
-  it('filters invalid reply identities and reports identity failures once', () => {
-    const invalidReply = createReply({ replyId: null, topicId: null, replyNumber: null });
+  it('retains replies with incomplete topic metadata and reports the failure once', () => {
+    const invalidReply = createReply({ topicId: null, topicReplyCount: null });
     const snapshot = buildSnapshot(
       createTopicsResult(),
       createRepliesResult({
@@ -271,11 +269,14 @@ describe('buildRawSnapshot', () => {
     expect(snapshot.replies).toMatchObject({
       status: 'partial',
       totalExpected: 2,
-      fetchedCount: 1,
+      fetchedCount: 2,
       failedCount: 1,
       identityFailureCount: 1,
     });
-    expect(snapshot.replies.items).toHaveLength(1);
+    expect(snapshot.replies.items).toHaveLength(2);
+    expect(snapshot.replies.items).toContainEqual(
+      expect.objectContaining({ topicId: null, topicReplyCount: null }),
+    );
   });
 
   it('marks replies partial when the declared total is unknown', () => {
@@ -298,7 +299,7 @@ describe('buildRawSnapshot', () => {
       createRepliesResult({
         data: [
           createReply(),
-          createReply({ replyId: '101#reply1', topicId: '101', replyNumber: 1 }),
+          createReply({ topicId: '101', topicReplyCount: 1, content: 'Another reply' }),
         ],
         totalReplies: 1,
       }),
@@ -326,7 +327,7 @@ describe('buildRawSnapshot', () => {
     });
   });
 
-  it('selects conflicting duplicate identities independently of input order', () => {
+  it('deduplicates conflicting topics and preserves replies with shared topic metadata', () => {
     const topics = [createTopic({ title: 'Old topic' }), createTopic({ title: 'New topic' })];
     const replies = [createReply({ content: 'Old reply' }), createReply({ content: 'New reply' })];
     const forward = buildSnapshot(
@@ -337,6 +338,7 @@ describe('buildRawSnapshot', () => {
       }),
       createRepliesResult({
         data: replies,
+        totalReplies: 2,
       }),
     );
     const reversed = buildSnapshot(
@@ -345,7 +347,7 @@ describe('buildRawSnapshot', () => {
         totalTopics: 1,
         fetchedTopics: 2,
       }),
-      createRepliesResult({ data: [...replies].reverse() }),
+      createRepliesResult({ data: [...replies].reverse(), totalReplies: 2 }),
     );
 
     expect(forward.topics).toMatchObject({
@@ -353,25 +355,26 @@ describe('buildRawSnapshot', () => {
       duplicateConflictCount: 1,
     });
     expect(forward.replies).toMatchObject({
-      status: 'partial',
-      duplicateConflictCount: 1,
+      status: 'complete',
+      fetchedCount: 2,
+      duplicateConflictCount: 0,
     });
     expect(forward.topics.items).toEqual(reversed.topics.items);
     expect(forward.replies.items).toEqual(reversed.replies.items);
     expect(forward.topics.items[0]?.title).toBe('New topic');
-    expect(forward.replies.items[0]?.content).toBe('New reply');
+    expect(forward.replies.items.map((reply) => reply.content)).toEqual(['New reply', 'Old reply']);
   });
 
-  it('deduplicates equivalent records without treating display-time drift as a conflict', () => {
+  it('deduplicates equivalent topics but preserves every reply record', () => {
     const topic = createTopic();
     const replies = [createReply(), createReply({ replyTime: '4 小时前' })];
     const forward = buildSnapshot(
       createTopicsResult({ topics: [topic, topic], totalTopics: 1, fetchedTopics: 2 }),
-      createRepliesResult({ data: replies }),
+      createRepliesResult({ data: replies, totalReplies: 2 }),
     );
     const reversed = buildSnapshot(
       createTopicsResult({ topics: [topic, topic], totalTopics: 1, fetchedTopics: 2 }),
-      createRepliesResult({ data: [...replies].reverse() }),
+      createRepliesResult({ data: [...replies].reverse(), totalReplies: 2 }),
     );
 
     expect(forward.topics).toMatchObject({
@@ -381,13 +384,13 @@ describe('buildRawSnapshot', () => {
     });
     expect(forward.replies).toMatchObject({
       status: 'complete',
-      fetchedCount: 1,
+      fetchedCount: 2,
       duplicateConflictCount: 0,
     });
     expect(forward.replies.items).toEqual(reversed.replies.items);
   });
 
-  it('sorts topics and replies by stable numeric identities', () => {
+  it('sorts topics and replies deterministically by topic and semantic fields', () => {
     const snapshot = buildSnapshot(
       createTopicsResult({
         topics: [
@@ -400,36 +403,36 @@ describe('buildRawSnapshot', () => {
       }),
       createRepliesResult({
         data: [
-          createReply({ replyId: '10#reply1', topicId: '10', replyNumber: 1 }),
-          createReply({ replyId: '2#reply5', topicId: '2', replyNumber: 5 }),
-          createReply({ replyId: '2#reply1', topicId: '2', replyNumber: 1 }),
+          createReply({ topicId: '10', topicReplyCount: 1, content: 'Topic 10 reply' }),
+          createReply({ topicId: '2', topicReplyCount: 5, content: 'Later content' }),
+          createReply({ topicId: '2', topicReplyCount: 1, content: 'Earlier content' }),
         ],
         totalReplies: 3,
       }),
     );
 
     expect(snapshot.topics.items.map((topic) => topic.topicId)).toEqual(['1', '2', '10']);
-    expect(snapshot.replies.items.map((reply) => reply.replyId)).toEqual([
-      '2#reply1',
-      '2#reply5',
-      '10#reply1',
+    expect(snapshot.replies.items.map((reply) => reply.content)).toEqual([
+      'Earlier content',
+      'Later content',
+      'Topic 10 reply',
     ]);
   });
 
-  it('rejects internally inconsistent reply identities', () => {
+  it('reports missing topic heat without an identity failure', () => {
     const snapshot = buildSnapshot(
       createTopicsResult(),
       createRepliesResult({
-        data: [createReply({ replyId: '100#reply3', replyNumber: 2 })],
+        data: [createReply({ topicReplyCount: null })],
         invalidReplyCount: 0,
       }),
     );
 
     expect(snapshot.replies).toMatchObject({
       status: 'partial',
-      fetchedCount: 0,
+      fetchedCount: 1,
       failedCount: 1,
-      identityFailureCount: 1,
+      identityFailureCount: 0,
     });
   });
 });

@@ -22,9 +22,8 @@ export function createAnalyzerInput(snapshot: RawSnapshotV2): RawUserData {
       clickCount: topic.clickCount,
     })),
     replies: snapshot.replies.items.map((reply) => ({
-      replyId: reply.replyId,
       topicId: reply.topicId,
-      replyNumber: reply.replyNumber,
+      topicReplyCount: reply.topicReplyCount,
       topicTitle: reply.topicTitle,
       nodeName: reply.nodeName,
       occurredAt: reply.occurredAt === null ? null : new Date(reply.occurredAt),

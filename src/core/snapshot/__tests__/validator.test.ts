@@ -40,9 +40,8 @@ function createSnapshot() {
       result: {
         data: [
           {
-            replyId: '100#reply2',
             topicId: '100',
-            replyNumber: 2,
+            topicReplyCount: 2,
             topicTitle: 'Topic title',
             nodeName: 'create',
             replyTime: '3 小时前',
@@ -94,7 +93,7 @@ describe('isRawSnapshotV2', () => {
     ).toBe(false);
   });
 
-  it('rejects internally inconsistent reply identities', () => {
+  it('rejects invalid reply topic metadata', () => {
     const snapshot = createSnapshot();
     const reply = snapshot.replies.items[0];
 
@@ -107,10 +106,45 @@ describe('isRawSnapshotV2', () => {
         ...snapshot,
         replies: {
           ...snapshot.replies,
-          items: [{ ...reply, replyId: '100#reply3' }],
+          items: [{ ...reply, topicId: 'invalid' }],
         },
       }),
     ).toBe(false);
+
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        replies: {
+          ...snapshot.replies,
+          items: [{ ...reply, topicReplyCount: -1 }],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts nullable reply topic metadata when incompleteness is reported', () => {
+    const snapshot = createSnapshot();
+    const reply = snapshot.replies.items[0];
+
+    if (!reply) {
+      throw new Error('Expected reply fixture');
+    }
+
+    const items = [{ ...reply, topicId: null, topicReplyCount: null }];
+
+    expect(isRawSnapshotV2({ ...snapshot, replies: { ...snapshot.replies, items } })).toBe(false);
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        replies: {
+          ...snapshot.replies,
+          status: 'partial',
+          failedCount: 1,
+          identityFailureCount: 1,
+          items,
+        },
+      }),
+    ).toBe(true);
   });
 
   it('rejects reply time precision without a normalized occurrence', () => {
@@ -183,7 +217,22 @@ describe('isRawSnapshotV2', () => {
     ).toBe(false);
   });
 
-  it('accepts a duplicate conflict as a partial collection reason', () => {
+  it('accepts a topic duplicate conflict as a partial collection reason', () => {
+    const snapshot = createSnapshot();
+
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        topics: {
+          ...snapshot.topics,
+          status: 'partial',
+          duplicateConflictCount: 1,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects reply duplicate conflict diagnostics', () => {
     const snapshot = createSnapshot();
 
     expect(
@@ -193,21 +242,6 @@ describe('isRawSnapshotV2', () => {
           ...snapshot.replies,
           status: 'partial',
           duplicateConflictCount: 1,
-        },
-      }),
-    ).toBe(true);
-  });
-
-  it('rejects duplicate conflict counts larger than the retained collection', () => {
-    const snapshot = createSnapshot();
-
-    expect(
-      isRawSnapshotV2({
-        ...snapshot,
-        replies: {
-          ...snapshot.replies,
-          status: 'partial',
-          duplicateConflictCount: 2,
         },
       }),
     ).toBe(false);
