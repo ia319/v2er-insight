@@ -53,12 +53,12 @@ function normalizeJsonValue(value: unknown, ancestors: WeakSet<object>): Canonic
   }
 }
 
-/** Serialize JSON-compatible data with recursively sorted object keys. */
+/** Serializes JSON-compatible data with recursively sorted object keys. */
 export function canonicalJsonStringify(value: unknown): string {
   return JSON.stringify(normalizeJsonValue(value, new WeakSet<object>()));
 }
 
-/** Compute a SHA-256 hex digest from canonical JSON data. */
+/** Computes a SHA-256 hex digest from canonical JSON data. */
 export function hashCanonicalJson(value: unknown): string {
   return createHash('sha256').update(canonicalJsonStringify(value), 'utf8').digest('hex');
 }

@@ -22,7 +22,7 @@ import type { RawSnapshotV2 } from '@/core/snapshot';
 import { createAnalyzerInput } from './adapters/snapshot';
 
 /**
- * Build the core metrics and content fields used by AnalyzerOutput.
+ * Builds the core metrics and content fields used by AnalyzerOutput.
  *
  * @param data - Internal input adapted from a validated raw snapshot.
  * @returns User overview, period summary, and content chunks.
@@ -62,7 +62,7 @@ function buildAnalyzerCoreOutput(
 }
 
 /**
- * Build Analyzer output from a validated versioned snapshot.
+ * Builds Analyzer output from a validated versioned snapshot.
  *
  * @param snapshot - Validated Raw Snapshot V2.
  * @returns Analyzer output using normalized reply occurrences from the snapshot.

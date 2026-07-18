@@ -48,7 +48,7 @@ export type NoticeCode =
   | 'DATA_SNAPSHOT_PARTIAL';
 export type NoticeSeverity = 'info' | 'warning';
 
-/** A non-fatal user-facing effect that should remain machine-identifiable. */
+/** A machine-identifiable, non-fatal user-facing effect. */
 export interface UserNotice {
   code: NoticeCode;
   severity: NoticeSeverity;
@@ -74,7 +74,7 @@ export interface StepRunResult {
   recoverActions?: RecoveryAction[];
   /** 额外元数据，用于编排判断或后续重试 */
   meta?: Record<string, unknown>;
-  /** 仍允许步骤继续，但需要向用户说明的结构化影响 */
+  /** Structured user impact for a continuing workflow step. */
   notices?: UserNotice[];
 }
 

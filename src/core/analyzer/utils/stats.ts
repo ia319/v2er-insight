@@ -22,7 +22,7 @@ export function topN<T>(
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
-  // Resolve equal counts by key so input order cannot change the selected Top N.
+  // Stable key ordering makes Top N independent of input order.
   const sorted = Array.from(counts.entries())
     .sort(([leftKey, leftCount], [rightKey, rightCount]) => {
       const countComparison = rightCount - leftCount;
@@ -77,7 +77,7 @@ export function weekdayDistribution(dates: Date[]): Record<string, number> {
   const result: Record<string, number> = {};
 
   for (const day of weekdays) {
-    // 即使无活动也要返回 0
+    // Every weekday remains present in an empty activity distribution.
     result[day] = total === 0 ? 0 : (counts[day] ?? 0) / total;
   }
 

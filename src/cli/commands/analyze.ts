@@ -46,7 +46,7 @@ function printStats(output: AnalyzerOutput): void {
 }
 
 /**
- * Analyze a validated Raw Snapshot V2 and persist Analyzer output.
+ * Analyzes a validated Raw Snapshot V2 and persists Analyzer output.
  *
  * @param username - V2EX member name used to resolve data files.
  * @param options - Command output behavior.

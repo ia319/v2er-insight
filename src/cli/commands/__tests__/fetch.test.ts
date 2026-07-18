@@ -255,7 +255,7 @@ describe('runFetch', () => {
       reasonCode: 'FETCH_PARTIAL_FAILED',
     });
     expect(mockLogger.detail).toHaveBeenCalledWith('Replies: 1/?');
-    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('缺失记录不能解释为删除'));
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('缺失记录状态未知'));
   });
 
   it('should report conflicting duplicate topic identities as partial', async () => {

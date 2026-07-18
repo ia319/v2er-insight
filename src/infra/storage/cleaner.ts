@@ -1,12 +1,12 @@
 /**
- * Storage 过期数据清理
+ * Source-data retention cleanup.
  *
- * 根据配置清理过期的原始数据文件（raw.json / analyzed.json）。
- * result.json 永远不会被清理。
+ * raw.json and analyzed.json follow the configured retention policy.
+ * result.json has permanent retention.
  *
- * 清理策略：
- * - keepRaw=true → 永不清理
- * - keepRaw=false → 检查文件 mtime，超过 rawRetention 天则删除
+ * Policy:
+ * - keepRaw=true: permanent source-data retention
+ * - keepRaw=false: age-based cleanup using file mtime and rawRetention
  */
 
 import fs from 'fs';
@@ -57,14 +57,14 @@ function getExpirationStatus(
 }
 
 /**
- * 清理指定用户的过期数据文件
+ * Cleans expired source-data files for one user.
  *
- * 根据 config.data.keepRaw 和 config.data.rawRetention 决定清理行为：
- * - keepRaw=true：不做任何操作
- * - keepRaw=false：删除超过 rawRetention 天的 raw.json 和 analyzed.json
- * - result.json 永远不受影响
+ * config.data.keepRaw and config.data.rawRetention define the cleanup policy:
+ * - keepRaw=true: permanent raw.json and analyzed.json retention
+ * - keepRaw=false: age-based raw.json and analyzed.json cleanup
+ * - result.json: permanent retention
  *
- * @param username - V2EX 用户名
+ * @param username - V2EX username.
  * @returns Cleanup policy, deleted files, and explicit skip diagnostics.
  */
 export function cleanExpiredData(username: string): CleanupResult {

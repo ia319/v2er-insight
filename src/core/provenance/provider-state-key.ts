@@ -9,7 +9,7 @@ export interface ProviderStateKeyInput {
 }
 
 /**
- * Build a stable state key for one logical provider delivery target.
+ * Builds a stable state key for one logical provider delivery target.
  *
  * @param input - Provider, model, prompt, thinking, and optional session identity.
  * @returns A provider-prefixed key safe for use in analysis-state.json.

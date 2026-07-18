@@ -25,18 +25,18 @@ export interface UserTopicsDetailResult {
   failedTopics: number;
   /** Number of topic list pages that could not be fetched. */
   failedPages: number;
-  /** Number of topic links without a stable identity. */
+  /** Stable topic identity parse-failure count. */
   invalidTopicCount: number;
   /** 用户是否隐藏了主题列表 */
   isHidden: boolean;
 }
 
 /**
- * Parse topic content and attach the stable identity from its source URL.
+ * Parses topic content and attaches the stable identity from its source URL.
  *
  * @param sourceUrl - URL returned by the topic list use case.
  * @param html - Topic page HTML.
- * @returns An identified topic, or `null` when the URL has no stable ID.
+ * @returns An identified topic; `null` represents an unresolved stable identity.
  */
 function parseIdentifiedTopic(sourceUrl: string, html: string): V2exTopicDetail | null {
   const topicId = extractTopicIdFromPath(sourceUrl);
@@ -52,7 +52,7 @@ function parseIdentifiedTopic(sourceUrl: string, html: string): V2exTopicDetail 
 }
 
 /**
- * Contain parser failures so one malformed topic cannot abort the batch.
+ * Parser failures remain isolated within the batch.
  *
  * @param topicsById - Successfully parsed topics keyed by stable identity.
  * @param sourceUrl - URL returned by the topic list use case.

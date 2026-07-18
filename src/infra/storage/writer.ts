@@ -33,7 +33,7 @@ export function writeDataFile(
     `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
   );
 
-  // recursive: true 在目录已存在时不会抛异常，无需前置 existsSync 检查
+  // recursive: true covers existing and newly created directories.
   fs.mkdirSync(dataDir, { recursive: true });
 
   const content = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
@@ -49,7 +49,7 @@ export function writeDataFile(
     try {
       fs.unlinkSync(tempPath);
     } catch {
-      // The temporary file may not exist when creation itself failed.
+      // A creation failure can leave the temporary path absent.
     }
     throw error;
   }

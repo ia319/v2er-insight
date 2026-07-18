@@ -53,7 +53,7 @@ export function calculateReplyStats(
     .map((reply) => reply.occurredAt)
     .filter((occurredAt): occurredAt is Date => occurredAt !== null);
 
-  // 只有足够的解析成功才计算星期分布
+  // Weekday distribution requires enough successfully parsed timestamps.
   const weekdayDist =
     replyDates.length >= replies.length * 0.5 ? weekdayDistribution(replyDates) : null;
 

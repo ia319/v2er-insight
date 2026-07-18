@@ -2,7 +2,7 @@ import { logger } from '@/infra/logger';
 import type { UserNotice } from './types';
 
 /**
- * Render one structured notice through the diagnostic logger.
+ * Renders one structured notice through the diagnostic logger.
  *
  * @param notice - Non-fatal effect with stable code and recovery details.
  * @returns Nothing.
@@ -31,7 +31,7 @@ export function renderNotice(notice: UserNotice): void {
 }
 
 /**
- * Render a notice list in its supplied order.
+ * Renders a notice list in its supplied order.
  *
  * @param notices - Notices returned by a command or workflow step.
  * @returns Nothing.

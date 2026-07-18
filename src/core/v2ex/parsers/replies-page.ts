@@ -48,7 +48,7 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     const replyContentWrapper = dockArea.next();
     const replyContent = replyContentWrapper.find(REPLY_CONTENT);
 
-    // Parse both fields independently so one malformed value does not discard the other.
+    // Independent parsing preserves each valid topic metadata field.
     const topicLink = dockArea.find(TOPIC_LINK);
     const topicTitle = topicLink.text().trim();
     const topicHref = topicLink.attr('href') ?? '';

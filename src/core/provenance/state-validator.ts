@@ -60,7 +60,7 @@ function isProvidersState(value: unknown): value is Record<string, ProviderProve
   return isRecord(value) && Object.values(value).every(isProviderState);
 }
 
-/** Validate parsed analysis-state.json data before it enters the workflow. */
+/** Validates parsed analysis-state.json data before it enters the workflow. */
 export function isAnalysisStateV1(value: unknown): value is AnalysisStateV1 {
   return (
     isRecord(value) &&

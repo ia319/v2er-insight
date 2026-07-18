@@ -1,8 +1,8 @@
 /**
- * Fetch V2EX user data and persist a versioned raw snapshot.
+ * V2EX user-data fetch and versioned raw-snapshot persistence.
  *
- * Collect profile, topic, and reply results through V2EX use cases, then
- * preserve their data and completeness metadata in raw.json.
+ * Profile, topic, and reply results retain their collection completeness
+ * metadata in raw.json.
  */
 
 import { getUserProfile, getAllUserReplies, getAllUserTopicsDetail } from '@/core/v2ex';
@@ -59,14 +59,14 @@ function printSummary(snapshot: RawSnapshotV2): void {
       `Completeness: failed=${failedCount}, failedPages=${failedPageCount}, ` +
         `identityFailures=${identityFailureCount}, duplicateConflicts=${duplicateConflictCount}`,
     );
-    logger.warn('抓取数据不完整：缺失记录不能解释为删除，后续分析可能受影响');
+    logger.warn('抓取数据不完整：缺失记录状态未知，后续分析置信度降低');
   }
 }
 
 // -- 命令入口 ----------------------------------------------------------------
 
 /**
- * Fetch requested V2EX user data and persist Raw Snapshot V2.
+ * Fetches requested V2EX user data and persists Raw Snapshot V2.
  *
  * @param username - V2EX member name.
  * @param options - Requested scopes, cache behavior, and pipeline mode.
@@ -168,7 +168,7 @@ export async function runFetch(
     }
   }
 
-  // Preserve requested scopes and collection diagnostics in one versioned artifact.
+  // One versioned artifact contains requested scopes and collection diagnostics.
   const rawData = buildRawSnapshot({
     username,
     capturedAt,

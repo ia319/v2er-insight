@@ -20,7 +20,7 @@ function deriveCaptureStatus(snapshot: RawSnapshotV2): CaptureStatus {
     : 'partial';
 }
 
-/** Record the semantic identity and completeness of a persisted raw snapshot. */
+/** Records the semantic identity and completeness of a persisted raw snapshot. */
 export function recordRawProvenance(
   state: AnalysisStateV1,
   snapshot: RawSnapshotV2,
@@ -47,7 +47,7 @@ export function recordRawProvenance(
     : next;
 }
 
-/** Record Analyzer provenance and recompute current-result freshness. */
+/** Records Analyzer provenance and recomputes current-result freshness. */
 export function recordAnalyzedProvenance(
   state: AnalysisStateV1,
   snapshot: RawSnapshotV2,

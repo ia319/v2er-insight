@@ -11,7 +11,7 @@ export type AnalysisStateReadResult =
   | { status: 'invalid' }
   | { status: 'valid'; state: AnalysisStateV1 };
 
-/** Raised when an existing sidecar cannot be validated safely. */
+/** Error for an invalid or unreadable existing sidecar. */
 export class AnalysisStateCorruptError extends Error {
   constructor() {
     super('analysis-state.json is invalid or unreadable');
@@ -19,7 +19,7 @@ export class AnalysisStateCorruptError extends Error {
   }
 }
 
-/** Read and validate the durable analysis state without hiding corruption. */
+/** Reads durable analysis state with explicit corruption status. */
 export function readAnalysisState(username: string): AnalysisStateReadResult {
   const result = readDataFileResult(username, 'analysisState');
 
@@ -33,9 +33,8 @@ export function readAnalysisState(username: string): AnalysisStateReadResult {
 }
 
 /**
- * Validate, update, and atomically persist one user's analysis state.
- *
- * Existing invalid state is never replaced automatically.
+ * Validates, updates, and atomically persists one user's analysis state.
+ * Existing invalid state remains unchanged.
  */
 export function updateAnalysisState(
   username: string,

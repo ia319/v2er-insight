@@ -176,7 +176,7 @@ function isCanonicalIsoTime(value: unknown): value is string {
 }
 
 /**
- * Validate the persisted Raw Snapshot V2 contract at the storage boundary.
+ * Validates the persisted Raw Snapshot V2 contract at the storage boundary.
  *
  * @param value - Parsed JSON value read from raw.json.
  * @returns Whether the value satisfies the complete Raw Snapshot V2 shape.

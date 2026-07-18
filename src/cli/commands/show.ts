@@ -124,9 +124,9 @@ function printFull(result: AIAnalysisResult): void {
 // -- 命令入口 ----------------------------------------------------------------
 
 /**
- * Display the latest persisted AI result.
+ * Displays the latest persisted AI result.
  *
- * @param username - User whose result should be displayed.
+ * @param username - User associated with the displayed result.
  * @param options - JSON, brief, and pipeline output options.
  * @returns Structured show status with any result-provenance notices.
  */

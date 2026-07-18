@@ -54,7 +54,7 @@ v2er <username>
 | `--force`                  | 强制重新抓取（忽略本地缓存）                                       |
 | `--model [name]`           | 指定 AI 模型（默认: `gemini-3.1-pro-preview`）                     |
 | `--thinking-level [level]` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
-| `--resend`                 | 即使分析数据未发生有效变化，也重新发送给当前 AI 目标               |
+| `--resend`                 | 强制重新发送完整分析数据                                           |
 | `-v, --verbose`            | 显示调试输出                                                       |
 
 一键命令根据本地 `raw.json`、`analyzed.json` 和 `result.json` 选择执行起点。`--force` 从抓取步骤重新执行。
@@ -103,9 +103,9 @@ v2er ai <username> [选项]
 | -------------------------- | ------------------------------------------------------------------ |
 | `--model [name]`           | 指定 Gemini 模型（默认: `gemini-3.1-pro-preview`）                 |
 | `--thinking-level [level]` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
-| `--resend`                 | 即使当前目标已收到相同分析，也重新发送完整数据                     |
+| `--resend`                 | 强制重新发送完整分析数据                                           |
 
-AI 命令会验证分析数据来源。同一目标已收到相同分析且本地结果仍可用时，直接复用结果；不完整抓取数据会在发送前提示。
+AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。
 
 ### 4. 报告展示 (Show)
 
@@ -154,7 +154,7 @@ v2er config proxy                           # 查看代理
 v2er config proxy --clear                   # 清除代理
 ```
 
-默认永久保留 `raw.json` 和 `analyzed.json`。只有显式设置 `data.keepRaw=false` 才会按 `data.rawRetention` 自动清理；`v2er config reset data` 恢复默认保留。清理对重发和外部会话的影响见 [数据生命周期](docs/data-lifecycle.md)。
+默认配置 `data.keepRaw=true`：永久保留 `raw.json` 和 `analyzed.json`。`data.keepRaw=false`：按 `data.rawRetention` 自动清理。`v2er config reset data` 恢复默认保留。清理对重发和外部会话的影响见 [数据生命周期](docs/data-lifecycle.md)。
 
 ---
 

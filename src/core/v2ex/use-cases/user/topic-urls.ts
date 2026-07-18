@@ -14,9 +14,9 @@ import { fetchPagedData } from '../utils';
 export interface UserTopicUrlsResult extends PagedResult<string> {
   /** 用户是否隐藏了主题列表 */
   isHidden: boolean;
-  /** Number of links without a stable topic ID. */
+  /** Stable topic identity parse-failure count. */
   invalidTopicCount: number;
-  /** Number of collected topic URLs discarded after the list became hidden. */
+  /** Hidden-state topic URL discard count. */
   discardedTopicCount: number;
 }
 

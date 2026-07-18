@@ -39,7 +39,7 @@ export function parseTopicsListPage(html: string): TopicsPageParseResult {
     };
   }
 
-  // Deduplicate by stable topic ID so URL variations cannot create duplicates.
+  // Stable topic IDs collapse URL variants into one record.
   const topicUrlsById = new Map<string, string>();
   let invalidTopicCount = 0;
   $(TOPIC_LINK).each((_, el) => {

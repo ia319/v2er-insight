@@ -40,7 +40,7 @@ export interface RepliesPageParseResult {
 export interface TopicsPageParseResult {
   /** 是否被用户隐藏 */
   isHidden: boolean;
-  /** Number of links without a stable topic ID. */
+  /** Stable topic identity parse-failure count. */
   invalidTopicCount: number;
   /** 本页帖子 URL 列表 */
   topicUrls: string[];

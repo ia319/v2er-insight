@@ -21,7 +21,7 @@ import { logger } from '@/infra/logger';
 import { renderNotices } from './workflow/notices';
 import packageJson from '../../package.json';
 
-// 从配置文件初始化日志级别（必须在其他初始化之前）
+// Log-level initialization precedes other startup side effects.
 const configLogLevel = getConfig().log?.level;
 if (configLogLevel) {
   logger.setLevel(configLogLevel);
@@ -41,7 +41,7 @@ program
   .option('--force', 'Force re-fetch from scratch')
   .option('--model [name]', 'Specify AI model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level (or select interactively)')
-  .option('--resend', 'Send unchanged analyzed data again')
+  .option('--resend', 'Force resend complete analyzed data')
   .option('-v, --verbose', 'Show debug output')
   .action(async (username, options, command) => {
     if (!username) {
@@ -89,7 +89,7 @@ program
   .argument('<username>', 'V2EX username')
   .option('--model [name]', 'Specify Gemini model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level: minimal | low | medium | high')
-  .option('--resend', 'Send unchanged analyzed data again')
+  .option('--resend', 'Force resend complete analyzed data')
   .option('-v, --verbose', 'Show debug output')
   .action(async (username, _, command) => {
     const opts = command.optsWithGlobals();

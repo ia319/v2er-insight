@@ -100,10 +100,8 @@ interface SelectedRecord<T> {
 }
 
 /**
- * Deduplicate records without allowing input order to select a conflicting value.
- *
- * All duplicate candidates use a fixed-field selection key. Candidates whose
- * semantic conflict keys differ report the affected stable identity once.
+ * Fixed-field keys produce deterministic duplicate selection.
+ * Distinct semantic conflict keys count the affected stable identity once.
  */
 function deduplicateRecords<T>(
   records: T[],
@@ -262,7 +260,7 @@ function buildRepliesCollection(
 }
 
 /**
- * Build a versioned raw snapshot from one fetch execution.
+ * Builds a versioned raw snapshot from one fetch execution.
  *
  * @param input - Profile, requested scopes, results, and shared capture time.
  * @returns A Raw Snapshot V2 with explicit completeness metadata.

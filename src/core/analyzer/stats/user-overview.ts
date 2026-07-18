@@ -14,7 +14,7 @@ export function calculateUserOverview(data: RawUserData): UserOverview {
   // 计算最后活动时间
   const lastActiveTime = getLastActiveTime(topics, replies);
 
-  // Calculate the ratio only when both collections were requested and replies exist.
+  // The ratio domain requires requested topic and reply collections plus at least one reply.
   const hasRequestedTopics = topicsStatus !== 'not_requested';
   const hasRequestedReplies = repliesStatus !== 'not_requested';
   const topicReplyRatio =

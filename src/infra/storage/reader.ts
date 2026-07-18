@@ -15,7 +15,7 @@ export type DataFileReadResult =
   | { status: 'success'; data: unknown };
 
 /**
- * Read one JSON data file while preserving missing and invalid states.
+ * Reads one JSON data file with explicit missing and invalid states.
  *
  * @param username - V2EX username that owns the data file.
  * @param type - Supported data file type.

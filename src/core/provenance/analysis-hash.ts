@@ -9,7 +9,7 @@ export interface AnalysisFingerprintInput {
   analysisConfigHash: string;
 }
 
-/** Hash only Analyzer settings that change statistical meaning. */
+/** Hashes Analyzer settings that define statistical meaning. */
 export function computeAnalysisConfigHash(config?: AnalyzerConfig): string {
   return hashCanonicalJson({
     inactivityThreshold: config?.inactivityThreshold ?? DEFAULT_CONFIG.analyzer.inactivityThreshold,
@@ -18,7 +18,7 @@ export function computeAnalysisConfigHash(config?: AnalyzerConfig): string {
   });
 }
 
-/** Combine source semantics, Analyzer schema, and semantic configuration. */
+/** Combines source semantics, Analyzer schema, and semantic configuration. */
 export function computeAnalysisFingerprint(input: AnalysisFingerprintInput): string {
   return hashCanonicalJson([
     input.semanticDataHash,
@@ -27,7 +27,7 @@ export function computeAnalysisFingerprint(input: AnalysisFingerprintInput): str
   ]);
 }
 
-/** Hash the complete Analyzer payload for provenance and turn diagnostics. */
+/** Hashes the complete Analyzer payload for provenance and turn diagnostics. */
 export function computePayloadHash(output: AnalyzerOutput): string {
   return hashCanonicalJson(output);
 }

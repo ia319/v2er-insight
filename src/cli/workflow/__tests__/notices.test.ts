@@ -130,6 +130,6 @@ describe('result state notices', () => {
       'DATA_SNAPSHOT_PARTIAL',
     ]);
     expect(notices[0]?.actions?.[0]?.content).toBe('v2er alice --force');
-    expect(notices[1]?.details?.[0]).toContain('不能解释为删除');
+    expect(notices[1]?.details?.[0]).toContain('缺失记录状态未知');
   });
 });

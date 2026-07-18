@@ -107,7 +107,7 @@ function normalizeAbsoluteDay(displayTime: string, capturedAt: Date): Normalized
 }
 
 /**
- * Normalize a V2EX reply time against one snapshot capture time.
+ * Normalizes a V2EX reply time against one snapshot capture time.
  *
  * @param displayTime - Time text shown on the V2EX replies page.
  * @param capturedAt - Shared capture time for the complete fetch execution.

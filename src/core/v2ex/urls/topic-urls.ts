@@ -49,13 +49,13 @@ export function extractTopicIdFromPath(path: string): string | null {
 }
 
 /**
- * Extract the current topic reply count encoded by a V2EX topic anchor.
+ * Extracts the current topic reply count encoded by a V2EX topic anchor.
  *
- * Member reply pages link every entry for one topic to its current last reply,
- * so `#replyN` is topic metadata rather than the identity of that user reply.
+ * Member reply pages use the topic's current last-reply anchor for every entry
+ * in that topic. The `#replyN` value represents the current topic reply count.
  *
  * @param path - Relative or absolute topic URL containing a `#replyN` anchor.
- * @returns The topic reply count, or `null` when the anchor is incomplete.
+ * @returns The topic reply count; `null` represents an incomplete anchor.
  */
 export function extractTopicReplyCountFromPath(path: string): number | null {
   const normalized = path.trim();

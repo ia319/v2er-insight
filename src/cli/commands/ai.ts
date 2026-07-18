@@ -45,7 +45,7 @@ function isThinkingLevel(value: string): value is ThinkingLevel {
 /**
  * Run the AI analysis command for one user.
  *
- * @param username - V2EX username whose analyzed data should be processed.
+ * @param username - Target V2EX username.
  * @param options - Per-command model, thinking, resend, and pipeline overrides.
  * @returns The workflow result for the AI step.
  */
@@ -174,7 +174,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     logger.detail(`思考等级: ${thinkingLevel}`);
   }
 
-  // Build once so delivery identity and transmitted content use the same prompt and payload.
+  // One request supplies both the delivery identity and transmitted content.
   const request = buildAnalysisRequest(analyzed);
   const providerKey = computeProviderStateKey({
     provider: 'gemini',
@@ -225,7 +225,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   }
 
   if (provenance.basedOnPartial) {
-    logger.warn('当前分析基于不完整抓取数据，缺失记录不能解释为删除');
+    logger.warn('当前分析基于不完整抓取数据；缺失记录状态未知');
   }
 
   const provider = new GeminiProvider(apiKey, model);

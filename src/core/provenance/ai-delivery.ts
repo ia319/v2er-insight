@@ -26,7 +26,7 @@ export interface ProviderDeliveryRecordInput {
 }
 
 /**
- * Verify that analyzed.json still matches its durable source and configuration identity.
+ * Verifies analyzed.json against its durable source and configuration identity.
  *
  * @param state - Validated analysis-state.json value.
  * @param output - Validated AnalyzerOutput V2 read from analyzed.json.
@@ -74,7 +74,7 @@ export function checkAnalyzedProvenance(
 }
 
 /**
- * Determine whether one logical provider target already received the current analysis.
+ * Determines whether one logical provider target already received the current analysis.
  *
  * @param state - Validated delivery state.
  * @param providerKey - Stable logical provider target key.
@@ -90,7 +90,7 @@ export function hasProviderReceivedAnalysis(
 }
 
 /**
- * Advance provider and current-result provenance after result.json is durable.
+ * Advances provider and current-result provenance after result.json is durable.
  *
  * @param state - Latest validated analysis state.
  * @param input - Delivery identity and result quality metadata.

@@ -2,7 +2,7 @@ import type { CurrentResultState } from '@/core/provenance';
 import type { UserNotice } from './types';
 
 /**
- * Build display warnings from validated current-result provenance.
+ * Builds display warnings from validated current-result provenance.
  *
  * @param username - User whose result is being displayed.
  * @param currentResult - Validated result provenance when available.
@@ -28,7 +28,7 @@ export function createResultStateNotices(
       code: 'DATA_RESULT_STALE',
       severity: 'warning',
       summary: '当前展示结果已落后于最新数据',
-      details: ['result.json 仍可查看，但其分析指纹与当前数据来源不一致。'],
+      details: ['result.json 可查看；其分析指纹与当前数据来源不一致。'],
       actions: [refreshAction],
     });
   }
@@ -38,7 +38,7 @@ export function createResultStateNotices(
       code: 'DATA_SNAPSHOT_PARTIAL',
       severity: 'warning',
       summary: '当前展示结果基于不完整抓取数据',
-      details: ['缺失记录不能解释为删除，相关结论应降低置信度。'],
+      details: ['缺失记录状态未知；相关结论置信度降低。'],
       actions: [refreshAction],
     });
   }

@@ -117,7 +117,7 @@ function isPeriodContent(value: unknown): value is PeriodContent | PeriodContent
 }
 
 /**
- * Validate persisted Analyzer output before it enters an AI provider boundary.
+ * Validates persisted Analyzer output before it enters an AI provider boundary.
  *
  * @param value - Parsed analyzed.json value.
  * @returns Whether the complete AnalyzerOutput V2 contract is satisfied.

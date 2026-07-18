@@ -2,7 +2,7 @@ import type { RawSnapshotV2 } from '@/core/snapshot';
 import type { RawUserData } from '../types';
 
 /**
- * Convert a versioned snapshot into the Analyzer internal input model.
+ * Converts a versioned snapshot into the Analyzer internal input model.
  *
  * @param snapshot - Validated Raw Snapshot V2.
  * @returns V2EX-shaped records consumed by Analyzer statistics and content modules.

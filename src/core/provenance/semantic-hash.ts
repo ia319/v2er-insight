@@ -87,7 +87,7 @@ function createSemanticProjection(snapshot: RawSnapshotV2) {
   };
 }
 
-/** Compute the semantic identity of one validated raw snapshot. */
+/** Computes the semantic identity of one validated raw snapshot. */
 export function computeSemanticDataHash(snapshot: RawSnapshotV2): string {
   return hashCanonicalJson(createSemanticProjection(snapshot));
 }

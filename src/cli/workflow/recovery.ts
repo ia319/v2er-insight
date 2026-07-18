@@ -31,7 +31,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
     {
       type: 'instruction',
       content: '先备份并移出损坏的 analysis-state.json，保留原文件用于诊断',
-      description: '状态文件无法验证，不能自动覆盖或猜测已有 provenance',
+      description: '状态文件验证失败；现有 provenance 保持原状',
     },
     {
       type: 'command',

@@ -21,9 +21,9 @@ It uses a modular architecture separating generic logic (Fetcher) from business 
 
 ## Build & Packaging Notes
 
-- `scripts/copy-dist-assets.cjs`: Copy runtime non-code assets into `dist` (currently `src/core/ai/prompt/system-prompt.md`) to avoid packaged runtime `ENOENT`.
-- `scripts/prune-dist-maps.cjs`: Remove `*.map` from `dist` before packaging to reduce tarball size and avoid leaking local build path metadata.
-- `pack:check` runs `pnpm pack --dry-run --json` and should be used to verify published files before release.
+- `scripts/copy-dist-assets.cjs`: Copies runtime non-code assets into `dist` (currently `src/core/ai/prompt/system-prompt.md`) for packaged runtime access.
+- `scripts/prune-dist-maps.cjs`: Removes `*.map` from `dist` before packaging, reducing tarball size and local build path metadata exposure.
+- `pack:check`: Verifies published files through `pnpm pack --dry-run --json`.
 
 ## Directory Structure & File Purposes
 
@@ -228,7 +228,7 @@ root
 
 - **Parsers Breakdown**:
   - `src/core/v2ex/parsers/replies-page.ts`: Handles nested reply content (traverses `.inner` wrappers).
-  - Member reply entries for the same topic can share one `#replyN` anchor; store the anchor value as topic reply-count metadata.
+  - Member reply entries for the same topic can share one `#replyN` anchor; the anchor value is topic reply-count metadata.
   - `src/core/v2ex/parsers/topics-list-page.ts`: Deduplicates links by topic ID and reports invalid identity counts.
   - `src/core/v2ex/parsers/utils/pagination.ts`: Robust pagination parser using `.first()` to handle dual pagination bars.
 - **Date Handling**:
@@ -252,7 +252,7 @@ root
 - `getAllUserTopicUrls(username, options?)` → Full URLs, hidden state, invalid identities, and hidden-state discard count
 - `getAllUserTopicsDetail(username, options?)` → Identified topic contents with page and identity completeness metadata
 
-If any fetched list page reports hidden topics, discard topic URLs collected from earlier pages. Count those discarded URLs as failed topics while keeping `invalidTopicCount` limited to links without stable identities.
+A hidden signal from any fetched list page clears topic URLs collected from earlier pages. Discarded URLs contribute to failed topics; `invalidTopicCount` remains the stable-identity parse-failure count.
 
 **Utils** (`utils/`):
 
@@ -263,7 +263,7 @@ If any fetched list page reports hidden topics, discard topic URLs collected fro
 
 ### 4. Raw Snapshot Module (Complete)
 
-- **Role**: Build the versioned boundary between V2EX fetch results and persisted analysis input.
+- **Role**: Versioned boundary between V2EX fetch results and persisted analysis input.
 - **Location**: `src/core/snapshot/`
 
 **Public API**:
@@ -274,41 +274,41 @@ If any fetched list page reports hidden topics, discard topic URLs collected fro
 
 **Data Contract**:
 
-- Record `username`, one ISO `capturedAt`, and profile data at the snapshot root.
-- Represent topics and replies as `complete`, `partial`, or `not_requested` collections.
-- Record expected, fetched, failed, failed-page, identity-failure, and duplicate-conflict counts per collection.
-- Keep `failedCount` at least as large as `identityFailureCount`.
-- Mark declared and fetched count mismatches as `partial`; record the absolute reply-count difference in `failedCount`.
-- Preserve explicit topic visibility independently from an empty topic collection.
-- Deduplicate stable topic identities with a fixed-field selection key that is independent of input order.
-- Mark topic collections `partial` when duplicate identities contain conflicting semantic fields, and count each affected identity once.
-- Preserve every member reply entry because the source page does not expose a stable per-reply identity.
-- Sort topics by numeric topic ID and replies by nullable numeric topic ID plus fixed semantic fields.
-- Retain replies with incomplete topic metadata and mark the reply collection `partial` through its failure diagnostics.
-- Keep reply `duplicateConflictCount` at zero because reply records are not identity-deduplicated.
-- Validate schema, topic identities, reply metadata, collection invariants, and unique topic IDs at the storage boundary.
-- Preserve reply display time and normalize supported relative or Chinese calendar values against the shared `capturedAt`.
-- Record normalized reply time precision as `minute`, `hour`, or `day`; retain `null` with `unknown` for unsupported or invalid values.
-- Interpret calendar dates in the V2EX `+08:00` timezone independently from the runtime machine timezone.
+- Snapshot root: `username`, one ISO `capturedAt`, and profile data.
+- Collection states: `complete`, `partial`, and `not_requested` for topics and replies.
+- Collection diagnostics: expected, fetched, failed, failed-page, identity-failure, and duplicate-conflict counts.
+- Count invariant: `failedCount >= identityFailureCount`.
+- Declared/fetched count mismatch: `partial`, with the absolute reply-count difference in `failedCount`.
+- Topic visibility: explicit state independent of collection size.
+- Stable topic identity deduplication: fixed-field selection key independent of input order.
+- Conflicting duplicate topic identities: `partial`, with each affected identity counted once.
+- Member reply entries: distinct records whose shared topic anchors carry topic-level metadata.
+- Deterministic ordering: topics by numeric topic ID; replies by nullable numeric topic ID and fixed semantic fields.
+- Incomplete reply metadata: retained records and `partial` collection status through failure diagnostics.
+- Reply `duplicateConflictCount`: `0`; reply records retain source multiplicity.
+- Storage boundary validation: schema, topic identities, reply metadata, collection invariants, and unique topic IDs.
+- Reply time: original display value plus normalized supported relative and Chinese calendar values against the shared `capturedAt`.
+- Normalized reply time precision: `minute`, `hour`, or `day`; unsupported or invalid values use `null` with `unknown`.
+- Calendar timezone: V2EX `+08:00`, independent of the runtime machine timezone.
 
 **Provenance Hashing** (`src/core/provenance/`):
 
-- Use `canonicalJsonStringify(value)` to serialize plain JSON values with recursively sorted object keys.
-- Use `computeSemanticDataHash(snapshot)` to calculate the SHA-256 identity of stable Snapshot facts.
-- Include topic identities, reply semantic facts with multiplicity preserved, content, interaction counts, visibility, and collection completeness diagnostics.
-- Exclude capture time, daily ranking, item order, reply display time, and normalized reply-time drift.
-- Use `computeAnalysisConfigHash(config)` to hash inactivity and TopN settings while excluding content chunk limits.
-- Use `computeAnalysisFingerprint(input)` to combine semantic data identity, Analyzer schema version, and semantic configuration identity.
-- Use `computePayloadHash(output)` to hash the complete Analyzer output for provenance and turn diagnostics.
-- Use `computeProviderStateKey(input)` to isolate delivery state by provider, model, system prompt, thinking level, and logical session.
-- Use `checkAnalyzedProvenance(state, output, config)` to verify raw identity, Analyzer schema, semantic configuration, payload identity, and capture quality before delivery.
-- Use `hasProviderReceivedAnalysis(state, providerKey, fingerprint)` for provider-target duplicate detection.
-- Use `recordProviderDelivery(state, input)` only after result persistence; it records provider hashes and a fresh current result with `change` or `resend` delivery mode.
-- Use `AnalysisStateV1` to represent raw identity, analyzed identity, current-result freshness, and provider delivery hashes.
-- Validate parsed state with `isAnalysisStateV1(value)` before workflow code consumes nested provenance fields.
-- Use `recordRawProvenance(state, snapshot)` to derive semantic identity, treat any partial or unrequested collection as a partial capture, and mark the current result stale when raw identity diverges from its analyzed source.
-- Use `recordAnalyzedProvenance(state, snapshot, output, config)` to record Analyzer hashes and set result freshness by analysis-fingerprint equality.
-- Reject unsupported, non-finite, non-plain, and circular values instead of producing an ambiguous digest.
+- `canonicalJsonStringify(value)` → Plain JSON serialization with recursively sorted object keys.
+- `computeSemanticDataHash(snapshot)` → SHA-256 identity of stable Snapshot facts.
+- Semantic hash inputs: topic identities, reply semantic facts with source multiplicity, content, interaction counts, visibility, and collection completeness diagnostics.
+- Transient fields outside semantic identity: capture time, daily ranking, item order, reply display time, and normalized reply-time drift.
+- `computeAnalysisConfigHash(config)` → Identity of inactivity and TopN settings; content chunk limits remain operational settings.
+- `computeAnalysisFingerprint(input)` → Combined semantic data identity, Analyzer schema version, and semantic configuration identity.
+- `computePayloadHash(output)` → Complete Analyzer output identity for provenance and turn diagnostics.
+- `computeProviderStateKey(input)` → Delivery-state identity across provider, model, system prompt, thinking level, and logical session.
+- `checkAnalyzedProvenance(state, output, config)` → Validation of raw identity, Analyzer schema, semantic configuration, payload identity, and capture quality before delivery.
+- `hasProviderReceivedAnalysis(state, providerKey, fingerprint)` → Provider-target duplicate detection.
+- `recordProviderDelivery(state, input)` → Provider hashes and a fresh current result with `change` or `resend` delivery mode after result persistence.
+- `AnalysisStateV1` → Raw identity, analyzed identity, current-result freshness, and provider delivery hashes.
+- `isAnalysisStateV1(value)` → Parsed-state validation before workflow access to nested provenance fields.
+- `recordRawProvenance(state, snapshot)` → Semantic identity, partial-capture status, and current-result freshness relative to the analyzed source.
+- `recordAnalyzedProvenance(state, snapshot, output, config)` → Analyzer hashes and result freshness by analysis-fingerprint equality.
+- Unsupported, non-finite, non-plain, and circular canonical inputs produce explicit errors.
 
 ### 5. CLI Module (Complete)
 
@@ -332,7 +332,7 @@ If any fetched list page reports hidden topics, discard topic URLs collected fro
 - `--force` → Force re-fetch from scratch
 - `--model [name]` → Specify AI model (optional value)
 - `--thinking-level [level]` → Specify thinking level (optional value)
-- `--resend` → Send unchanged analyzed data again
+- `--resend` → Force resend complete analyzed data
 - `-v, --verbose` → Show debug output
 
 The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
@@ -354,30 +354,30 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 
 **Fetch Provenance**:
 
-- Keep cache-hit fetches unchanged and skip provenance mutation with the cached command result.
-- Stop before network access when `analysis-state.json` is invalid or unreadable.
-- Atomically persist `raw.json` before recording its semantic hash and capture status in `analysis-state.json`.
-- Return `PROVENANCE_UPDATE_FAILED` when raw persistence succeeds but the sidecar cannot be advanced.
+- Cache-hit fetch results leave provenance unchanged.
+- Invalid or unreadable `analysis-state.json` produces a state-validation failure before network access.
+- Atomic `raw.json` persistence precedes semantic hash and capture-status recording in `analysis-state.json`.
+- Raw persistence followed by a sidecar update failure returns `PROVENANCE_UPDATE_FAILED`.
 
 **Analyze Provenance**:
 
-- Reject Raw Snapshot V2 files without raw provenance as legacy analysis input.
-- Recompute semantic hash and capture status before analysis and reject either mismatch before writing `analyzed.json`.
-- Atomically persist `analyzed.json` before recording config hash, analysis fingerprint, and payload hash.
-- Recheck raw provenance inside the protected state update so concurrent source changes cannot advance analyzed state.
-- Mark the current result fresh only when its analysis fingerprint equals the newly recorded Analyzer fingerprint.
+- Raw Snapshot V2 files missing raw provenance are classified as legacy analysis input.
+- Semantic hash and capture status are recomputed before analysis; mismatches produce provenance failure before `analyzed.json` persistence.
+- Atomic `analyzed.json` persistence precedes config hash, analysis fingerprint, and payload hash recording.
+- The protected state update rechecks raw provenance against the persisted source state.
+- Current-result freshness equals analysis-fingerprint equality with the newly recorded Analyzer fingerprint.
 
 **AI Delivery Provenance**:
 
-- Validate persisted `AnalyzerOutput V2` and its raw, schema, config, fingerprint, payload, and capture-quality provenance before provider access.
-- Derive Gemini delivery identity from provider, model, system prompt, thinking level, and the default logical session.
-- Reuse an unchanged delivery only when the same target received the fingerprint and a matching fresh `result.json` remains available.
-- Let `--resend` bypass reuse and record `currentResult.deliveryMode = 'resend'`.
-- Warn before sending analysis based on partial capture data.
-- Persist `result.json` before updating provider last-sent state, and leave last-sent unchanged after provider, parse, or result-write failure.
-- Recheck analyzed provenance during the protected state update before cleaning intermediate files.
-- `runShow()` returns stale and partial notices from valid current-result provenance while continuing to display legacy results without sidecar assumptions.
-- JSON report content remains on stdout; command and workflow entrypoints render result notices on stderr.
+- Persisted `AnalyzerOutput V2` validation covers raw, schema, config, fingerprint, payload, and capture-quality provenance before provider access.
+- Gemini delivery identity consists of provider, model, system prompt, thinking level, and the default logical session.
+- Unchanged delivery reuse requires the same target fingerprint and a matching fresh `result.json`.
+- `--resend` bypasses reuse and records `currentResult.deliveryMode = 'resend'`.
+- Partial-capture analysis produces a warning before provider delivery.
+- `result.json` persistence precedes provider last-sent state updates; provider, parse, and result-write failures retain the previous delivery state.
+- The protected state update rechecks analyzed provenance before intermediate-file cleanup.
+- `runShow()` derives stale and partial notices from valid current-result provenance. Legacy results with absent sidecars remain displayable with unknown provenance.
+- stdout carries JSON report content; stderr carries command and workflow notices.
 
 ### 6. Config Module (Complete)
 
@@ -454,16 +454,16 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 
 **Overview Semantics**:
 
-- Keep `totalTopics` null when topics are hidden or were not requested.
-- Keep `totalReplies` null when replies were not requested.
-- Calculate `topicReplyRatio` only when topics are visible, both collections were requested, and replies exist.
+- `totalTopics`: `null` for hidden or unrequested topics.
+- `totalReplies`: `null` for unrequested replies.
+- `topicReplyRatio`: available for visible, requested topic and reply collections with at least one reply.
 
 **Data Quality Contract**:
 
-- Add `schemaVersion: 2` and `dataQuality` to every `AnalyzerOutput`.
-- Project `capturedAt`, status, expected count, fetched count, and failed count from each snapshot collection.
-- Treat `complete` as a complete captured fact set.
-- Treat `partial` and `not_requested` missing records as unknown, not deleted.
+- Every `AnalyzerOutput` contains `schemaVersion: 2` and `dataQuality`.
+- `dataQuality` projects `capturedAt`, status, expected count, fetched count, and failed count from each snapshot collection.
+- `complete`: complete captured fact set.
+- `partial` and `not_requested`: missing record state unknown.
 
 ### 8. AI Module (Complete)
 
@@ -597,24 +597,24 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 └── analysis-state.json # Durable provenance and provider delivery state
 ```
 
-**Public API** (username must match `/^[a-zA-Z0-9_-]+$/`, otherwise throws Error):
+**Public API** (valid username pattern: `/^[a-zA-Z0-9_-]+$/`; other values throw Error):
 
 - `getUserDataDir(username)` → User data directory path
 - `getDataFilePath(username, type)` → Specific data file path
 - `readDataFile<T>(username, type)` → Read `raw`, `analyzed`, `result`, or `analysisState` JSON (returns `null` on missing/invalid)
-- `readDataFileResult(username, type)` → Preserve `missing`, `invalid`, and parsed-success states for every `DataFileType`
-- `writeDataFile(username, type, data, options?)` → Write JSON through a same-directory `0600` temporary file and atomically rename it over the target
-- `readAnalysisState(username)` → Validate `analysis-state.json` and preserve missing/invalid/valid distinctions
-- `updateAnalysisState(username, updater)` → Reject invalid existing or updated state before atomic persistence
-- `cleanExpiredData(username)` → Return cleanup enablement, retention, deleted files, and typed skip diagnostics
+- `readDataFileResult(username, type)` → Typed `missing`, `invalid`, and parsed-success states for every `DataFileType`
+- `writeDataFile(username, type, data, options?)` → Same-directory `0600` temporary write and atomic target replacement
+- `readAnalysisState(username)` → Validated `analysis-state.json` with missing/invalid/valid distinctions
+- `updateAnalysisState(username, updater)` → Validated existing and updated state with atomic persistence
+- `cleanExpiredData(username)` → Cleanup enablement, retention, deleted files, and typed skip diagnostics
 
 **Cleanup Strategy**:
 
-- `data.keepRaw = true` → Never clean raw/analyzed source data (default)
-- `data.keepRaw = false` → Delete files older than `data.rawRetention` days (default retention: 1)
-- `result.json` and `analysis-state.json` are never cleaned
+- `data.keepRaw = true` → Permanent raw/analyzed retention (default)
+- `data.keepRaw = false` → Age-based cleanup after `data.rawRetention` days (default retention: 1)
+- `result.json` and `analysis-state.json` → Permanent retention
 - Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
-- See `docs/data-lifecycle.md` for user-facing retention effects and recovery commands.
+- `docs/data-lifecycle.md` documents user-facing retention effects and recovery commands.
 
 ## Proxy Configuration
 
@@ -637,13 +637,13 @@ If none are set, no proxy is used.
 **Security**:
 
 - Config file uses `0600` permission (owner read/write only, Linux/Mac)
-- Windows users should manually verify config file permissions
-- Avoid storing proxy credentials in config file; use environment variables instead
+- Windows config permissions require manual verification
+- Environment variables store proxy credentials
 
 ## Testing Strategy
 
 - **Structure**: Co-located tests in `__tests__/` folders within each module.
 - **Language**: All test descriptions, data, and assertions in English; comments may be Chinese.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
-- **Network Mocking**: Use `vi.mock` for modules (Fetcher, parsers).
+- **Network Mocking**: `vi.mock` for Fetcher and parser modules.
 - **Coverage**: 450+ tests covering parsers, URL generators, services, CLI, config, analyzer, AI, and retry.

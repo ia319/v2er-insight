@@ -1,20 +1,14 @@
 /**
  * Analyzer 输出数据结构
  *
- * 设计思路：
- * 1. UserOverview 用户总览（全局信息）
- * 2. PeriodsSummary 包含所有活跃期的统计分析结果（一次性发送）
- * 3. PeriodContent 按活跃期分片发送
- * 4. 关键规则：不同活跃期必须分 chunk（同一 chunk 只能包含同一活跃期的内容）
+ * 结构组成：
+ * 1. UserOverview：用户全局信息
+ * 2. PeriodsSummary：所有活跃期的统计结果
+ * 3. PeriodContent / PeriodContentChunk：按活跃期组织的内容
+ * 4. AnalyzerOutput：上述结构组成的单个完整 JSON
  *
- * 发送策略：
- * 1. 先发送 UserOverview → AI 获得用户基本画像
- * 2. 发送 PeriodsSummary → AI 获得所有活跃期的统计概览
- * 3. 再按需发送各活跃期的内容：
- *    - 活跃期 0 内容少 → 发送 PeriodContent(periodIndex=0)
- *    - 活跃期 1 内容多 → 发送 PeriodContentChunk(periodIndex=1, chunkIndex=0)
- *                     → 发送 PeriodContentChunk(periodIndex=1, chunkIndex=1)
- *                     → ...
+ * 单个 chunk 对应一个活跃期。periodIndex 关联统计周期与内容，chunkIndex
+ * 表示同一活跃期内的分片顺序。
  */
 
 // ============================================================================
@@ -22,8 +16,7 @@
 // ============================================================================
 
 /**
- * 用户总览
- * 在提示词后首先发送给 AI，描述目标用户的基本信息
+ * 目标用户的基本信息和全局指标
  */
 export interface UserOverview {
   /** 加入时间，格式：2010-04-25 21:45:46 +08:00 */
@@ -137,7 +130,6 @@ export interface SinglePeriodStats {
 
 /**
  * 所有活跃期的统计汇总
- * 一次性发送，让 AI 看到全局概览
  */
 export interface PeriodsSummary {
   /** 总活跃期数 */
@@ -154,7 +146,7 @@ export interface PeriodsSummary {
 // ============================================================================
 
 /**
- * 发送给 AI 的单条帖子
+ * Analyzer 内容中的单条帖子
  */
 export interface ContentTopic {
   /** 主题标题 - 用于分析关注话题和表达风格 */
@@ -166,7 +158,7 @@ export interface ContentTopic {
 }
 
 /**
- * 发送给 AI 的单条回复
+ * Analyzer 内容中的单条回复
  */
 export interface ContentReply {
   /** 回复所在的主题标题 - 用于分析关注的话题类型 */
@@ -192,8 +184,8 @@ export interface PeriodContent {
 
 /**
  * 活跃期内容分片
- * 当单个活跃期内容过多时（帖子>20 或 回复>100），分片发送
- * 关键规则：同一 chunk 只能包含同一活跃期的内容
+ * 单个活跃期内容超过阈值（帖子>20 或 回复>100）时采用分片结构
+ * 单个 chunk 对应一个活跃期
  */
 export interface PeriodContentChunk {
   /** 活跃期序号 - 对应 PeriodsSummary.periods[periodIndex] */
@@ -236,23 +228,21 @@ export interface AnalyzerOutput {
   };
   /** 用户总览 */
   userOverview: UserOverview;
-  /** 所有活跃期的统计汇总（一次性发送） */
+  /** 所有活跃期的统计汇总 */
   summary: PeriodsSummary;
   /**
    * 各活跃期的内容
    * 可能是完整内容(PeriodContent)或分片(PeriodContentChunk)
-   * 发送时按 periodIndex 顺序发送
+   * 按 periodIndex 排列，同一活跃期的分片按 chunkIndex 排列
    */
   contents: Array<PeriodContent | PeriodContentChunk>;
 }
 
 // ============================================================================
-// AI 关联说明
+// AnalyzerOutput 关联结构
 // ============================================================================
 /**
- * AI 如何关联活跃期与内容：
- *
- * AnalyzerOutput 作为一个完整 JSON 发送。
- * dataQuality 说明数据范围是否完整；periodIndex 将内容与统计周期关联。
- * 同一 periodIndex 的多个 chunk 需要合并理解，不能视为独立活跃期。
+ * AnalyzerOutput 采用单个完整 JSON。
+ * dataQuality 表示数据范围完整性。
+ * periodIndex 是内容与统计周期的关联键；同一值对应一个活跃期及其多个 chunk。
  */
