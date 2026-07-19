@@ -12,22 +12,55 @@ export const THINKING_LEVELS = ['minimal', 'low', 'medium', 'high'] as const;
 /** 思考水平类型（从 THINKING_LEVELS 派生，保证类型与运行时一致） */
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
+/** Supported AI provider identifiers. */
+export const AI_PROVIDERS = ['gemini', 'codex'] as const;
+
+/** AI provider identifier derived from the runtime allowlist. */
+export type AIProviderId = (typeof AI_PROVIDERS)[number];
+
+/** Selects the model marked as default by the active Codex App Server. */
+export const CODEX_DEFAULT_MODEL = 'app-default' as const;
+
+/** Selects the default reasoning effort declared by the resolved Codex model. */
+export const CODEX_DEFAULT_REASONING_EFFORT = 'model-default' as const;
+
+/** Gemini-specific connection and generation settings. */
+export interface GeminiProviderConfig {
+  apiKey?: string;
+  model?: string;
+  thinkingLevel?: ThinkingLevel;
+  timeout?: number;
+}
+
+/** Codex App Server process, project, and generation settings. */
+export interface CodexProviderConfig {
+  executable?: string;
+  projectPath?: string;
+  model?: string;
+  reasoningEffort?: string;
+  startupTimeout?: number;
+  turnTimeout?: number;
+  shutdownGrace?: number;
+}
+
 /** AI 模块配置 */
 export interface AIConfig {
-  /** AI 提供商（目前仅支持 gemini） */
-  provider?: string;
-  /** API 密钥 */
-  apiKey?: string;
-  /** 模型名称 */
-  model?: string;
-  /** 思考水平 */
-  thinkingLevel?: ThinkingLevel;
-  /** AI 请求超时（毫秒） */
-  timeout?: number;
+  provider?: AIProviderId;
+  gemini?: GeminiProviderConfig;
+  codex?: CodexProviderConfig;
   /** 最大重试次数 */
   maxRetries?: number;
   /** 重试基础延迟（毫秒） */
   baseDelay?: number;
   /** 重试最大延迟（毫秒） */
   maxDelay?: number;
+
+  /** @deprecated Use `gemini.apiKey`. */
+  apiKey?: string;
+  /** @deprecated Use `gemini.model`. */
+  model?: string;
+  /** @deprecated Use `gemini.thinkingLevel`. */
+  thinkingLevel?: ThinkingLevel;
+  /** @deprecated Use `gemini.timeout`. */
+  timeout?: number;
 }
