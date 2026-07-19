@@ -3,10 +3,9 @@
  *
  * 用法示例：
  * ```typescript
- * import { buildAnalyzerOutput } from '@/core/analyzer';
+ * import { buildAnalyzerOutputFromSnapshot } from '@/core/analyzer';
  *
- * const rawData: RawUserData = { profile, topics, replies, isTopicsHidden };
- * const output = buildAnalyzerOutput(rawData);
+ * const output = buildAnalyzerOutputFromSnapshot(snapshot);
  * // output.userOverview - 用户总览
  * // output.summary - 活跃期统计汇总
  * // output.contents - 分片后的内容
@@ -14,7 +13,9 @@
  */
 
 // 主入口函数
-export { buildAnalyzerOutput } from './builder';
+export { buildAnalyzerOutputFromSnapshot } from './builder';
+export { isAnalyzerOutput } from './validator';
+export { ANALYZER_OUTPUT_SCHEMA_VERSION } from './types';
 
 // 类型导出
 export type {
@@ -22,6 +23,7 @@ export type {
   RawUserData,
   // 输出
   AnalyzerOutput,
+  SnapshotQuality,
   UserOverview,
   PeriodsSummary,
   SinglePeriodStats,

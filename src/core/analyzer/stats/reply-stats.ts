@@ -2,14 +2,12 @@
  * 回复统计计算
  */
 
-import type { V2exReply } from '@/core/v2ex/types/entities';
-import type { SinglePeriodStats } from '../types';
+import type { AnalyzerReply, SinglePeriodStats } from '../types';
 import { getConfig } from '@/config';
-import { parseRelativeTime, average, topN, weekdayDistribution } from '../utils';
+import { average, topN, weekdayDistribution } from '../utils';
 
 interface ReplyStatsInput {
-  replies: V2exReply[];
-  referenceDate?: Date;
+  replies: AnalyzerReply[];
 }
 
 /**
@@ -26,14 +24,14 @@ export function calculateReplyStats(
   | 'replyWeekdayDistribution'
   | 'replyNodeDistribution'
 > {
-  const { replies, referenceDate = new Date() } = input;
+  const { replies } = input;
 
   if (replies.length === 0) {
     return {
       replyCount: 0,
       avgReplyLength: 0,
       directReplyRatio: 0,
-      avgRepliedTopicHeat: 0,
+      avgRepliedTopicHeat: null,
       replyWeekdayDistribution: null,
       replyNodeDistribution: {},
     };
@@ -45,15 +43,17 @@ export function calculateReplyStats(
   // 计算直接回复率
   const directReplies = replies.filter((r) => r.isDirectReply).length;
 
-  // 计算参与话题热度
-  const topicHeats = replies.map((r) => r.topicReplyCount);
+  // The member reply page anchors point to each topic's current last reply.
+  const topicReplyCounts = replies
+    .map((reply) => reply.topicReplyCount)
+    .filter((replyCount): replyCount is number => replyCount !== null);
 
   // 计算星期分布
   const replyDates = replies
-    .map((r) => parseRelativeTime(r.replyTime, referenceDate)?.date)
-    .filter((d): d is Date => d !== undefined);
+    .map((reply) => reply.occurredAt)
+    .filter((occurredAt): occurredAt is Date => occurredAt !== null);
 
-  // 只有足够的解析成功才计算星期分布
+  // Weekday distribution requires enough successfully parsed timestamps.
   const weekdayDist =
     replyDates.length >= replies.length * 0.5 ? weekdayDistribution(replyDates) : null;
 
@@ -61,7 +61,7 @@ export function calculateReplyStats(
     replyCount: replies.length,
     avgReplyLength: average(lengths),
     directReplyRatio: directReplies / replies.length,
-    avgRepliedTopicHeat: average(topicHeats),
+    avgRepliedTopicHeat: topicReplyCounts.length > 0 ? average(topicReplyCounts) : null,
     replyWeekdayDistribution: weekdayDist,
     replyNodeDistribution: topN(
       replies,

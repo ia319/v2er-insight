@@ -6,7 +6,8 @@
 import { Fetcher, SequentialStrategy } from '@/infra/fetcher';
 import type { FetchOptions } from '@/infra/fetcher';
 import { parseTopicDetail } from '../../parsers';
-import type { TopicDetailParseResult } from '../../types';
+import type { V2exTopicDetail } from '../../types';
+import { extractTopicIdFromPath, getTopicUrl } from '../../urls';
 import type { ServiceOptions } from '../types';
 import { getAllUserTopicUrls } from './topic-urls';
 
@@ -15,15 +16,65 @@ import { getAllUserTopicUrls } from './topic-urls';
  */
 export interface UserTopicsDetailResult {
   /** 所有帖子详情列表 */
-  topics: TopicDetailParseResult[];
+  topics: V2exTopicDetail[];
   /** 帖子总数（URL 数量） */
   totalTopics: number;
   /** 成功获取详情的帖子数 */
   fetchedTopics: number;
   /** 获取失败的帖子数 */
   failedTopics: number;
+  /** Number of topic list pages that could not be fetched. */
+  failedPages: number;
+  /** Stable topic identity parse-failure count. */
+  invalidTopicCount: number;
   /** 用户是否隐藏了主题列表 */
   isHidden: boolean;
+}
+
+/**
+ * Parses topic content and attaches the stable identity from its source URL.
+ *
+ * @param sourceUrl - URL returned by the topic list use case.
+ * @param html - Topic page HTML.
+ * @returns An identified topic; `null` represents an unresolved stable identity.
+ */
+function parseIdentifiedTopic(sourceUrl: string, html: string): V2exTopicDetail | null {
+  const topicId = extractTopicIdFromPath(sourceUrl);
+  if (!topicId) {
+    return null;
+  }
+
+  return {
+    topicId,
+    sourceUrl: getTopicUrl(topicId),
+    ...parseTopicDetail(html),
+  };
+}
+
+/**
+ * Parser failures remain isolated within the batch.
+ *
+ * @param topicsById - Successfully parsed topics keyed by stable identity.
+ * @param sourceUrl - URL returned by the topic list use case.
+ * @param html - Topic page HTML.
+ * @returns Whether the topic was parsed and retained.
+ */
+function tryStoreIdentifiedTopic(
+  topicsById: Map<string, V2exTopicDetail>,
+  sourceUrl: string,
+  html: string,
+): boolean {
+  try {
+    const topic = parseIdentifiedTopic(sourceUrl, html);
+    if (!topic) {
+      return false;
+    }
+
+    topicsById.set(topic.topicId, topic);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -42,13 +93,17 @@ export async function getAllUserTopicsDetail(
 ): Promise<UserTopicsDetailResult> {
   // 获取用户所有帖子完整 URL
   const urlsResult = await getAllUserTopicUrls(username, options);
+  const totalTopics =
+    urlsResult.data.length + urlsResult.invalidTopicCount + urlsResult.discardedTopicCount;
 
   if (urlsResult.isHidden || urlsResult.data.length === 0) {
     return {
       topics: [],
-      totalTopics: 0,
+      totalTopics,
       fetchedTopics: 0,
-      failedTopics: 0,
+      failedTopics: urlsResult.invalidTopicCount + urlsResult.discardedTopicCount,
+      failedPages: urlsResult.failedPages,
+      invalidTopicCount: urlsResult.invalidTopicCount,
       isHidden: urlsResult.isHidden,
     };
   }
@@ -59,22 +114,16 @@ export async function getAllUserTopicsDetail(
     headers: options?.headers,
   };
 
-  const topics: TopicDetailParseResult[] = [];
-  let fetchedTopics = 0;
+  const topicsById = new Map<string, V2exTopicDetail>();
   const failedUrls: string[] = [];
 
   // 第一轮：批量抓取并解析帖子详情
   for await (const result of fetcher.fetch(urlsResult.data, fetchOptions, options?.events)) {
-    if (result.success && result.content) {
-      try {
-        const detail = parseTopicDetail(result.content);
-        topics.push(detail);
-        fetchedTopics++;
-      } catch {
-        // 解析失败，记录 URL 用于二次重试
-        failedUrls.push(result.url);
-      }
-    } else {
+    if (
+      !result.success ||
+      !result.content ||
+      !tryStoreIdentifiedTopic(topicsById, result.url, result.content)
+    ) {
       failedUrls.push(result.url);
     }
   }
@@ -83,33 +132,34 @@ export async function getAllUserTopicsDetail(
   if (failedUrls.length > 0) {
     const recoveredUrls = new Set<string>();
     for await (const result of fetcher.fetch(failedUrls, fetchOptions, options?.events)) {
-      if (result.success && result.content) {
-        try {
-          const detail = parseTopicDetail(result.content);
-          topics.push(detail);
-          fetchedTopics++;
-          recoveredUrls.add(result.url);
-        } catch {
-          // 二次重试解析仍失败
-        }
+      if (
+        result.success &&
+        result.content &&
+        tryStoreIdentifiedTopic(topicsById, result.url, result.content)
+      ) {
+        recoveredUrls.add(result.url);
       }
     }
     // 最终失败数 = 原失败列表 - 已恢复
     const stillFailed = failedUrls.filter((url) => !recoveredUrls.has(url));
     return {
-      topics,
-      totalTopics: urlsResult.data.length,
-      fetchedTopics,
-      failedTopics: stillFailed.length,
+      topics: Array.from(topicsById.values()),
+      totalTopics,
+      fetchedTopics: topicsById.size,
+      failedTopics: stillFailed.length + urlsResult.invalidTopicCount,
+      failedPages: urlsResult.failedPages,
+      invalidTopicCount: urlsResult.invalidTopicCount,
       isHidden: false,
     };
   }
 
   return {
-    topics,
-    totalTopics: urlsResult.data.length,
-    fetchedTopics,
-    failedTopics: failedUrls.length,
+    topics: Array.from(topicsById.values()),
+    totalTopics,
+    fetchedTopics: topicsById.size,
+    failedTopics: failedUrls.length + urlsResult.invalidTopicCount,
+    failedPages: urlsResult.failedPages,
+    invalidTopicCount: urlsResult.invalidTopicCount,
     isHidden: false,
   };
 }

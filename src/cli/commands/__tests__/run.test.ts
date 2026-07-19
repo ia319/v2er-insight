@@ -23,6 +23,7 @@ describe('resolveWorkflowOptions', () => {
       force: true,
       model: 'gemini-2.5-pro',
       thinkingLevel: 'high',
+      resend: true,
       verbose: true,
     };
 
@@ -33,6 +34,7 @@ describe('resolveWorkflowOptions', () => {
       force: true,
       model: 'gemini-2.5-pro',
       thinkingLevel: 'high',
+      resend: true,
       verbose: true,
     });
   });
@@ -73,6 +75,7 @@ describe('runPipeline', () => {
       force: true,
       model: 'gemini-2.0-flash',
       thinkingLevel: 'medium',
+      resend: true,
       verbose: true,
     });
 
@@ -81,6 +84,7 @@ describe('runPipeline', () => {
       force: true,
       model: 'gemini-2.0-flash',
       thinkingLevel: 'medium',
+      resend: true,
       verbose: true,
     });
     expect(mockLogger.setLevel).toHaveBeenCalledWith('debug');

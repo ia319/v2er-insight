@@ -1,19 +1,21 @@
 /**
- * fetch 命令 — 抓取 V2EX 用户数据并持久化
+ * V2EX user-data fetch and versioned raw-snapshot persistence.
  *
- * 调用 V2EX use-cases 获取 profile + topics detail + replies，
- * 组装为 RawUserData 结构后写入 raw.json。
+ * Profile, topic, and reply results retain their collection completeness
+ * metadata in raw.json.
  */
 
 import { getUserProfile, getAllUserReplies, getAllUserTopicsDetail } from '@/core/v2ex';
-import type {
-  UserProfileParseResult,
-  UserTopicsDetailResult,
-  PagedResult,
-  V2exReply,
-} from '@/core/v2ex';
-import type { RawUserData } from '@/core/analyzer';
-import { readDataFile, writeDataFile } from '@/infra/storage';
+import type { UserTopicsDetailResult, UserRepliesResult } from '@/core/v2ex';
+import { buildRawSnapshot } from '@/core/snapshot';
+import type { RawSnapshotV2, SnapshotCollection, SnapshotRequest } from '@/core/snapshot';
+import { recordRawProvenance } from '@/core/provenance';
+import {
+  readAnalysisState,
+  readDataFile,
+  updateAnalysisState,
+  writeDataFile,
+} from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
@@ -22,41 +24,60 @@ import { createFetchEvents } from '../utils';
 
 // -- 内部工具 ----------------------------------------------------------------
 
-/**
- * 打印抓取摘要
- */
-function printSummary(
-  profileOk: boolean,
-  topicsResult: UserTopicsDetailResult | null,
-  replies: PagedResult<V2exReply> | null,
-): void {
-  logger.section('=== 抓取摘要 ===');
-  logger.detail(`Profile: ${profileOk ? 'OK' : 'Failed'}`);
+function formatCollectionCount(collection: SnapshotCollection<unknown>): string {
+  return `${collection.fetchedCount}/${collection.totalExpected ?? '?'}`;
+}
 
-  if (topicsResult) {
-    if (topicsResult.isHidden) {
-      logger.detail('Topics: Hidden');
-    } else {
-      const failed = topicsResult.failedTopics > 0 ? ` (${topicsResult.failedTopics} failed)` : '';
-      logger.detail(`Topics: ${topicsResult.fetchedTopics}/${topicsResult.totalTopics}${failed}`);
-    }
+function printSummary(snapshot: RawSnapshotV2): void {
+  logger.section('=== 抓取摘要 ===');
+  logger.detail('Profile: OK');
+
+  if (snapshot.topics.status === 'not_requested') {
+    logger.detail('Topics: Not requested');
+  } else if (snapshot.topics.hidden) {
+    logger.detail('Topics: Hidden');
+  } else {
+    logger.detail(`Topics: ${formatCollectionCount(snapshot.topics)}`);
   }
 
-  if (replies) {
-    const failed = replies.failedPages > 0 ? ` (${replies.failedPages} failed)` : '';
-    logger.detail(`Replies: ${replies.data.length}${failed}`);
+  if (snapshot.replies.status === 'not_requested') {
+    logger.detail('Replies: Not requested');
+  } else {
+    logger.detail(`Replies: ${formatCollectionCount(snapshot.replies)}`);
+  }
+
+  const failedCount = snapshot.topics.failedCount + snapshot.replies.failedCount;
+  const failedPageCount = snapshot.topics.failedPageCount + snapshot.replies.failedPageCount;
+  const identityFailureCount =
+    snapshot.topics.identityFailureCount + snapshot.replies.identityFailureCount;
+  const duplicateConflictCount =
+    snapshot.topics.duplicateConflictCount + snapshot.replies.duplicateConflictCount;
+  const isPartial = snapshot.topics.status === 'partial' || snapshot.replies.status === 'partial';
+
+  if (isPartial) {
+    logger.detail(
+      `Completeness: failed=${failedCount}, failedPages=${failedPageCount}, ` +
+        `identityFailures=${identityFailureCount}, duplicateConflicts=${duplicateConflictCount}`,
+    );
+    logger.warn('抓取数据不完整：缺失记录状态未知，后续分析置信度降低');
   }
 }
 
 // -- 命令入口 ----------------------------------------------------------------
 
 /**
- * 执行 fetch 命令
+ * Fetches requested V2EX user data and persists Raw Snapshot V2.
+ *
+ * @param username - V2EX member name.
+ * @param options - Requested scopes, cache behavior, and pipeline mode.
+ * @returns Structured fetch step status and completeness metadata.
  */
 export async function runFetch(
   username: string,
   options: FetchCommandOptions,
 ): Promise<StepRunResult> {
+  const capturedAt = new Date();
+
   // 缓存检查
   if (!options.force) {
     const existing = readDataFile(username, 'raw');
@@ -70,28 +91,35 @@ export async function runFetch(
     }
   }
 
+  const analysisState = readAnalysisState(username);
+  if (analysisState.status === 'invalid') {
+    logger.error(`${username} 的 analysis-state.json 无效或不可读`);
+    return {
+      step: 'fetch',
+      status: 'failed',
+      reasonCode: 'PROVENANCE_STATE_INVALID',
+      message: 'analysis-state.json 无效或不可读，已停止抓取以保留现有证据',
+      recoverable: true,
+      recoverActions: getRecoveryActions('PROVENANCE_STATE_INVALID', { username }),
+    };
+  }
+
   logger.info(`\n抓取用户数据: ${username}`);
 
   // 默认两者都抓取，除非显式指定了其中之一
   const fetchTopics = options.topics || !options.replies;
   const fetchReplies = options.replies || !options.topics;
 
-  let profile: UserProfileParseResult | null = null;
-  let topicsResult: UserTopicsDetailResult | null = null;
-  let replies: PagedResult<V2exReply> | null = null;
+  let topicsRequest: SnapshotRequest<UserTopicsDetailResult> = { requested: false };
+  let repliesRequest: SnapshotRequest<UserRepliesResult> = { requested: false };
 
   // 1. 获取用户资料
   logger.section('获取用户资料...');
-  profile = await getUserProfile(username, {
+  const profile = await getUserProfile(username, {
     events: createFetchEvents('获取资料'),
   });
 
-  if (profile) {
-    logger.success(`注册于 ${profile.joinDate}`);
-    if (profile.dailyRanking) {
-      logger.detail(`活跃排名: #${profile.dailyRanking}`);
-    }
-  } else {
+  if (!profile) {
     logger.error('获取用户资料失败');
     return {
       step: 'fetch',
@@ -103,12 +131,18 @@ export async function runFetch(
     };
   }
 
+  logger.success(`注册于 ${profile.joinDate}`);
+  if (profile.dailyRanking) {
+    logger.detail(`活跃排名: #${profile.dailyRanking}`);
+  }
+
   // 2. 获取帖子详情
   if (fetchTopics) {
     logger.section('获取帖子详情...');
-    topicsResult = await getAllUserTopicsDetail(username, {
+    const topicsResult = await getAllUserTopicsDetail(username, {
       events: createFetchEvents('获取帖子'),
     });
+    topicsRequest = { requested: true, result: topicsResult };
 
     if (topicsResult.isHidden) {
       logger.detail('帖子列表被用户隐藏');
@@ -123,9 +157,10 @@ export async function runFetch(
   // 3. 获取回复
   if (fetchReplies) {
     logger.section('获取回复...');
-    replies = await getAllUserReplies(username, {
+    const replies = await getAllUserReplies(username, {
       events: createFetchEvents('获取回复'),
     });
+    repliesRequest = { requested: true, result: replies };
 
     logger.success(`${replies.data.length} 条回复`);
     if (replies.failedPages > 0) {
@@ -133,36 +168,58 @@ export async function runFetch(
     }
   }
 
-  // 4. 组装 RawUserData 并持久化
-  const rawData: RawUserData = {
+  // One versioned artifact contains requested scopes and collection diagnostics.
+  const rawData = buildRawSnapshot({
+    username,
+    capturedAt,
     profile,
-    topics: topicsResult?.topics ?? [],
-    replies: replies?.data ?? [],
-    isTopicsHidden: topicsResult?.isHidden ?? false,
-  };
+    topics: topicsRequest,
+    replies: repliesRequest,
+  });
 
   writeDataFile(username, 'raw', rawData);
 
-  if (!options.pipeline) {
-    logger.success('数据已保存');
-    printSummary(!!profile, topicsResult, replies);
+  try {
+    updateAnalysisState(username, (state) => recordRawProvenance(state, rawData));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`更新 provenance 状态失败: ${message}`);
+    return {
+      step: 'fetch',
+      status: 'failed',
+      reasonCode: 'PROVENANCE_UPDATE_FAILED',
+      message: `raw.json 已保存，但 provenance 状态更新失败: ${message}`,
+      recoverable: true,
+      recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+    };
   }
 
-  const failedTopics = topicsResult?.failedTopics ?? 0;
-  const failedPages = replies?.failedPages ?? 0;
-  const isPartial = failedTopics > 0 || failedPages > 0;
+  if (!options.pipeline) {
+    logger.success('数据已保存');
+    printSummary(rawData);
+  }
+
+  const failedTopics = rawData.topics.failedCount;
+  const failedPages = rawData.topics.failedPageCount + rawData.replies.failedPageCount;
+  const identityFailures =
+    rawData.topics.identityFailureCount + rawData.replies.identityFailureCount;
+  const duplicateConflicts =
+    rawData.topics.duplicateConflictCount + rawData.replies.duplicateConflictCount;
+  const isPartial = rawData.topics.status === 'partial' || rawData.replies.status === 'partial';
 
   if (isPartial) {
     return {
       step: 'fetch',
       status: 'partial',
       reasonCode: 'FETCH_PARTIAL_FAILED',
-      message: '抓取已完成，但存在部分页面失败',
+      message: '抓取已完成，但数据完整性不足',
       recoverable: true,
       recoverActions: getRecoveryActions('FETCH_PARTIAL_FAILED', { username }),
       meta: {
         failedTopics,
         failedPages,
+        identityFailures,
+        duplicateConflicts,
       },
     };
   }
@@ -172,8 +229,8 @@ export async function runFetch(
     status: 'success',
     message: '抓取完成',
     meta: {
-      fetchedTopics: topicsResult?.fetchedTopics ?? 0,
-      fetchedReplies: replies?.data.length ?? 0,
+      fetchedTopics: rawData.topics.fetchedCount,
+      fetchedReplies: rawData.replies.fetchedCount,
     },
   };
 }

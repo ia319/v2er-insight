@@ -6,6 +6,7 @@ import * as cheerio from 'cheerio';
 
 import type { V2exReply } from '../types/entities';
 import type { RepliesPageParseResult } from '../types/parse-result';
+import { extractTopicIdFromPath, extractTopicReplyCountFromPath } from '../urls/topic-urls';
 import { parsePagination } from './utils';
 import { REPLIES_PAGE_SELECTORS } from './selectors';
 
@@ -27,9 +28,10 @@ const {
 export function parseRepliesPage(html: string): RepliesPageParseResult {
   const $ = cheerio.load(html);
   const replies: V2exReply[] = [];
+  let invalidReplyCount = 0;
 
   // 获取用户回复总数
-  let totalReplies = 0;
+  let totalReplies: number | null = null;
   const headerText = $(TOTAL_CONTAINER).text();
   const totalMatch = headerText.match(/回复总数\s+(\d+)/);
   if (totalMatch?.[1]) {
@@ -46,12 +48,15 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     const replyContentWrapper = dockArea.next();
     const replyContent = replyContentWrapper.find(REPLY_CONTENT);
 
-    // 主题标题和回复总数
+    // Independent parsing preserves each valid topic metadata field.
     const topicLink = dockArea.find(TOPIC_LINK);
     const topicTitle = topicLink.text().trim();
     const topicHref = topicLink.attr('href') ?? '';
-    const replyCountMatch = topicHref.match(/#reply(\d+)/);
-    const topicReplyCount = replyCountMatch?.[1] ? parseInt(replyCountMatch[1], 10) : 0;
+    const topicId = extractTopicIdFromPath(topicHref);
+    const topicReplyCount = extractTopicReplyCountFromPath(topicHref);
+    if (topicId === null || topicReplyCount === null) {
+      invalidReplyCount++;
+    }
 
     // 节点名称
     const nodeLink = dockArea.find(NODE_LINK);
@@ -82,8 +87,9 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
     }
 
     replies.push({
-      topicTitle,
+      topicId,
       topicReplyCount,
+      topicTitle,
       nodeName,
       replyTime,
       content,
@@ -94,6 +100,7 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
 
   return {
     totalReplies,
+    invalidReplyCount,
     replies,
     currentPage,
     totalPages,

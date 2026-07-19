@@ -6,8 +6,10 @@
  */
 
 import type { V2erConfig } from '@/config';
-import { readConfig, writeConfig, getConfig, getConfigPath } from '@/config';
+import { DEFAULT_CONFIG, readConfig, writeConfig, getConfig, getConfigPath } from '@/config';
 import { logger } from '@/infra/logger';
+import { createDataRetentionEnabledNotice } from '../workflow/data-retention-notices';
+import { renderNotice } from '../workflow/notices';
 
 // -- 配置路径元数据 -----------------------------------------------------------
 
@@ -63,6 +65,13 @@ const CONFIG_PATHS: Record<string, ConfigPathMeta> = {
 const CONFIG_GROUPS = ['ai', 'fetch', 'analyzer', 'data', 'log'] as const;
 type ConfigGroup = (typeof CONFIG_GROUPS)[number];
 
+type DataRetentionStatus =
+  | { enabled: false }
+  | {
+      enabled: true;
+      retentionDays: number;
+    };
+
 // -- 工具函数 -----------------------------------------------------------------
 
 /**
@@ -88,6 +97,29 @@ function formatConfigForDisplay(config: V2erConfig): V2erConfig {
     display.ai.apiKey = maskSensitive(display.ai.apiKey);
   }
   return display;
+}
+
+function resolveDataRetentionStatus(config: V2erConfig): DataRetentionStatus {
+  const keepRaw = config.data?.keepRaw ?? DEFAULT_CONFIG.data.keepRaw;
+  if (keepRaw) {
+    return { enabled: false };
+  }
+
+  return {
+    enabled: true,
+    retentionDays: Math.max(0, config.data?.rawRetention ?? DEFAULT_CONFIG.data.rawRetention),
+  };
+}
+
+function renderRetentionStatus(config: V2erConfig): void {
+  const retention = resolveDataRetentionStatus(config);
+  if (!retention.enabled) {
+    logger.info('自动清理: 未启用');
+    logger.diagnostic('info', '文档: docs/data-lifecycle.md');
+    return;
+  }
+
+  renderNotice(createDataRetentionEnabledNotice(retention.retentionDays));
 }
 
 /**
@@ -216,6 +248,9 @@ export function configShow(group?: string): void {
     const groupConfig = display[group as ConfigGroup];
     logger.info(`[${group}]`);
     console.log(JSON.stringify(groupConfig, null, 2));
+    if (group === 'data') {
+      renderRetentionStatus(config);
+    }
     return;
   }
 
@@ -264,6 +299,13 @@ export function configSet(dotPath: string, rawValue: string): void {
   // 敏感值掩码显示
   const displayValue = dotPath.endsWith('apiKey') ? maskSensitive(String(value)) : String(value);
   logger.info(`Set ${dotPath} = ${displayValue}`);
+
+  if (dotPath === 'data.keepRaw' || dotPath === 'data.rawRetention') {
+    const retention = resolveDataRetentionStatus(config);
+    if (retention.enabled) {
+      renderNotice(createDataRetentionEnabledNotice(retention.retentionDays));
+    }
+  }
 }
 
 /**

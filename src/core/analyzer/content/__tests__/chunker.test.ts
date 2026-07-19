@@ -4,12 +4,14 @@
 
 import { describe, it, expect } from 'vitest';
 import { chunkPeriodContent } from '../chunker';
-import type { ActivePeriod } from '../../types';
-import type { V2exTopicDetail, V2exReply } from '@/core/v2ex/types/entities';
+import type { ActivePeriod, AnalyzerReply } from '../../types';
+import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
 
 // Create topics for testing
 function createTopic(index: number): V2exTopicDetail {
   return {
+    topicId: String(200000 + index),
+    sourceUrl: `https://www.v2ex.com/t/${200000 + index}`,
     title: `Topic ${index}`,
     nodeName: 'Technology',
     content: `Content ${index}`,
@@ -21,13 +23,14 @@ function createTopic(index: number): V2exTopicDetail {
 }
 
 // Create replies for testing
-function createReply(index: number): V2exReply {
+function createReply(index: number): AnalyzerReply {
   return {
+    topicId: '100001',
+    topicReplyCount: index,
     topicTitle: `Reply Topic ${index}`,
     nodeName: 'Q&A',
     content: `Reply Content ${index}`,
-    replyTime: '1 day ago',
-    topicReplyCount: 50,
+    occurredAt: new Date(2024, 0, 1),
     isDirectReply: true,
     replyTo: null,
   };

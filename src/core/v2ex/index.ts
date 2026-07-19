@@ -20,6 +20,7 @@ export {
   getUserTopicsUrl,
   getTopicUrl,
   extractTopicIdFromPath,
+  extractTopicReplyCountFromPath,
 } from './urls';
 
 // 解析器导出
@@ -40,6 +41,7 @@ export {
 export type {
   ServiceOptions,
   PagedResult,
+  UserRepliesResult,
   UserTopicUrlsResult,
   UserTopicsDetailResult,
 } from './use-cases';

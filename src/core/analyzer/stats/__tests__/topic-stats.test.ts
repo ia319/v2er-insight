@@ -9,6 +9,8 @@ describe('calculateTopicStats', () => {
   it('should calculate topic statistics', () => {
     const topics = [
       {
+        topicId: '200001',
+        sourceUrl: 'https://www.v2ex.com/t/200001',
         title: 'Topic 1',
         nodeName: 'go',
         createdAt: '2024-01-01 10:00:00 +08:00',
@@ -18,6 +20,8 @@ describe('calculateTopicStats', () => {
         clickCount: 100,
       },
       {
+        topicId: '200002',
+        sourceUrl: 'https://www.v2ex.com/t/200002',
         title: 'Topic 2',
         nodeName: 'go',
         createdAt: '2024-01-02 14:00:00 +08:00',
@@ -27,6 +31,8 @@ describe('calculateTopicStats', () => {
         clickCount: 200,
       },
       {
+        topicId: '200003',
+        sourceUrl: 'https://www.v2ex.com/t/200003',
         title: 'Topic 3',
         nodeName: 'python',
         createdAt: '2024-01-03 10:00:00 +08:00',

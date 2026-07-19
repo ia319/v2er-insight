@@ -3,8 +3,8 @@
  * 将原始 V2EX 数据转换为 AI 可消费的格式
  */
 
-import type { V2exReply, V2exTopicDetail } from '@/core/v2ex/types/entities';
-import type { ContentTopic, ContentReply } from '../types';
+import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
+import type { AnalyzerReply, ContentTopic, ContentReply } from '../types';
 
 /**
  * 将帖子转换为 AI 输入格式
@@ -24,7 +24,7 @@ export function transformTopics(topics: V2exTopicDetail[]): ContentTopic[] {
  * @param replies - 单个活跃期内的回复数组
  * @returns 转换后的 ContentReply 数组
  */
-export function transformReplies(replies: V2exReply[]): ContentReply[] {
+export function transformReplies(replies: AnalyzerReply[]): ContentReply[] {
   return replies.map((reply) => ({
     topicTitle: reply.topicTitle,
     nodeName: reply.nodeName,

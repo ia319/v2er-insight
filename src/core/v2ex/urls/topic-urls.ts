@@ -47,3 +47,28 @@ export function extractTopicIdFromPath(path: string): string | null {
   const match = path.match(/\/t\/(\d+)/);
   return match?.[1] ?? null;
 }
+
+/**
+ * Extracts the current topic reply count encoded by a V2EX topic anchor.
+ *
+ * Member reply pages use the topic's current last-reply anchor for every entry
+ * in that topic. The `#replyN` value represents the current topic reply count.
+ *
+ * @param path - Relative or absolute topic URL containing a `#replyN` anchor.
+ * @returns The topic reply count; `null` represents an incomplete anchor.
+ */
+export function extractTopicReplyCountFromPath(path: string): number | null {
+  const normalized = path.trim();
+  const replyMatch = normalized.match(/#reply(\d+)(?:$|[?&])/);
+
+  if (!replyMatch?.[1]) {
+    return null;
+  }
+
+  const replyCount = Number.parseInt(replyMatch[1], 10);
+  if (!Number.isSafeInteger(replyCount)) {
+    return null;
+  }
+
+  return replyCount;
+}

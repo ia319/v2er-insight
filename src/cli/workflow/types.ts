@@ -14,13 +14,22 @@ export type StepStatus = 'success' | 'partial' | 'failed' | 'skipped';
 export type ReasonCode =
   | 'FETCH_PROFILE_FAILED'
   | 'FETCH_PARTIAL_FAILED'
+  | 'PROVENANCE_STATE_INVALID'
+  | 'PROVENANCE_UPDATE_FAILED'
   | 'ANALYZE_INPUT_MISSING'
+  | 'ANALYZE_PROVENANCE_MISSING'
+  | 'ANALYZE_SOURCE_MISMATCH'
   | 'ANALYZE_FAILED'
   | 'AI_INPUT_MISSING'
+  | 'AI_INPUT_INVALID'
+  | 'AI_PROVENANCE_MISSING'
+  | 'AI_SOURCE_MISMATCH'
   | 'AI_API_KEY_MISSING'
   | 'AI_INVALID_THINKING_LEVEL'
   | 'AI_PROVIDER_FAILED'
+  | 'AI_RESULT_WRITE_FAILED'
   | 'SHOW_RESULT_MISSING'
+  | 'SHOW_RESULT_INVALID'
   | 'UNKNOWN_ERROR';
 
 /** 步骤失败或部分成功时可提供给用户的恢复动作 */
@@ -31,6 +40,23 @@ export interface RecoveryAction {
   content: string;
   /** 动作用途说明 */
   description: string;
+}
+
+export type NoticeCode =
+  | 'DATA_RETENTION_ENABLED'
+  | 'DATA_FILES_CLEANED'
+  | 'DATA_RESULT_STALE'
+  | 'DATA_SNAPSHOT_PARTIAL';
+export type NoticeSeverity = 'info' | 'warning';
+
+/** A machine-identifiable, non-fatal user-facing effect. */
+export interface UserNotice {
+  code: NoticeCode;
+  severity: NoticeSeverity;
+  summary: string;
+  details?: string[];
+  actions?: RecoveryAction[];
+  documentation?: string;
 }
 
 /** 单个步骤的结构化执行结果 */
@@ -49,6 +75,8 @@ export interface StepRunResult {
   recoverActions?: RecoveryAction[];
   /** 额外元数据，用于编排判断或后续重试 */
   meta?: Record<string, unknown>;
+  /** Structured user impact for a continuing workflow step. */
+  notices?: UserNotice[];
 }
 
 /** 本地中间产物状态 */
@@ -67,6 +95,7 @@ export interface RunWorkflowOptions {
   force?: boolean;
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  resend?: boolean;
   verbose?: boolean;
 }
 

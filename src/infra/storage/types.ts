@@ -5,7 +5,7 @@
  */
 
 /** 数据文件类型 */
-export type DataFileType = 'raw' | 'analyzed' | 'result';
+export type DataFileType = 'raw' | 'analyzed' | 'result' | 'analysisState';
 
 /**
  * 数据文件类型到文件名的映射
@@ -15,6 +15,7 @@ export const DATA_FILE_NAMES: Record<DataFileType, string> = {
   raw: 'raw.json',
   analyzed: 'analyzed.json',
   result: 'result.json',
+  analysisState: 'analysis-state.json',
 };
 
 /** 写入选项 */

@@ -18,13 +18,37 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   FETCH_PARTIAL_FAILED: [
     {
       type: 'instruction',
-      content: '当前版本暂不支持仅重试失败页',
-      description: '建议先执行全量重抓，后续阶段会接入 --retry 能力',
+      content: '当前版本暂不支持局部修复不完整抓取',
+      description: '建议执行全量重抓以恢复完整快照',
     },
     {
       type: 'command',
       content: 'v2er fetch <username> --force',
-      description: '强制重新抓取，替换现有 raw 数据',
+      description: '强制重新抓取，替换不完整的 raw 数据',
+    },
+  ],
+  PROVENANCE_STATE_INVALID: [
+    {
+      type: 'instruction',
+      content: '先备份并移出损坏的 analysis-state.json，保留原文件用于诊断',
+      description: '状态文件验证失败；现有 provenance 保持原状',
+    },
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '移出损坏状态文件后，全量重建 raw 数据与 provenance',
+    },
+  ],
+  PROVENANCE_UPDATE_FAILED: [
+    {
+      type: 'instruction',
+      content: '检查数据目录权限和可用磁盘空间后重试',
+      description: '数据文件与 provenance 状态的一致性提交未完成',
+    },
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '重新生成一致的 raw 数据与 provenance 状态',
     },
   ],
   ANALYZE_INPUT_MISSING: [
@@ -32,6 +56,20 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       type: 'command',
       content: 'v2er fetch <username>',
       description: '先生成 raw.json，再执行 analyze',
+    },
+  ],
+  ANALYZE_PROVENANCE_MISSING: [
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '重新抓取并建立 raw.json 对应的 provenance 状态',
+    },
+  ],
+  ANALYZE_SOURCE_MISMATCH: [
+    {
+      type: 'command',
+      content: 'v2er fetch <username> --force',
+      description: '重新生成相互匹配的 raw 数据与 provenance 状态',
     },
   ],
   ANALYZE_FAILED: [
@@ -51,6 +89,32 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       type: 'command',
       content: 'v2er analyze <username>',
       description: '先生成 analyzed.json，再执行 AI 分析',
+    },
+  ],
+  AI_INPUT_INVALID: [
+    {
+      type: 'command',
+      content: 'v2er <username> --force',
+      description: '重新抓取并生成受支持的 AnalyzerOutput V2',
+    },
+  ],
+  AI_PROVENANCE_MISSING: [
+    {
+      type: 'command',
+      content: 'v2er <username> --force',
+      description: '重新抓取、分析并建立完整 provenance 状态',
+    },
+  ],
+  AI_SOURCE_MISMATCH: [
+    {
+      type: 'command',
+      content: 'v2er analyze <username>',
+      description: '根据当前 raw 数据和 Analyzer 配置重新生成 analyzed 数据',
+    },
+    {
+      type: 'command',
+      content: 'v2er <username> --force',
+      description: '若 raw provenance 也不一致，执行全量重抓和分析',
     },
   ],
   AI_API_KEY_MISSING: [
@@ -104,11 +168,30 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '若当前模型不稳定，可切换模型后重试',
     },
   ],
+  AI_RESULT_WRITE_FAILED: [
+    {
+      type: 'instruction',
+      content: '检查数据目录权限和可用磁盘空间后重试',
+      description: 'AI 已返回结果，但 result.json 未成功写入且发送状态未推进',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '存储问题修复后重新发送并保存结果',
+    },
+  ],
   SHOW_RESULT_MISSING: [
     {
       type: 'command',
       content: 'v2er ai <username>',
       description: '先生成 result.json，再执行展示',
+    },
+  ],
+  SHOW_RESULT_INVALID: [
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '重新生成结构完整的 result.json',
     },
   ],
   UNKNOWN_ERROR: [],

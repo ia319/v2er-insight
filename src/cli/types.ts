@@ -26,6 +26,8 @@ export interface AiCommandOptions {
   model?: string | true;
   /** 临时覆盖思考等级，或 true 表示触发交互选择 */
   thinkingLevel?: ThinkingLevel | true;
+  /** Forces a resend of the complete analyzed payload. */
+  resend?: boolean;
   /** 由一键流程触发时开启，供命令控制日志粒度 */
   pipeline?: boolean;
 }
@@ -57,6 +59,8 @@ export interface RunCommandOptions {
   model?: string | true;
   /** 临时覆盖思考等级，或 true 表示触发交互选择 */
   thinkingLevel?: ThinkingLevel | true;
+  /** Forces a resend of the complete analyzed payload. */
+  resend?: boolean;
   /** 显示 debug 级别日志 */
   verbose?: boolean;
 }

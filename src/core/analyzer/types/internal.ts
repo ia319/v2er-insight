@@ -2,7 +2,8 @@
  * Analyzer 内部类型
  */
 
-import type { V2exReply, V2exTopicDetail } from '@/core/v2ex/types/entities';
+import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
+import type { AnalyzerReply } from './input';
 
 /** 活跃期：两个暂停期之间的连续活动时间段 */
 export interface ActivePeriod {
@@ -10,7 +11,7 @@ export interface ActivePeriod {
   startDate: Date;
   endDate: Date;
   topics: V2exTopicDetail[];
-  replies: V2exReply[];
+  replies: AnalyzerReply[];
 }
 
 /** 带解析日期的帖子 */
@@ -21,7 +22,7 @@ export interface TopicWithDate {
 
 /** 带解析日期的回复 */
 export interface ReplyWithDate {
-  reply: V2exReply;
+  reply: AnalyzerReply;
   replyDate: Date;
 }
 

@@ -90,6 +90,13 @@ export const logger = {
     }
   },
 
+  /** Structured notice details are written to stderr. */
+  diagnostic(level: 'info' | 'warn', msg: string): void {
+    if (shouldLog(level)) {
+      console.warn(msg);
+    }
+  },
+
   // -- CLI 格式化输出 --------------------------------------------------------
 
   /** 章节标题 — 分隔不同操作阶段 */

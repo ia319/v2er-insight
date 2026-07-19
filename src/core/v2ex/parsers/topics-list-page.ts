@@ -5,6 +5,7 @@
 import * as cheerio from 'cheerio';
 
 import type { TopicsPageParseResult } from '../types/parse-result';
+import { extractTopicIdFromPath } from '../urls/topic-urls';
 import { parsePagination } from './utils';
 import { TOPICS_LIST_PAGE_SELECTORS } from './selectors';
 
@@ -31,31 +32,35 @@ export function parseTopicsListPage(html: string): TopicsPageParseResult {
   if (isHidden) {
     return {
       isHidden: true,
+      invalidTopicCount: 0,
       topicUrls: [],
       currentPage: 1,
       totalPages: 1,
     };
   }
 
-  // 提取主题 URL（使用 Set 去重，O(n) 复杂度）
-  const topicUrlSet = new Set<string>();
+  // Stable topic IDs collapse URL variants into one record.
+  const topicUrlsById = new Map<string, string>();
+  let invalidTopicCount = 0;
   $(TOPIC_LINK).each((_, el) => {
     const href = $(el).attr('href');
-    if (href) {
-      // 提取纯 URL（去掉 #reply 部分）
-      const cleanUrl = href.split('#')[0] ?? '';
-      if (cleanUrl) {
-        topicUrlSet.add(cleanUrl);
-      }
+    const topicId = href ? extractTopicIdFromPath(href) : null;
+
+    if (!topicId) {
+      invalidTopicCount++;
+      return;
     }
+
+    topicUrlsById.set(topicId, `/t/${topicId}`);
   });
-  const topicUrls = Array.from(topicUrlSet);
+  const topicUrls = Array.from(topicUrlsById.values());
 
   // 分页信息
   const { currentPage, totalPages } = parsePagination($);
 
   return {
     isHidden: false,
+    invalidTopicCount,
     topicUrls,
     currentPage,
     totalPages,

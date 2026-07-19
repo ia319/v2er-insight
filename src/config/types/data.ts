@@ -2,20 +2,19 @@
  * 数据管理配置类型
  */
 
-/** 数据管理配置 */
+/** Source-data retention configuration. */
 export interface DataConfig {
   /**
-   * AI 成功后是否永久保留原始数据（raw.json / analyzed.json）
-   * - true：永久保留，不自动清理
-   * - false：按 rawRetention 天数自动清理（默认）
+   * Source-data retention mode after successful AI analysis.
+   * - true: permanent raw.json and analyzed.json retention (default)
+   * - false: age-based cleanup using rawRetention
    */
   keepRaw?: boolean;
 
   /**
-   * 原始数据保留天数（仅 keepRaw=false 时生效）
-   * 超过此天数的 raw.json / analyzed.json 会被自动清理
-   * result.json 永远不会被清理
-   * 有效范围：>= 0（0 表示不保留，负数会被修正为 0）
+   * raw.json and analyzed.json retention period for keepRaw=false.
+   * result.json has permanent retention.
+   * Valid range: >= 0; zero makes source files immediately eligible for cleanup.
    */
   rawRetention?: number;
 }

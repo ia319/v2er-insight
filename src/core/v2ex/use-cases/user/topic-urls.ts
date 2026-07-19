@@ -14,6 +14,10 @@ import { fetchPagedData } from '../utils';
 export interface UserTopicUrlsResult extends PagedResult<string> {
   /** 用户是否隐藏了主题列表 */
   isHidden: boolean;
+  /** Stable topic identity parse-failure count. */
+  invalidTopicCount: number;
+  /** Hidden-state topic URL discard count. */
+  discardedTopicCount: number;
 }
 
 /**
@@ -27,22 +31,30 @@ export async function getAllUserTopicUrls(
   username: string,
   options?: ServiceOptions,
 ): Promise<UserTopicUrlsResult> {
+  let isHidden = false;
+  let invalidTopicCount = 0;
+
   const result = await fetchPagedData(
     (page) => getUserTopicsUrl(username, page),
-    parseTopicsListPage,
+    (html) => {
+      const parsed = parseTopicsListPage(html);
+      isHidden ||= parsed.isHidden;
+      invalidTopicCount += parsed.invalidTopicCount;
+      return parsed;
+    },
     (parsed) => parsed.topicUrls,
     options,
   );
 
   // 将相对路径转换为完整 URL
   const fullUrls = result.data.map((path) => getTopicUrl(path));
-
-  // 检测隐藏状态：空数据且单页可能是隐藏
-  const isHidden = result.data.length === 0 && result.totalPages === 1;
+  const discardedTopicCount = isHidden ? fullUrls.length : 0;
 
   return {
     ...result,
-    data: fullUrls,
+    data: isHidden ? [] : fullUrls,
     isHidden,
+    invalidTopicCount,
+    discardedTopicCount,
   };
 }

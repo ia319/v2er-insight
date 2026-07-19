@@ -17,6 +17,8 @@ describe('calculateUserOverview', () => {
       profile: mockProfile,
       topics: [
         {
+          topicId: '200001',
+          sourceUrl: 'https://www.v2ex.com/t/200001',
           title: 'Test',
           nodeName: 'test',
           createdAt: '2024-01-01 10:00:00 +08:00',
@@ -28,24 +30,28 @@ describe('calculateUserOverview', () => {
       ],
       replies: [
         {
-          topicTitle: 'Topic',
+          topicId: '100001',
           topicReplyCount: 50,
+          topicTitle: 'Topic',
           nodeName: 'node',
-          replyTime: '1 天前',
+          occurredAt: new Date('2024-01-03T02:00:00.000Z'),
           content: 'reply',
           isDirectReply: true,
           replyTo: null,
         },
         {
-          topicTitle: 'Topic2',
+          topicId: '100002',
           topicReplyCount: 30,
+          topicTitle: 'Topic2',
           nodeName: 'node2',
-          replyTime: '2 天前',
+          occurredAt: new Date('2024-01-02T02:00:00.000Z'),
           content: 'reply2',
           isDirectReply: false,
           replyTo: 'user',
         },
       ],
+      topicsStatus: 'complete',
+      repliesStatus: 'complete',
       isTopicsHidden: false,
     };
 
@@ -64,6 +70,8 @@ describe('calculateUserOverview', () => {
       profile: { joinDate: '2020-01-01', dailyRanking: null },
       topics: [],
       replies: [],
+      topicsStatus: 'complete',
+      repliesStatus: 'complete',
       isTopicsHidden: true,
     };
 
@@ -73,5 +81,51 @@ describe('calculateUserOverview', () => {
     expect(result.totalReplies).toBe(0);
     expect(result.topicReplyRatio).toBeNull();
     expect(result.lastActiveTime).toBe('unknown');
+  });
+
+  it('should keep the topic-reply ratio unknown when topics are hidden', () => {
+    const data: RawUserData = {
+      profile: { joinDate: '2020-01-01', dailyRanking: null },
+      topics: [],
+      replies: [
+        {
+          topicId: '100001',
+          topicReplyCount: 1,
+          topicTitle: 'Topic',
+          nodeName: 'node',
+          occurredAt: new Date('2024-01-03T02:00:00.000Z'),
+          content: 'reply',
+          isDirectReply: false,
+          replyTo: null,
+        },
+      ],
+      topicsStatus: 'complete',
+      repliesStatus: 'complete',
+      isTopicsHidden: true,
+    };
+
+    const result = calculateUserOverview(data);
+
+    expect(result.totalTopics).toBeNull();
+    expect(result.totalReplies).toBe(1);
+    expect(result.topicReplyRatio).toBeNull();
+  });
+
+  it('should preserve unknown totals for unrequested collections', () => {
+    const data: RawUserData = {
+      profile: { joinDate: '2020-01-01', dailyRanking: null },
+      topics: [],
+      replies: [],
+      topicsStatus: 'not_requested',
+      repliesStatus: 'not_requested',
+      isTopicsHidden: false,
+    };
+
+    const result = calculateUserOverview(data);
+
+    expect(result.totalTopics).toBeNull();
+    expect(result.totalReplies).toBeNull();
+    expect(result.topicReplyRatio).toBeNull();
+    expect(result.isTopicsHidden).toBe(false);
   });
 });

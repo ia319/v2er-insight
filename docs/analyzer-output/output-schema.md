@@ -2,20 +2,32 @@
 
 本文档定义了发送给 AI 进行分析的数据结构。它是 Analyzer 模块与 AI 助手之间通信的唯一事实来源。
 
+根对象使用 `schemaVersion: 2`，并包含 `dataQuality`：
+
+| 字段                     | 类型             | 说明                                       |
+| ------------------------ | ---------------- | ------------------------------------------ |
+| `dataQuality.capturedAt` | `string`         | 本次抓取统一使用的 ISO 时间。              |
+| `topics/replies.status`  | `SnapshotStatus` | `complete`、`partial` 或 `not_requested`。 |
+| `totalExpected`          | `number \| null` | 期望总数；无法可靠确定时为 null。          |
+| `fetchedCount`           | `number`         | 已抓取并进入分析的数据条数。               |
+| `failedCount`            | `number`         | 已知缺失、无效或与声明总数不一致的条数。   |
+
+`partial` 和 `not_requested` 表示缺失记录状态未知。
+
 ## 设计哲学
 
 数据分为三个层次，旨在为 AI 提供全局背景和细致的语义信息：
 
 1.  **UserOverview**：全局用户信息和表现指标。
-2.  **PeriodsSummary**：所有检测到的活跃期的统计摘要（作为单一的基准上下文发送）。
+2.  **PeriodsSummary**：所有检测到的活跃期统计摘要及全局基准。
 3.  **Content (Chunks)**：按同一活跃期分段的实际内容（帖子/回复），用于深度分析。
 
 > [!IMPORTANT]
-> **切片规则**：单个内容切片（Chunk）**必须仅包含**来自特定活跃期的数据。切片应尽可能按时间顺序处理。
+> **切片边界**：单个内容切片（Chunk）对应一个活跃期，内容按时间顺序排列。
 
-## 发送策略
+## 数据层次
 
-数据应按以下顺序提供给 AI：
+数据结构顺序：
 
 1.  **UserOverview** → 建立身份和全局画像。
 2.  **PeriodsSummary** → 提供所有活动的路线图和统计概览。
@@ -25,17 +37,17 @@
 
 ## 1. UserOverview - 用户总览
 
-立即发送，描述用户的基本画像和整体活动水平。
+目标用户的基本画像和整体活动水平。
 
-| 字段              | 类型             | 说明             | 分析意义                                                  |
-| :---------------- | :--------------- | :--------------- | :-------------------------------------------------------- |
-| `joinDate`        | `string`         | 账号创建日期     | 确定用户的“资历”和长期行为基准。                          |
-| `lastActiveTime`  | `string`         | 最后活跃时间     | 衡量用户近期的存留状态。                                  |
-| `topicReplyRatio` | `number`         | 发帖与回复比率   | **高**：内容创作者/意见领袖；**低**：讨论参与者/回帖者。  |
-| `totalTopics`     | `number`         | 累计发帖总数     | 衡量生命周期内的内容产出量。                              |
-| `totalReplies`    | `number`         | 累计回复总数     | 衡量生命周期内的社交互动活跃度。                          |
-| `isTopicsHidden`  | `boolean`        | 是否隐藏主题列表 | 隐私倾向标识。如果为 true，则 AI 需知晓帖子分析可能受限。 |
-| `dailyRanking`    | `number \| null` | 今日活跃度排名   | 衡量该用户在该社区中的当前热度位置。                      |
+| 字段              | 类型             | 说明             | 分析意义                                  |
+| :---------------- | :--------------- | :--------------- | :---------------------------------------- |
+| `joinDate`        | `string`         | 账号创建日期     | 确定用户的“资历”和长期行为基准。          |
+| `lastActiveTime`  | `string`         | 最后活跃时间     | 衡量用户近期的存留状态。                  |
+| `topicReplyRatio` | `number \| null` | 发帖与回复比率   | 主题隐藏、范围未请求或没有回复时为 null。 |
+| `totalTopics`     | `number \| null` | 累计发帖总数     | 主题隐藏或未请求帖子时为 null。           |
+| `totalReplies`    | `number \| null` | 累计回复总数     | 未请求回复时为 null。                     |
+| `isTopicsHidden`  | `boolean`        | 是否隐藏主题列表 | 隐私倾向标识。true 对应帖子维度数据受限。 |
+| `dailyRanking`    | `number \| null` | 今日活跃度排名   | 衡量该用户在该社区中的当前热度位置。      |
 
 ---
 
@@ -62,7 +74,7 @@
 | `replyCount`               | `number`                         | 该周期内总回复数   | 该阶段的社交互动活跃水平。                                         |
 | `avgReplyLength`           | `number`                         | 平均回复字符长度   | 衡量表达的认真程度与交流深度。                                     |
 | `directReplyRatio`         | `number`                         | 直接回复主帖的比率 | **高**：更关注主旨，倾向开启新讨论；**低**：倾向于跟帖与他人互动。 |
-| `avgRepliedTopicHeat`      | `number`                         | 参与话题的平均热度 | **高**：追逐热点话题；**低**：更关注分众/小众领域。                |
+| `avgRepliedTopicHeat`      | `number \| null`                 | 参与话题的平均热度 | 非空值越高表示参与话题越热门；null 表示没有可用的话题回复总数。    |
 | `replyWeekdayDistribution` | `Record<string, number> \| null` | 7 天百分比分布     | 识别周内活动规律（如：工作日活跃还是周末活跃）。                   |
 | `replyNodeDistribution`    | `Record<string, number>`         | 前 3 个回复节点    | 定义用户在该阶段的**活跃领域和社交边界**。                         |
 
@@ -70,7 +82,7 @@
 
 ## 3. PeriodsSummary - 活跃期汇总
 
-汇总所有活跃期的统计数据，使 AI 能够获得纵向的变化规律。
+所有活跃期的统计数据及纵向变化依据。
 
 | 字段           | 类型                  | 说明                                               |
 | :------------- | :-------------------- | :------------------------------------------------- |
@@ -115,7 +127,7 @@
 
 ### PeriodContentChunk (分片版)
 
-当内容超过阈值时进行分片发送，确保 AI 处理不会溢出上下文。
+内容超过阈值时采用分片结构，所有分片保存在同一 `AnalyzerOutput.contents` 中。
 
 | 字段                  | 类型             | 说明                                           |
 | :-------------------- | :--------------- | :--------------------------------------------- |
@@ -127,12 +139,12 @@
 
 ---
 
-## 发送序列示例与 AI 逻辑
+## 结构示例与关联关系
 
 ```text
-→ UserOverview { ... }
-→ PeriodsSummary { totalPeriods: 10, ... } // AI 此时获得“地图”
-→ PeriodContent { periodIndex: 2, ... }   // AI 收到具体内容，查表得知属于索引为 2 的活跃期
+UserOverview { ... }
+PeriodsSummary { totalPeriods: 10, ... }
+PeriodContent { periodIndex: 2, ... } // 对应 PeriodsSummary.periods[2]
 ```
 
-AI 应该利用 `periodIndex` 将 `Content` 与 `SinglePeriodStats` 中的统计数据进行交叉验证，例如：若统计数据指示该阶段“关注热点”，则 AI 在分析 `Content` 时应重点寻找与流行话题的关联。
+`periodIndex` 建立 `Content` 与 `SinglePeriodStats` 的对应关系；统计指标与内容语义共同构成该活跃期的分析依据。

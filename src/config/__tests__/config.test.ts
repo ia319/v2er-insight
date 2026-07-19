@@ -110,7 +110,7 @@ describe('config/storage', () => {
       expect(config.ai?.thinkingLevel).toBe('high');
       expect(config.fetch?.timeout).toBe(30_000);
       expect(config.analyzer?.inactivityThreshold).toBe(60);
-      expect(config.data?.keepRaw).toBe(false);
+      expect(config.data?.keepRaw).toBe(true);
       expect(config.log?.level).toBe('info');
     });
 

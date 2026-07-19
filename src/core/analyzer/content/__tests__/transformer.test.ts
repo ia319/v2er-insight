@@ -4,12 +4,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { transformTopics, transformReplies } from '../transformer';
-import type { V2exTopicDetail, V2exReply } from '@/core/v2ex/types/entities';
+import type { AnalyzerReply } from '../../types';
+import type { V2exTopicDetail } from '@/core/v2ex/types/entities';
 
 describe('transformTopics', () => {
   it('should transform V2exTopicDetail to ContentTopic', () => {
     const topics: V2exTopicDetail[] = [
       {
+        topicId: '200001',
+        sourceUrl: 'https://www.v2ex.com/t/200001',
         title: 'Test Title',
         nodeName: 'Technology',
         content: 'Test Content',
@@ -36,14 +39,15 @@ describe('transformTopics', () => {
 });
 
 describe('transformReplies', () => {
-  it('should transform V2exReply to ContentReply', () => {
-    const replies: V2exReply[] = [
+  it('should transform AnalyzerReply to ContentReply', () => {
+    const replies: AnalyzerReply[] = [
       {
+        topicId: '100001',
+        topicReplyCount: 50,
         topicTitle: 'Reply Topic Title',
         nodeName: 'Q&A',
         content: 'Reply Content',
-        replyTime: '1 day ago',
-        topicReplyCount: 50,
+        occurredAt: new Date(2024, 0, 1),
         isDirectReply: true,
         replyTo: null,
       },

@@ -21,8 +21,10 @@ export interface UserProfileParseResult {
  * 来源：/member/{username}/replies?p={page}
  */
 export interface RepliesPageParseResult {
-  /** 用户的回复总数（页面顶部显示的"回复总数 30237"） */
-  totalReplies: number;
+  /** Declared total reply count, or `null` when the page omits it. */
+  totalReplies: number | null;
+  /** Number of replies with incomplete topic link metadata. */
+  invalidReplyCount: number;
   /** 本页回复列表 */
   replies: V2exReply[];
   /** 当前页码 */
@@ -38,6 +40,8 @@ export interface RepliesPageParseResult {
 export interface TopicsPageParseResult {
   /** 是否被用户隐藏 */
   isHidden: boolean;
+  /** Stable topic identity parse-failure count. */
+  invalidTopicCount: number;
   /** 本页帖子 URL 列表 */
   topicUrls: string[];
   /** 当前页码 */

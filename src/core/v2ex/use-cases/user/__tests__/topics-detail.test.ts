@@ -22,7 +22,11 @@ vi.mock('../../../parsers', () => ({
 vi.mock('../../../urls', () => ({
   getUserTopicsUrl: (username: string, page: number) =>
     `https://www.v2ex.com/member/${username}/topics?p=${page}`,
-  getTopicUrl: (path: string) => `https://www.v2ex.com${path}`,
+  getTopicUrl: (idOrPath: string) => {
+    const topicId = idOrPath.match(/\/t\/(\d+)/)?.[1] ?? idOrPath;
+    return `https://www.v2ex.com/t/${topicId}`;
+  },
+  extractTopicIdFromPath: (path: string) => path.match(/\/t\/(\d+)/)?.[1] ?? null,
 }));
 
 import { getAllUserTopicsDetail } from '../topics-detail';
@@ -70,6 +74,7 @@ describe('getAllUserTopicsDetail', () => {
 
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123', '/t/456'],
       currentPage: 1,
       totalPages: 1,
@@ -95,7 +100,21 @@ describe('getAllUserTopicsDetail', () => {
     expect(result.totalTopics).toBe(2);
     expect(result.fetchedTopics).toBe(2);
     expect(result.failedTopics).toBe(0);
+    expect(result.failedPages).toBe(0);
+    expect(result.invalidTopicCount).toBe(0);
     expect(result.isHidden).toBe(false);
+    expect(result.topics).toEqual([
+      expect.objectContaining({
+        topicId: '123',
+        sourceUrl: 'https://www.v2ex.com/t/123',
+        title: 'Topic 1',
+      }),
+      expect.objectContaining({
+        topicId: '456',
+        sourceUrl: 'https://www.v2ex.com/t/456',
+        title: 'Topic 2',
+      }),
+    ]);
   });
 
   it('should return empty when hidden', async () => {
@@ -109,6 +128,7 @@ describe('getAllUserTopicsDetail', () => {
     mockFetch.mockReturnValue(mockGenerator([listPage]));
     mockParseTopicsListPage.mockReturnValue({
       isHidden: true,
+      invalidTopicCount: 0,
       topicUrls: [],
       currentPage: 1,
       totalPages: 1,
@@ -118,6 +138,50 @@ describe('getAllUserTopicsDetail', () => {
 
     expect(result.topics).toEqual([]);
     expect(result.isHidden).toBe(true);
+  });
+
+  it('should count topics discarded when a later list page becomes hidden', async () => {
+    const page1: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>page1</html>',
+      statusCode: 200,
+    };
+    const page2: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=2',
+      success: true,
+      content: '<html>hidden</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValueOnce(mockGenerator([page1]));
+    mockFetch.mockReturnValueOnce(mockGenerator([page2]));
+    mockParseTopicsListPage
+      .mockReturnValueOnce({
+        isHidden: false,
+        invalidTopicCount: 0,
+        topicUrls: ['/t/123'],
+        currentPage: 1,
+        totalPages: 2,
+      })
+      .mockReturnValueOnce({
+        isHidden: true,
+        invalidTopicCount: 0,
+        topicUrls: [],
+        currentPage: 1,
+        totalPages: 1,
+      });
+
+    const result = await getAllUserTopicsDetail('testuser');
+
+    expect(result).toMatchObject({
+      topics: [],
+      totalTopics: 1,
+      fetchedTopics: 0,
+      failedTopics: 1,
+      invalidTopicCount: 0,
+      isHidden: true,
+    });
   });
 
   it('should return empty when no topics', async () => {
@@ -131,6 +195,7 @@ describe('getAllUserTopicsDetail', () => {
     mockFetch.mockReturnValue(mockGenerator([listPage]));
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: [],
       currentPage: 1,
       totalPages: 1,
@@ -140,8 +205,85 @@ describe('getAllUserTopicsDetail', () => {
 
     expect(result.topics).toEqual([]);
     expect(result.totalTopics).toBe(0);
-    // 当主题列表为空且只有单页时，isHidden 为 true（基于 topic-urls.ts 的实现逻辑）
-    expect(result.isHidden).toBe(true);
+    expect(result.isHidden).toBe(false);
+  });
+
+  it('should count invalid topic identities as failed topics', async () => {
+    const listPage: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>list</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValue(mockGenerator([listPage]));
+    mockParseTopicsListPage.mockReturnValue({
+      isHidden: false,
+      invalidTopicCount: 2,
+      topicUrls: [],
+      currentPage: 1,
+      totalPages: 1,
+    });
+
+    const result = await getAllUserTopicsDetail('testuser');
+
+    expect(result).toMatchObject({
+      topics: [],
+      totalTopics: 2,
+      fetchedTopics: 0,
+      failedTopics: 2,
+      failedPages: 0,
+      invalidTopicCount: 2,
+      isHidden: false,
+    });
+  });
+
+  it('should preserve topic list page failures', async () => {
+    const listPage: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=1',
+      success: true,
+      content: '<html>list</html>',
+      statusCode: 200,
+    };
+    const failedListPage: FetchResult = {
+      url: 'https://www.v2ex.com/member/testuser/topics?p=2',
+      success: false,
+      content: null,
+      error: new Error('List page failed'),
+      statusCode: 0,
+    };
+    const topic: FetchResult = {
+      url: 'https://www.v2ex.com/t/123',
+      success: true,
+      content: '<html>topic</html>',
+      statusCode: 200,
+    };
+
+    mockFetch.mockReturnValueOnce(mockGenerator([listPage]));
+    mockFetch.mockReturnValueOnce(mockGenerator([failedListPage]));
+    mockFetch.mockReturnValueOnce(mockGenerator([failedListPage]));
+    mockFetch.mockReturnValueOnce(mockGenerator([topic]));
+    mockParseTopicsListPage.mockReturnValue({
+      isHidden: false,
+      invalidTopicCount: 0,
+      topicUrls: ['/t/123'],
+      currentPage: 1,
+      totalPages: 2,
+    });
+    mockParseTopicDetail.mockReturnValue({
+      title: 'Topic 1',
+      nodeName: 'node',
+      createdAt: '2024-01-01',
+      content: 'Content',
+      replyCount: 10,
+      lastReplyTime: null,
+      clickCount: 100,
+    });
+
+    const result = await getAllUserTopicsDetail('testuser');
+
+    expect(result.failedPages).toBe(1);
+    expect(result.topics).toHaveLength(1);
   });
 
   it('should count failures when topic fetch fails', async () => {
@@ -170,6 +312,7 @@ describe('getAllUserTopicsDetail', () => {
 
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123', '/t/456'],
       currentPage: 1,
       totalPages: 1,
@@ -211,6 +354,7 @@ describe('getAllUserTopicsDetail', () => {
 
     mockParseTopicsListPage.mockReturnValue({
       isHidden: false,
+      invalidTopicCount: 0,
       topicUrls: ['/t/123'],
       currentPage: 1,
       totalPages: 1,

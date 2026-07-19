@@ -8,10 +8,12 @@
  * 来源：/member/{username}/replies 页面中的单个回复项
  */
 export interface V2exReply {
+  /** Stable topic identity derived from `/t/{id}`. */
+  topicId: string | null;
+  /** Current topic reply count derived from the last-reply anchor. */
+  topicReplyCount: number | null;
   /** 主题标题 */
   topicTitle: string;
-  /** 该主题的回复总数（从 href #reply{N} 提取） */
-  topicReplyCount: number;
   /** 节点名称 */
   nodeName: string;
   /** 回复时间（相对时间或具体日期） */
@@ -29,6 +31,10 @@ export interface V2exReply {
  * 来源：/t/{topic_id} 页面
  */
 export interface V2exTopicDetail {
+  /** Stable topic identity derived from `/t/{id}`. */
+  topicId: string;
+  /** Canonical source URL for the topic. */
+  sourceUrl: string;
   /** 主题标题 */
   title: string;
   /** 节点名称 */

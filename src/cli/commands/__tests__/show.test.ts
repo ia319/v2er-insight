@@ -2,6 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AIAnalysisResult } from '@/core/ai';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
+const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
@@ -9,6 +10,7 @@ const mockLogger = vi.hoisted(() => ({
 
 vi.mock('@/infra/storage', () => ({
   readDataFile: mockedReadDataFile,
+  readAnalysisState: mockedReadAnalysisState,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -66,16 +68,27 @@ describe('runShow', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedReadAnalysisState.mockReturnValue({ status: 'missing' });
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   it('should show error when result data is missing', async () => {
     mockedReadDataFile.mockReturnValue(null);
 
-    await runShow('testuser', {});
+    const outcome = await runShow('testuser', {});
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('testuser'));
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('v2er ai'));
+    expect(outcome.reasonCode).toBe('SHOW_RESULT_MISSING');
+  });
+
+  it('should reject a result that does not satisfy the persisted contract', async () => {
+    mockedReadDataFile.mockReturnValue({ summary: 'Incomplete result' });
+
+    const outcome = await runShow('testuser', {});
+
+    expect(outcome.reasonCode).toBe('SHOW_RESULT_INVALID');
+    expect(consoleSpy).not.toHaveBeenCalled();
   });
 
   it('should output raw JSON with --json flag', async () => {
@@ -85,6 +98,41 @@ describe('runShow', () => {
     await runShow('testuser', { json: true });
 
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+  });
+
+  it('should return stale and partial notices from valid result provenance', async () => {
+    const result = createMockResult();
+    mockedReadDataFile.mockReturnValue(result);
+    mockedReadAnalysisState.mockReturnValue({
+      status: 'valid',
+      state: {
+        schemaVersion: 1,
+        currentResult: {
+          analysisFingerprint: 'a'.repeat(64),
+          stale: true,
+          basedOnPartial: true,
+        },
+      },
+    });
+
+    const outcome = await runShow('testuser', { json: true });
+
+    expect(outcome.notices?.map((notice) => notice.code)).toEqual([
+      'DATA_RESULT_STALE',
+      'DATA_SNAPSHOT_PARTIAL',
+    ]);
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+  });
+
+  it('should display legacy results without guessing provenance notices', async () => {
+    mockedReadDataFile.mockReturnValue(createMockResult());
+    mockedReadAnalysisState.mockReturnValue({ status: 'invalid' });
+
+    const outcome = await runShow('testuser', {});
+
+    expect(outcome.status).toBe('success');
+    expect(outcome.notices).toEqual([]);
   });
 
   it('should output brief format with --brief flag', async () => {
@@ -119,26 +167,6 @@ describe('runShow', () => {
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('████████░░ 80');
-  });
-
-  it('should handle NaN scores gracefully with N/A', async () => {
-    const result = createMockResult();
-    (result.psychological.scores as Record<string, number>).openness = NaN;
-    mockedReadDataFile.mockReturnValue(result);
-
-    await runShow('testuser', {});
-
-    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
-    expect(output).toContain('N/A');
-  });
-
-  it('should handle missing array properties gracefully', async () => {
-    const result = createMockResult();
-    (result.professional as unknown as Record<string, unknown>).tech_stack = undefined;
-    (result.personal as unknown as Record<string, unknown>).hobbies = undefined;
-    mockedReadDataFile.mockReturnValue(result);
-
-    await expect(runShow('testuser', {})).resolves.not.toThrow();
   });
 
   it('should display risk level with color coding', async () => {

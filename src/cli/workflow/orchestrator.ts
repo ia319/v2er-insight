@@ -10,6 +10,7 @@ import type {
   StepRunResult,
   WorkflowStep,
 } from './types';
+import { renderNotices } from './notices';
 
 type StepExecutor = () => Promise<StepRunResult>;
 type WorkflowExecutorSet = Record<WorkflowStep, StepExecutor>;
@@ -32,6 +33,7 @@ export function buildStepExecutors(options: RunWorkflowOptions): WorkflowExecuto
   const aiOptions: AiCommandOptions = {
     model: options.model,
     thinkingLevel: options.thinkingLevel,
+    resend: options.resend,
     pipeline: true,
   };
   const showOptions: ShowCommandOptions = {
@@ -72,6 +74,7 @@ export async function runWorkflow(options: RunWorkflowOptions): Promise<RunOutco
       results.push(result);
 
       printStepLine(result, index, plan.length);
+      renderNotices(result.notices);
 
       if (result.status === 'partial') {
         hasPartial = true;

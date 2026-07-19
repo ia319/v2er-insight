@@ -13,4 +13,4 @@ export {
   getAllUserTopicUrls,
   getAllUserTopicsDetail,
 } from './user';
-export type { UserTopicUrlsResult, UserTopicsDetailResult } from './user';
+export type { UserTopicUrlsResult, UserTopicsDetailResult, UserRepliesResult } from './user';

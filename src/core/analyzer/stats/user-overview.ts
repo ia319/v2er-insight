@@ -3,29 +3,31 @@
  */
 
 import type { RawUserData, UserOverview } from '../types';
-import { parseAbsoluteDate, parseRelativeTime } from '../utils';
+import { parseAbsoluteDate } from '../utils';
 
 /**
  * 计算用户总览
  */
-export function calculateUserOverview(
-  data: RawUserData,
-  referenceDate: Date = new Date(),
-): UserOverview {
-  const { profile, topics, replies, isTopicsHidden } = data;
+export function calculateUserOverview(data: RawUserData): UserOverview {
+  const { profile, topics, replies, topicsStatus, repliesStatus, isTopicsHidden } = data;
 
   // 计算最后活动时间
-  const lastActiveTime = getLastActiveTime(topics, replies, referenceDate);
+  const lastActiveTime = getLastActiveTime(topics, replies);
 
-  // 计算发帖/回复比率，无回复时为 null
-  const topicReplyRatio = replies.length > 0 ? topics.length / replies.length : null;
+  // The ratio domain requires requested topic and reply collections plus at least one reply.
+  const hasRequestedTopics = topicsStatus !== 'not_requested';
+  const hasRequestedReplies = repliesStatus !== 'not_requested';
+  const topicReplyRatio =
+    !isTopicsHidden && hasRequestedTopics && hasRequestedReplies && replies.length > 0
+      ? topics.length / replies.length
+      : null;
 
   return {
     joinDate: profile.joinDate,
     lastActiveTime,
     topicReplyRatio,
-    totalTopics: isTopicsHidden ? null : topics.length,
-    totalReplies: replies.length,
+    totalTopics: isTopicsHidden || !hasRequestedTopics ? null : topics.length,
+    totalReplies: hasRequestedReplies ? replies.length : null,
     isTopicsHidden,
     dailyRanking: profile.dailyRanking,
   };
@@ -34,11 +36,7 @@ export function calculateUserOverview(
 /**
  * 获取最后活动时间
  */
-function getLastActiveTime(
-  topics: RawUserData['topics'],
-  replies: RawUserData['replies'],
-  referenceDate: Date,
-): string {
+function getLastActiveTime(topics: RawUserData['topics'], replies: RawUserData['replies']): string {
   let lastDate: Date | null = null;
 
   // 检查帖子的最后时间
@@ -51,9 +49,8 @@ function getLastActiveTime(
 
   // 检查回复的最后时间
   for (const reply of replies) {
-    const parsed = parseRelativeTime(reply.replyTime, referenceDate);
-    if (parsed && (!lastDate || parsed.date > lastDate)) {
-      lastDate = parsed.date;
+    if (reply.occurredAt && (!lastDate || reply.occurredAt > lastDate)) {
+      lastDate = reply.occurredAt;
     }
   }
 

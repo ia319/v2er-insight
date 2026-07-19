@@ -54,6 +54,13 @@ describe('storage/paths', () => {
         path.join(mockDataBase, 'livid', 'result.json'),
       );
     });
+
+    it('should return analysis-state.json path', async () => {
+      const { getDataFilePath } = await import('../paths');
+      expect(getDataFilePath('livid', 'analysisState')).toBe(
+        path.join(mockDataBase, 'livid', 'analysis-state.json'),
+      );
+    });
   });
 
   describe('username validation', () => {
@@ -116,6 +123,14 @@ describe('storage/reader', () => {
 
       expect(readDataFile('livid', 'raw')).toBeNull();
     });
+
+    it('should preserve invalid JSON as a distinct detailed read result', async () => {
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readFileSync.mockReturnValue('invalid json');
+      const { readDataFileResult } = await import('../reader');
+
+      expect(readDataFileResult('livid', 'analysisState')).toEqual({ status: 'invalid' });
+    });
   });
 });
 
@@ -135,9 +150,10 @@ describe('storage/writer', () => {
   });
 
   describe('writeDataFile', () => {
-    it('should always create directory and write formatted JSON', async () => {
+    it('should atomically replace the target with formatted JSON', async () => {
       mockedFs.mkdirSync.mockImplementation(() => '' as never);
       mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
       const { writeDataFile } = await import('../writer');
 
       const data = { topics: [1, 2, 3] };
@@ -147,26 +163,91 @@ describe('storage/writer', () => {
       expect(mockedFs.mkdirSync).toHaveBeenCalledWith(path.join(mockDataBase, 'livid'), {
         recursive: true,
       });
-      // 应写入格式化 JSON
-      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
+      const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
+      expect(tempPath).toEqual(expect.stringContaining('.raw.json.'));
+      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(tempPath, JSON.stringify(data, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600,
+        flag: 'wx',
+      });
+      expect(mockedFs.renameSync).toHaveBeenCalledWith(
+        tempPath,
         path.join(mockDataBase, 'livid', 'raw.json'),
-        JSON.stringify(data, null, 2),
-        { encoding: 'utf-8', mode: 0o600 },
       );
     });
 
     it('should write compact JSON when pretty is false', async () => {
       mockedFs.mkdirSync.mockImplementation(() => '' as never);
       mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
       const { writeDataFile } = await import('../writer');
 
       const data = { a: 1 };
       writeDataFile('livid', 'raw', data, { pretty: false });
 
-      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
-        path.join(mockDataBase, 'livid', 'raw.json'),
-        JSON.stringify(data),
-        { encoding: 'utf-8', mode: 0o600 },
+      const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
+      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(tempPath, JSON.stringify(data), {
+        encoding: 'utf-8',
+        mode: 0o600,
+        flag: 'wx',
+      });
+    });
+
+    it('should remove the temporary file and preserve the error when replacement fails', async () => {
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {
+        throw new Error('rename failed');
+      });
+      mockedFs.unlinkSync.mockImplementation(() => {});
+      const { writeDataFile } = await import('../writer');
+
+      expect(() => writeDataFile('livid', 'raw', { a: 1 })).toThrow('rename failed');
+
+      const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
+      expect(mockedFs.unlinkSync).toHaveBeenCalledWith(tempPath);
+    });
+  });
+
+  describe('writeDataFileWithRollback', () => {
+    it('should restore the previous file content when the dependent write fails', async () => {
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readFileSync.mockReturnValue('{"summary":"previous"}');
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
+      const { DataFilePostWriteError, writeDataFileWithRollback } = await import('../writer');
+
+      expect(() =>
+        writeDataFileWithRollback('livid', 'result', { summary: 'next' }, () => {
+          throw new Error('state write failed');
+        }),
+      ).toThrow(DataFilePostWriteError);
+
+      expect(mockedFs.writeFileSync).toHaveBeenCalledTimes(2);
+      expect(mockedFs.writeFileSync.mock.calls[1]?.[1]).toBe('{"summary":"previous"}');
+      expect(mockedFs.renameSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('should remove a newly created file after the restore source disappears', async () => {
+      mockedFs.readFileSync.mockImplementation(() => {
+        throw Object.assign(new Error('file disappeared'), { code: 'ENOENT' });
+      });
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
+      mockedFs.unlinkSync.mockImplementation(() => {});
+      const { writeDataFileWithRollback } = await import('../writer');
+
+      expect(() =>
+        writeDataFileWithRollback('livid', 'result', { summary: 'next' }, () => {
+          throw new Error('state write failed');
+        }),
+      ).toThrow('state write failed');
+
+      expect(mockedFs.unlinkSync).toHaveBeenCalledWith(
+        path.join(mockDataBase, 'livid', 'result.json'),
       );
     });
   });
@@ -191,9 +272,13 @@ describe('storage/cleaner', () => {
    * 辅助函数：mock getConfig 返回指定配置
    */
   function mockConfig(data: { keepRaw?: boolean; rawRetention?: number }) {
-    vi.doMock('@/config', () => ({
-      getConfig: () => ({ data }),
-    }));
+    vi.doMock('@/config', async () => {
+      const actual = await vi.importActual<typeof import('@/config')>('@/config');
+      return {
+        ...actual,
+        getConfig: () => ({ data }),
+      };
+    });
   }
 
   /**
@@ -209,7 +294,15 @@ describe('storage/cleaner', () => {
 
     const result = cleanExpiredData('livid');
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({
+      enabled: false,
+      retentionDays: 1,
+      deleted: [],
+      skipped: [
+        { type: 'raw', reason: 'retention_disabled' },
+        { type: 'analyzed', reason: 'retention_disabled' },
+      ],
+    });
     expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
   });
 
@@ -224,7 +317,12 @@ describe('storage/cleaner', () => {
 
     const result = cleanExpiredData('livid');
 
-    expect(result).toEqual(['raw', 'analyzed']);
+    expect(result).toEqual({
+      enabled: true,
+      retentionDays: 1,
+      deleted: ['raw', 'analyzed'],
+      skipped: [],
+    });
     expect(mockedFs.unlinkSync).toHaveBeenCalledTimes(2);
   });
 
@@ -237,8 +335,52 @@ describe('storage/cleaner', () => {
 
     const result = cleanExpiredData('livid');
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({
+      enabled: true,
+      retentionDays: 3,
+      deleted: [],
+      skipped: [
+        { type: 'raw', reason: 'not_expired' },
+        { type: 'analyzed', reason: 'not_expired' },
+      ],
+    });
     expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
+  });
+
+  it('should report missing source files without deleting anything', async () => {
+    mockConfig({ keepRaw: false, rawRetention: 1 });
+    mockedFs.existsSync.mockReturnValue(false);
+    const { cleanExpiredData } = await import('../cleaner');
+
+    const result = cleanExpiredData('livid');
+
+    expect(result.skipped).toEqual([
+      { type: 'raw', reason: 'missing' },
+      { type: 'analyzed', reason: 'missing' },
+    ]);
+    expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
+  });
+
+  it('should preserve diagnostics when metadata or deletion fails', async () => {
+    mockConfig({ keepRaw: false, rawRetention: 1 });
+    mockedFs.existsSync.mockReturnValue(true);
+    mockedFs.statSync
+      .mockImplementationOnce(() => {
+        throw new Error('stat failed');
+      })
+      .mockReturnValueOnce({ mtimeMs: mtimeOfDaysAgo(2).getTime() } as fs.Stats);
+    mockedFs.unlinkSync.mockImplementation(() => {
+      throw new Error('delete failed');
+    });
+    const { cleanExpiredData } = await import('../cleaner');
+
+    const result = cleanExpiredData('livid');
+
+    expect(result.skipped).toEqual([
+      { type: 'raw', reason: 'metadata_unavailable' },
+      { type: 'analyzed', reason: 'delete_failed' },
+    ]);
+    expect(result.deleted).toEqual([]);
   });
 
   it('should never delete result.json', async () => {
@@ -251,7 +393,7 @@ describe('storage/cleaner', () => {
     const result = cleanExpiredData('livid');
 
     // 只应清理 raw 和 analyzed，不包含 result
-    expect(result).not.toContain('result');
+    expect(result.deleted).not.toContain('result');
     // unlinkSync 最多被调用 2 次（raw + analyzed）
     expect(mockedFs.unlinkSync).toHaveBeenCalledTimes(2);
   });

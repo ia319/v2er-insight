@@ -15,6 +15,8 @@ describe('splitByPeriods', () => {
   it('should assign topics to correct periods', () => {
     const topics = [
       {
+        topicId: '200001',
+        sourceUrl: 'https://www.v2ex.com/t/200001',
         title: 'Jan Topic',
         nodeName: 'test',
         createdAt: '2024-01-15 10:00:00 +08:00',
@@ -24,6 +26,8 @@ describe('splitByPeriods', () => {
         clickCount: 0,
       },
       {
+        topicId: '200002',
+        sourceUrl: 'https://www.v2ex.com/t/200002',
         title: 'Apr Topic',
         nodeName: 'test',
         createdAt: '2024-04-15 10:00:00 +08:00',
@@ -46,18 +50,18 @@ describe('splitByPeriods', () => {
   it('should assign replies to correct periods', () => {
     const replies = [
       {
-        topicTitle: 'Topic',
+        topicId: '100001',
         topicReplyCount: 10,
+        topicTitle: 'Topic',
         nodeName: 'test',
-        replyTime: '5 天前',
+        occurredAt: new Date(2024, 0, 5),
         content: 'reply',
         isDirectReply: true,
         replyTo: null,
       },
     ];
 
-    // referenceDate 设为 2024-01-10，5天前是 2024-01-05
-    const result = splitByPeriods(boundaries, [], replies, new Date(2024, 0, 10));
+    const result = splitByPeriods(boundaries, [], replies);
 
     expect(result[0]?.replies).toHaveLength(1);
     expect(result[1]?.replies).toHaveLength(0);
@@ -74,6 +78,8 @@ describe('splitByPeriods', () => {
   it('should exclude topics outside all period boundaries', () => {
     const topics = [
       {
+        topicId: '200003',
+        sourceUrl: 'https://www.v2ex.com/t/200003',
         title: 'Outside Topic',
         nodeName: 'test',
         createdAt: '2024-02-15 10:00:00 +08:00', // 在两个周期之间
@@ -94,6 +100,8 @@ describe('splitByPeriods', () => {
   it('should include topics exactly on boundary dates', () => {
     const topics = [
       {
+        topicId: '200004',
+        sourceUrl: 'https://www.v2ex.com/t/200004',
         title: 'Boundary Start',
         nodeName: 'test',
         createdAt: '2024-01-01 10:00:00 +08:00', // 边界起点当天
@@ -103,6 +111,8 @@ describe('splitByPeriods', () => {
         clickCount: 0,
       },
       {
+        topicId: '200005',
+        sourceUrl: 'https://www.v2ex.com/t/200005',
         title: 'Boundary End',
         nodeName: 'test',
         createdAt: '2024-01-31 10:00:00 +08:00', // 边界终点当天

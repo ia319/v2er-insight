@@ -5,13 +5,14 @@
  * 支持 --json 原始输出和 --brief 简略版。
  */
 
-import type { AIAnalysisResult, PsychologicalProfile } from '@/core/ai';
-import { readDataFile } from '@/infra/storage';
+import { isAIAnalysisResult, type AIAnalysisResult, type PsychologicalProfile } from '@/core/ai';
+import { readAnalysisState, readDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { COLORS } from '@/infra/logger/colors';
 import type { ShowCommandOptions } from '../types';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
+import { createResultStateNotices } from '../workflow/result-state-notices';
 
 // -- 格式化工具 --------------------------------------------------------------
 
@@ -123,15 +124,19 @@ function printFull(result: AIAnalysisResult): void {
 // -- 命令入口 ----------------------------------------------------------------
 
 /**
- * 执行 show 命令
+ * Displays the latest persisted AI result.
+ *
+ * @param username - User associated with the displayed result.
+ * @param options - JSON, brief, and pipeline output options.
+ * @returns Structured show status with any result-provenance notices.
  */
 export async function runShow(
   username: string,
   options: ShowCommandOptions,
 ): Promise<StepRunResult> {
-  const result = readDataFile<AIAnalysisResult>(username, 'result');
+  const resultValue = readDataFile<unknown>(username, 'result');
 
-  if (!result) {
+  if (resultValue === null) {
     logger.error(`未找到 ${username} 的分析结果`);
     logger.info('请先运行: v2er ai <username>');
     return {
@@ -144,6 +149,25 @@ export async function runShow(
     };
   }
 
+  if (!isAIAnalysisResult(resultValue)) {
+    logger.error(`${username} 的 result.json 格式无效或不受支持`);
+    return {
+      step: 'show',
+      status: 'failed',
+      reasonCode: 'SHOW_RESULT_INVALID',
+      message: 'result.json 格式无效或不受支持，无法展示报告',
+      recoverable: true,
+      recoverActions: getRecoveryActions('SHOW_RESULT_INVALID', { username }),
+    };
+  }
+  const result = resultValue;
+
+  const analysisState = readAnalysisState(username);
+  const notices =
+    analysisState.status === 'valid'
+      ? createResultStateNotices(username, analysisState.state.currentResult)
+      : [];
+
   // --json: 原始 JSON 输出
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -152,6 +176,7 @@ export async function runShow(
       status: 'success',
       message: '已输出 JSON 结果',
       meta: { mode: 'json' },
+      notices,
     };
   }
 
@@ -163,6 +188,7 @@ export async function runShow(
       status: 'success',
       message: '已输出简略报告',
       meta: { mode: 'brief' },
+      notices,
     };
   }
 
@@ -173,5 +199,6 @@ export async function runShow(
     status: 'success',
     message: '已输出完整报告',
     meta: { mode: 'full' },
+    notices,
   };
 }

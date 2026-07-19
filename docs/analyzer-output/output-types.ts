@@ -1,20 +1,14 @@
 /**
  * Analyzer 输出数据结构
  *
- * 设计思路：
- * 1. UserOverview 用户总览（全局信息）
- * 2. PeriodsSummary 包含所有活跃期的统计分析结果（一次性发送）
- * 3. PeriodContent 按活跃期分片发送
- * 4. 关键规则：不同活跃期必须分 chunk（同一 chunk 只能包含同一活跃期的内容）
+ * 结构组成：
+ * 1. UserOverview：用户全局信息
+ * 2. PeriodsSummary：所有活跃期的统计结果
+ * 3. PeriodContent / PeriodContentChunk：按活跃期组织的内容
+ * 4. AnalyzerOutput：上述结构组成的单个完整 JSON
  *
- * 发送策略：
- * 1. 先发送 UserOverview → AI 获得用户基本画像
- * 2. 发送 PeriodsSummary → AI 获得所有活跃期的统计概览
- * 3. 再按需发送各活跃期的内容：
- *    - 活跃期 0 内容少 → 发送 PeriodContent(periodIndex=0)
- *    - 活跃期 1 内容多 → 发送 PeriodContentChunk(periodIndex=1, chunkIndex=0)
- *                     → 发送 PeriodContentChunk(periodIndex=1, chunkIndex=1)
- *                     → ...
+ * 单个 chunk 对应一个活跃期。periodIndex 关联统计周期与内容，chunkIndex
+ * 表示同一活跃期内的分片顺序。
  */
 
 // ============================================================================
@@ -22,8 +16,7 @@
 // ============================================================================
 
 /**
- * 用户总览
- * 在提示词后首先发送给 AI，描述目标用户的基本信息
+ * 目标用户的基本信息和全局指标
  */
 export interface UserOverview {
   /** 加入时间，格式：2010-04-25 21:45:46 +08:00 */
@@ -37,12 +30,13 @@ export interface UserOverview {
    * 发帖与回复量比率
    * 计算方式：totalTopics / totalReplies
    * 高 = 偏向发起话题；低 = 偏向参与讨论
+   * null = 主题隐藏、帖子或回复未请求，或没有回复
    */
   topicReplyRatio: number | null;
-  /** 总发帖数，null = 隐藏主题列表 或发帖数为 0 */
+  /** 总发帖数，null = 隐藏主题列表或未请求帖子 */
   totalTopics: number | null;
-  /** 总回复数 */
-  totalReplies: number;
+  /** 总回复数，null = 未请求回复 */
+  totalReplies: number | null;
   /**
    * 是否隐藏主题列表
    * true = 用户主动隐藏了发帖记录
@@ -114,8 +108,9 @@ export interface SinglePeriodStats {
    * 参与话题的平均热度
    * 计算方式：Avg(topicReplyCount)
    * 高 = 追热点；低 = 关注小众话题
+   * null = 当前活跃期没有可用的话题回复总数
    */
-  avgRepliedTopicHeat: number;
+  avgRepliedTopicHeat: number | null;
   /**
    * 回复星期分布（全部 7 天，百分比）
    * 通过相对时间（如"3天前"）计算星期几
@@ -136,7 +131,6 @@ export interface SinglePeriodStats {
 
 /**
  * 所有活跃期的统计汇总
- * 一次性发送，让 AI 看到全局概览
  */
 export interface PeriodsSummary {
   /** 总活跃期数 */
@@ -153,7 +147,7 @@ export interface PeriodsSummary {
 // ============================================================================
 
 /**
- * 发送给 AI 的单条帖子
+ * Analyzer 内容中的单条帖子
  */
 export interface ContentTopic {
   /** 主题标题 - 用于分析关注话题和表达风格 */
@@ -165,7 +159,7 @@ export interface ContentTopic {
 }
 
 /**
- * 发送给 AI 的单条回复
+ * Analyzer 内容中的单条回复
  */
 export interface ContentReply {
   /** 回复所在的主题标题 - 用于分析关注的话题类型 */
@@ -191,8 +185,8 @@ export interface PeriodContent {
 
 /**
  * 活跃期内容分片
- * 当单个活跃期内容过多时（帖子>20 或 回复>100），分片发送
- * 关键规则：同一 chunk 只能包含同一活跃期的内容
+ * 单个活跃期内容超过阈值（帖子>20 或 回复>100）时采用分片结构
+ * 单个 chunk 对应一个活跃期
  */
 export interface PeriodContentChunk {
   /** 活跃期序号 - 对应 PeriodsSummary.periods[periodIndex] */
@@ -211,42 +205,45 @@ export interface PeriodContentChunk {
 // 最终输出结构
 // ============================================================================
 
+export type SnapshotStatus = 'complete' | 'partial' | 'not_requested';
+
+export interface SnapshotQuality {
+  status: SnapshotStatus;
+  totalExpected: number | null;
+  fetchedCount: number;
+  /** 已知缺失、无效或与声明总数不一致的条数 */
+  failedCount: number;
+}
+
 /**
  * Analyzer 模块的最终输出
  */
 export interface AnalyzerOutput {
+  /** Analyzer 输出协议版本 */
+  schemaVersion: 2;
+  /** 本次抓取的数据完整性 */
+  dataQuality: {
+    capturedAt: string;
+    topics: SnapshotQuality;
+    replies: SnapshotQuality;
+  };
   /** 用户总览 */
   userOverview: UserOverview;
-  /** 所有活跃期的统计汇总（一次性发送） */
+  /** 所有活跃期的统计汇总 */
   summary: PeriodsSummary;
   /**
    * 各活跃期的内容
    * 可能是完整内容(PeriodContent)或分片(PeriodContentChunk)
-   * 发送时按 periodIndex 顺序发送
+   * 按 periodIndex 排列，同一活跃期的分片按 chunkIndex 排列
    */
   contents: Array<PeriodContent | PeriodContentChunk>;
 }
 
 // ============================================================================
-// AI 关联说明
+// AnalyzerOutput 关联结构
 // ============================================================================
 /**
- * AI 如何关联活跃期与内容：
- *
- * 1. AI 首先收到 PeriodsSummary，了解到共有 N 个活跃期及其统计数据
- * 2. AI 逐个收到 PeriodContent/PeriodContentChunk
- * 3. 每个内容都有 periodIndex 字段，明确标识属于哪个活跃期
- * 4. AI 可以通过 periodIndex 将内容与 summary.periods[periodIndex] 对应
- *
- * 示例发送序列：
- *   → PeriodsSummary { totalPeriods: 3, periods: [stats0, stats1, stats2] }
- *   → PeriodContent { periodIndex: 0, topics: [...], replies: [...] }
- *   → PeriodContentChunk { periodIndex: 1, chunkIndex: 0, totalChunksInPeriod: 2, ... }
- *   → PeriodContentChunk { periodIndex: 1, chunkIndex: 1, totalChunksInPeriod: 2, ... }
- *   → PeriodContent { periodIndex: 2, topics: [...], replies: [...] }
- *
- * AI 可以清晰地知道：
- * - 活跃期 0 (stats0)：1 个完整内容包
- * - 活跃期 1 (stats1)：2 个分片，需要合并理解
- * - 活跃期 2 (stats2)：1 个完整内容包
+ * AnalyzerOutput 采用单个完整 JSON。
+ * dataQuality 表示数据范围完整性。
+ * periodIndex 是内容与统计周期的关联键；同一值对应一个活跃期及其多个 chunk。
  */

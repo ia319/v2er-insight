@@ -4,7 +4,6 @@
 
 export {
   parseAbsoluteDate,
-  parseRelativeTime,
   formatTimeRange,
   getWeekday,
   getHour,

@@ -12,6 +12,8 @@ const mockedConfigReset = vi.hoisted(() => vi.fn());
 const mockedInitFetchProxy = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedLoggerSetLevel = vi.hoisted(() => vi.fn());
+const mockedLoggerWarn = vi.hoisted(() => vi.fn());
+const mockedLoggerDiagnostic = vi.hoisted(() => vi.fn());
 
 vi.mock('../commands', () => ({
   runFetch: mockedRunFetch,
@@ -33,6 +35,8 @@ vi.mock('@/config', () => ({
 vi.mock('@/infra/logger', () => ({
   logger: {
     setLevel: mockedLoggerSetLevel,
+    warn: mockedLoggerWarn,
+    diagnostic: mockedLoggerDiagnostic,
   },
 }));
 
@@ -44,15 +48,24 @@ describe('cli option forwarding', () => {
     vi.clearAllMocks();
     vi.resetModules();
     mockedGetConfig.mockReturnValue({ log: { level: 'info' } });
-    mockedRunAi.mockResolvedValue({ status: 'success' });
+    mockedRunAi.mockResolvedValue({
+      status: 'success',
+      notices: [
+        {
+          code: 'DATA_FILES_CLEANED',
+          severity: 'warning',
+          summary: '源数据已清理',
+        },
+      ],
+    });
   });
 
   afterEach(() => {
     process.argv = originalArgv;
   });
 
-  it('should forward --thinking-level to ai subcommand', async () => {
-    process.argv = ['node', 'v2er', 'ai', 'alice', '--thinking-level', 'low'];
+  it('should forward AI options to the ai subcommand', async () => {
+    process.argv = ['node', 'v2er', 'ai', 'alice', '--thinking-level', 'low', '--resend'];
 
     await import('../index');
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -62,7 +75,9 @@ describe('cli option forwarding', () => {
       'alice',
       expect.objectContaining({
         thinkingLevel: 'low',
+        resend: true,
       }),
     );
+    expect(mockedLoggerWarn).toHaveBeenCalledWith('[DATA_FILES_CLEANED] 源数据已清理');
   });
 });

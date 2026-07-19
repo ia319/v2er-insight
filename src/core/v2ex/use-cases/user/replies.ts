@@ -8,6 +8,13 @@ import type { V2exReply } from '../../types';
 import type { PagedResult, ServiceOptions } from '../types';
 import { fetchPagedData } from '../utils';
 
+/** Reply collection with item-level completeness metadata. */
+export interface UserRepliesResult extends PagedResult<V2exReply> {
+  totalReplies: number | null;
+  /** Number of replies with incomplete topic link metadata. */
+  invalidReplyCount: number;
+}
+
 /**
  * 获取用户所有回复
  *
@@ -18,11 +25,27 @@ import { fetchPagedData } from '../utils';
 export async function getAllUserReplies(
   username: string,
   options?: ServiceOptions,
-): Promise<PagedResult<V2exReply>> {
-  return fetchPagedData(
+): Promise<UserRepliesResult> {
+  let totalReplies: number | null = null;
+  let invalidReplyCount = 0;
+
+  const result = await fetchPagedData(
     (page) => getUserRepliesUrl(username, page),
-    parseRepliesPage,
+    (html) => {
+      const parsed = parseRepliesPage(html);
+      if (parsed.totalReplies !== null) {
+        totalReplies = Math.max(totalReplies ?? 0, parsed.totalReplies);
+      }
+      invalidReplyCount += parsed.invalidReplyCount;
+      return parsed;
+    },
     (result) => result.replies,
     options,
   );
+
+  return {
+    ...result,
+    totalReplies,
+    invalidReplyCount,
+  };
 }

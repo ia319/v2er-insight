@@ -11,6 +11,7 @@ describe('parseTopicsListPage', () => {
     const result = parseTopicsListPage(html);
 
     expect(result.isHidden).toBe(false);
+    expect(result.invalidTopicCount).toBe(0);
     expect(result.topicUrls).toContain('/t/200001');
     expect(result.topicUrls).toContain('/t/200002');
     expect(result.currentPage).toBe(1);
@@ -22,6 +23,18 @@ describe('parseTopicsListPage', () => {
     const result = parseTopicsListPage(html);
 
     expect(result.isHidden).toBe(true);
+    expect(result.invalidTopicCount).toBe(0);
     expect(result.topicUrls).toHaveLength(0);
+  });
+
+  it('should deduplicate URL variations by topic ID and count invalid links', () => {
+    const result = parseTopicsListPage(`
+      <a href="/t/200001#reply1">Topic</a>
+      <a href="/t/200001?p=2">Duplicate topic URL</a>
+      <a href="/t/invalid">Invalid topic URL</a>
+    `);
+
+    expect(result.topicUrls).toEqual(['/t/200001']);
+    expect(result.invalidTopicCount).toBe(1);
   });
 });
