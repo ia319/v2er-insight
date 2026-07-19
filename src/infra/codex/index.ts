@@ -10,5 +10,11 @@ export {
   CodexAppServerRequestTimeoutError,
   CodexAppServerRpcError,
   CodexAppServerTransportError,
+  JsonlRpcClient,
 } from './app-server';
-export type { JsonRpcNotification, JsonValue } from './app-server';
+export type {
+  JsonResultDecoder,
+  JsonlRpcClientOptions,
+  JsonRpcNotification,
+  JsonValue,
+} from './app-server';
