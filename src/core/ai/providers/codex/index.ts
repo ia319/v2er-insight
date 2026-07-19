@@ -7,6 +7,13 @@ export type {
 } from './session-selection';
 export { selectCodexSession } from './session-selection';
 export type {
+  CodexThreadCreationErrorCode,
+  CodexThreadCreationRuntime,
+  CreateCodexThreadGenerationOptions,
+  CreatedCodexThreadGeneration,
+} from './thread-creation';
+export { CodexThreadCreationError, createCodexThreadGeneration } from './thread-creation';
+export type {
   CodexProjectPathErrorCode,
   CodexProjectPathSource,
   ResolvedCodexProjectPath,
