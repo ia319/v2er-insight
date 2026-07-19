@@ -223,6 +223,48 @@ describe('CodexAppServerConnection', () => {
     await connection.close();
   });
 
+  it('should wait for a completion that arrives before the start response', async () => {
+    const { connection, output, requests } = createHarness();
+    const running = connection.runTurn(
+      {
+        threadId: 'thread-1',
+        text: 'hello',
+        cwd: 'D:\\data',
+        model: 'gpt-current',
+        effort: 'high',
+      },
+      1000,
+    );
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thread-1',
+          turn: {
+            id: 'turn-1',
+            status: 'completed',
+            error: null,
+            items: [{ type: 'agentMessage', id: 'message-1', text: 'done', phase: 'final_answer' }],
+          },
+        },
+      })}\n${JSON.stringify({
+        id: 2,
+        result: { turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] } },
+      })}\n`,
+    );
+
+    await expect(running).resolves.toMatchObject({
+      id: 'turn-1',
+      status: 'completed',
+      agentMessages: [{ id: 'message-1', text: 'done', phase: 'final_answer' }],
+    });
+    await connection.close();
+  });
+
   it('should decode subscribed session notifications and isolate decoder failures', () => {
     const { connection, output } = createHarness();
     const notifications = vi.fn();

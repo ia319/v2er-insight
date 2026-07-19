@@ -22,6 +22,7 @@ import { decodeSessionNotification } from './notification-decoder';
 import type { CodexSessionNotification } from './notification-types';
 import type { JsonValue } from './protocol';
 import type { CodexThreadInfo, CodexThreadSessionInfo, CodexTurnInfo } from './thread-types';
+import { CodexTurnCompletionCollector } from './turn-completion';
 import type {
   CodexAppServerExit,
   CodexAppServerProcess,
@@ -182,6 +183,30 @@ export class CodexAppServerConnection {
       },
       decodeTurnStartResponse,
     );
+  }
+
+  /** Starts a turn and waits for its terminal notification without a subscription race. */
+  async runTurn(options: CodexTurnStartOptions, timeoutMs: number): Promise<CodexTurnInfo> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new RangeError('timeoutMs must be a positive finite number');
+    }
+
+    const collector = new CodexTurnCompletionCollector(options.threadId);
+    const unsubscribe = this.subscribeSessionNotifications(
+      (notification) => collector.accept(notification),
+      (error) => collector.fail(error),
+    );
+    try {
+      const started = await this.startTurn(options);
+      if (started.status !== 'inProgress') {
+        throw new CodexAppServerProtocolError(
+          `turn/start returned terminal status "${started.status}" for turn "${started.id}"`,
+        );
+      }
+      return await collector.waitFor(started.id, timeoutMs);
+    } finally {
+      unsubscribe();
+    }
   }
 
   /** Subscribes to decoded session notifications and reports decoder failures separately. */
