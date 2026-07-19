@@ -2,13 +2,34 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CodexThreadInfo, CodexTurnInfo } from '@/infra/codex';
 import { createAIAnalysisResultFixture } from '../../../__tests__/result-fixture';
 import {
+  activateCodexThreadSession,
   completeCodexPromptTurn,
   createPendingCodexThreadState,
+  prepareCodexAnalysisDelivery,
   recordCodexInitialAnalysisTurn,
   recordCodexPromptTurn,
+  recordCodexThreadTurnStart,
 } from '../thread-registry';
 import type { CodexThreadRegistryV1, CodexThreadState } from '../thread-state';
 import { recoverCodexBootstrap } from '../bootstrap-recovery';
+
+const HASH = 'a'.repeat(64);
+
+const DELIVERY = {
+  deliveryId: 'delivery-1',
+  providerKey: `codex:${HASH}`,
+  analysisFingerprint: HASH,
+  payloadHash: HASH,
+  basedOnPartial: false,
+  deliveryMode: 'change' as const,
+  reasoningEffort: 'high',
+};
+
+const UPDATE_DELIVERY = {
+  ...DELIVERY,
+  deliveryId: 'delivery-2',
+  reasoningEffort: 'low',
+};
 
 function createPendingRegistry(): CodexThreadRegistryV1 {
   return {
@@ -20,7 +41,7 @@ function createPendingRegistry(): CodexThreadRegistryV1 {
         threadId: 'thread-1',
         generation: 1,
         displayName: 'alice-insight',
-        promptHash: 'a'.repeat(64),
+        promptHash: HASH,
         model: 'gpt-current',
         reasoningEffort: 'high',
         executablePath: 'C:\\App\\codex.exe',
@@ -59,6 +80,44 @@ function createUpdater(initial: CodexThreadRegistryV1) {
     },
   );
   return { updateRegistry, getRegistry: () => registry };
+}
+
+function createReadyRegistry(): CodexThreadRegistryV1 {
+  let registry = createPendingRegistry();
+  registry = recordCodexPromptTurn(registry, 'local-1', 'turn-prompt', '2026-07-19T01:01:00.000Z');
+  registry = completeCodexPromptTurn(
+    registry,
+    'local-1',
+    'turn-prompt',
+    '2026-07-19T01:02:00.000Z',
+  );
+  registry = prepareCodexAnalysisDelivery(
+    registry,
+    'local-1',
+    DELIVERY,
+    '2026-07-19T01:03:00.000Z',
+  );
+  registry = recordCodexInitialAnalysisTurn(
+    registry,
+    'local-1',
+    'turn-analysis',
+    '2026-07-19T01:04:00.000Z',
+  );
+  return activateCodexThreadSession(
+    registry,
+    'local-1',
+    'turn-analysis',
+    'high',
+    '2026-07-19T01:05:00.000Z',
+  );
+}
+
+function createReadyThread(extraTurns: CodexTurnInfo[] = []): CodexThreadInfo {
+  return createThread([
+    createTurn('completed'),
+    createTurn('completed', 'turn-analysis'),
+    ...extraTurns,
+  ]);
 }
 
 describe('recoverCodexBootstrap', () => {
@@ -131,6 +190,12 @@ describe('recoverCodexBootstrap', () => {
       'turn-prompt',
       '2026-07-19T01:02:00.000Z',
     );
+    registry = prepareCodexAnalysisDelivery(
+      registry,
+      'local-1',
+      DELIVERY,
+      '2026-07-19T01:02:30.000Z',
+    );
     registry = recordCodexInitialAnalysisTurn(
       registry,
       'local-1',
@@ -153,7 +218,11 @@ describe('recoverCodexBootstrap', () => {
         updateRegistry: updater.updateRegistry,
         platform: 'win32',
       }),
-    ).resolves.toMatchObject({ action: 'analysisResult', result });
+    ).resolves.toMatchObject({
+      action: 'analysisResult',
+      result,
+      delivery: { ...DELIVERY, turnId: 'turn-analysis' },
+    });
     expect(updater.updateRegistry).not.toHaveBeenCalled();
   });
 
@@ -218,6 +287,119 @@ describe('recoverCodexBootstrap', () => {
         platform: 'win32',
       }),
     ).resolves.toMatchObject({ action: 'busy', turnId: null });
+  });
+
+  it('should continue a prepared ready-session attempt when no turn was accepted', async () => {
+    const registry = prepareCodexAnalysisDelivery(
+      createReadyRegistry(),
+      'local-1',
+      UPDATE_DELIVERY,
+      '2026-07-19T01:06:00.000Z',
+    );
+    const updater = createUpdater(registry);
+
+    await expect(
+      recoverCodexBootstrap({
+        state: getState(registry),
+        thread: createReadyThread(),
+        updateRegistry: updater.updateRegistry,
+        platform: 'win32',
+      }),
+    ).resolves.toMatchObject({ action: 'sendAnalysis' });
+  });
+
+  it('should preserve an idle ready session without a pending delivery', async () => {
+    const registry = createReadyRegistry();
+    const updater = createUpdater(registry);
+
+    await expect(
+      recoverCodexBootstrap({
+        state: getState(registry),
+        thread: createReadyThread([createTurn('completed', 'app-turn')]),
+        updateRegistry: updater.updateRegistry,
+        platform: 'win32',
+      }),
+    ).resolves.toMatchObject({ action: 'ready' });
+  });
+
+  it('should recover a completed ready-session analysis by its pending turn', async () => {
+    let registry = prepareCodexAnalysisDelivery(
+      createReadyRegistry(),
+      'local-1',
+      UPDATE_DELIVERY,
+      '2026-07-19T01:06:00.000Z',
+    );
+    registry = recordCodexThreadTurnStart(
+      registry,
+      'local-1',
+      'turn-update',
+      '2026-07-19T01:07:00.000Z',
+    );
+    const result = createAIAnalysisResultFixture();
+    const updateTurn: CodexTurnInfo = {
+      id: 'turn-update',
+      status: 'completed',
+      error: null,
+      agentMessages: [{ id: 'final', text: JSON.stringify(result), phase: 'final_answer' }],
+    };
+    const updater = createUpdater(registry);
+
+    await expect(
+      recoverCodexBootstrap({
+        state: getState(registry),
+        thread: createReadyThread([updateTurn]),
+        updateRegistry: updater.updateRegistry,
+        platform: 'win32',
+      }),
+    ).resolves.toMatchObject({
+      action: 'analysisResult',
+      result,
+      delivery: { ...UPDATE_DELIVERY, turnId: 'turn-update' },
+    });
+  });
+
+  it('should keep an accepted ready-session analysis in progress', async () => {
+    let registry = prepareCodexAnalysisDelivery(
+      createReadyRegistry(),
+      'local-1',
+      UPDATE_DELIVERY,
+      '2026-07-19T01:06:00.000Z',
+    );
+    registry = recordCodexThreadTurnStart(
+      registry,
+      'local-1',
+      'turn-update',
+      '2026-07-19T01:07:00.000Z',
+    );
+    const updater = createUpdater(registry);
+
+    await expect(
+      recoverCodexBootstrap({
+        state: getState(registry),
+        thread: createReadyThread([createTurn('inProgress', 'turn-update')]),
+        updateRegistry: updater.updateRegistry,
+        platform: 'win32',
+      }),
+    ).resolves.toMatchObject({ action: 'busy', turnId: 'turn-update' });
+  });
+
+  it('should reject an untracked turn after an unaccepted ready-session attempt', async () => {
+    const registry = prepareCodexAnalysisDelivery(
+      createReadyRegistry(),
+      'local-1',
+      UPDATE_DELIVERY,
+      '2026-07-19T01:06:00.000Z',
+    );
+    const updater = createUpdater(registry);
+
+    await expect(
+      recoverCodexBootstrap({
+        state: getState(registry),
+        thread: createReadyThread([createTurn('completed', 'unknown-turn')]),
+        updateRegistry: updater.updateRegistry,
+        platform: 'win32',
+      }),
+    ).rejects.toMatchObject({ code: 'untracked_turns' });
   });
 
   it('should reject an untracked turn instead of resending a missing local stage', async () => {

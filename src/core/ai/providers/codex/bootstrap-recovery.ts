@@ -4,7 +4,11 @@ import type { CodexAgentMessage, CodexThreadInfo, CodexTurnInfo } from '@/infra/
 import { areCodexProjectPathsEqual } from './project-path';
 import type { CodexRegistryUpdate } from './registry-update';
 import { completeCodexPromptTurn } from './thread-registry';
-import type { CodexThreadRegistryV1, CodexThreadState } from './thread-state';
+import type {
+  CodexPendingAnalysisDelivery,
+  CodexThreadRegistryV1,
+  CodexThreadState,
+} from './thread-state';
 import { assertCodexTurnCompleted, selectCodexFinalMessage } from './turn-result';
 
 export type CodexBootstrapRecoveryErrorCode =
@@ -40,6 +44,7 @@ export type CodexBootstrapRecovery =
       turn: CodexTurnInfo;
       message: CodexAgentMessage;
       result: AIAnalysisResult;
+      delivery: CodexPendingAnalysisDelivery;
     });
 
 export interface RecoverCodexBootstrapOptions {
@@ -169,6 +174,14 @@ function recoverAnalysisPending(options: RecoverCodexBootstrapOptions): CodexBoo
       : { action: 'sendAnalysis', state: options.state, thread: options.thread };
   }
 
+  const delivery = options.state.pendingAnalysis;
+  if (delivery === undefined || delivery.turnId !== turnId) {
+    return recoveryError(
+      'local_state_invalid',
+      `Codex analysis turn "${turnId}" has no matching pending delivery`,
+    );
+  }
+
   const turn = findTurn(options.thread, turnId);
   const promptIndex = options.thread.turns.findIndex((candidate) => candidate.id === promptTurnId);
   const analysisIndex = options.thread.turns.findIndex((candidate) => candidate.id === turnId);
@@ -199,6 +212,73 @@ function recoverAnalysisPending(options: RecoverCodexBootstrapOptions): CodexBoo
     turn,
     message,
     result: parseAIAnalysisResult(message.text),
+    delivery,
+  };
+}
+
+function recoverReady(options: RecoverCodexBootstrapOptions): CodexBootstrapRecovery {
+  const delivery = options.state.pendingAnalysis;
+  if (delivery === undefined) {
+    return isBusy(options.thread)
+      ? { action: 'busy', state: options.state, thread: options.thread, turnId: null }
+      : { action: 'ready', state: options.state, thread: options.thread };
+  }
+
+  if (delivery.turnId === null) {
+    if (isBusy(options.thread)) {
+      return { action: 'busy', state: options.state, thread: options.thread, turnId: null };
+    }
+    const latestAcceptedTurnId = options.state.lastTurnId;
+    if (latestAcceptedTurnId === null) {
+      return recoveryError(
+        'local_state_invalid',
+        `Codex ready session "${options.state.localSessionId}" has no accepted turn`,
+      );
+    }
+    const latestAcceptedIndex = options.thread.turns.findIndex(
+      (turn) => turn.id === latestAcceptedTurnId,
+    );
+    if (latestAcceptedIndex < 0) {
+      return recoveryError(
+        'turn_not_found',
+        `Codex turn "${latestAcceptedTurnId}" was not found in thread "${options.thread.id}"`,
+      );
+    }
+    const untracked = options.thread.turns[latestAcceptedIndex + 1];
+    if (untracked) {
+      return recoveryError(
+        'untracked_turns',
+        `Codex thread "${options.thread.id}" contains untracked turn "${untracked.id}" after the latest accepted turn`,
+      );
+    }
+    return { action: 'sendAnalysis', state: options.state, thread: options.thread };
+  }
+
+  if (options.state.lastTurnId !== delivery.turnId) {
+    return recoveryError(
+      'local_state_invalid',
+      `Codex pending turn "${delivery.turnId}" is not the latest accepted turn`,
+    );
+  }
+  const turn = findTurn(options.thread, delivery.turnId);
+  if (turn.status === 'inProgress') {
+    return {
+      action: 'busy',
+      state: options.state,
+      thread: options.thread,
+      turnId: delivery.turnId,
+    };
+  }
+  assertCodexTurnCompleted(turn);
+  const message = selectCodexFinalMessage(turn);
+  return {
+    action: 'analysisResult',
+    state: options.state,
+    thread: options.thread,
+    turn,
+    message,
+    result: parseAIAnalysisResult(message.text),
+    delivery,
   };
 }
 
@@ -218,13 +298,6 @@ export async function recoverCodexBootstrap(
     case 'analysisPending':
       return recoverAnalysisPending(options);
     case 'ready':
-      return isBusy(options.thread)
-        ? {
-            action: 'busy',
-            state: options.state,
-            thread: options.thread,
-            turnId: null,
-          }
-        : { action: 'ready', state: options.state, thread: options.thread };
+      return recoverReady(options);
   }
 }
