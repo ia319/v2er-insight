@@ -10,6 +10,7 @@
  */
 
 import type { V2erConfig } from './types';
+import { CODEX_DEFAULT_MODEL, CODEX_DEFAULT_REASONING_EFFORT } from './types/ai';
 
 /**
  * 合并默认值后的配置类型
@@ -32,6 +33,13 @@ export const DEFAULT_CONFIG = {
     maxRetries: 3,
     baseDelay: 1000,
     maxDelay: 10_000,
+    codex: {
+      model: CODEX_DEFAULT_MODEL,
+      reasoningEffort: CODEX_DEFAULT_REASONING_EFFORT,
+      startupTimeout: 10_000,
+      turnTimeout: 600_000,
+      shutdownGrace: 2000,
+    },
   },
   fetch: {
     timeout: 30_000,
