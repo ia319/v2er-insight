@@ -22,7 +22,7 @@ import {
   recordProviderDelivery,
   type AnalysisStateV1,
 } from '@/core/provenance';
-import { getConfig, THINKING_LEVELS, DEFAULT_CONFIG } from '@/config';
+import { getConfig, resolveGeminiConfig, THINKING_LEVELS } from '@/config';
 import type { ThinkingLevel } from '@/config';
 import {
   cleanExpiredData,
@@ -82,6 +82,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   const analyzed = analyzedValue;
 
   const config = getConfig();
+  const geminiConfig = resolveGeminiConfig(config.ai);
   const analysisState = readAnalysisState(username);
   if (analysisState.status === 'invalid') {
     logger.error(`${username} 的 analysis-state.json 无效或不可读`);
@@ -147,16 +148,11 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     };
   }
 
-  // Commander 将 --model [name] 无值时解析为 true；
-  // 字符串时直接使用，否则回退到配置/默认值（后续支持交互选择时替换此逻辑）
-  const model =
-    typeof options.model === 'string'
-      ? options.model
-      : (config.ai?.model ?? DEFAULT_CONFIG.ai.model);
+  // Commander maps optional flags without values to true, so only strings override config.
+  const model = typeof options.model === 'string' ? options.model : geminiConfig.model;
 
-  // 同上：--thinking-level [level] 无值时为 true，字符串时直接使用
   const rawThinkingLevel =
-    typeof options.thinkingLevel === 'string' ? options.thinkingLevel : config.ai?.thinkingLevel;
+    typeof options.thinkingLevel === 'string' ? options.thinkingLevel : geminiConfig.thinkingLevel;
 
   if (rawThinkingLevel && !isThinkingLevel(rawThinkingLevel)) {
     logger.error(`无效的思考等级: "${rawThinkingLevel}"`);
@@ -235,9 +231,9 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   const provider = new GeminiProvider(apiKey, model);
 
   const retryOptions = {
-    maxRetries: config.ai?.maxRetries ?? DEFAULT_CONFIG.ai.maxRetries,
-    baseDelay: config.ai?.baseDelay ?? DEFAULT_CONFIG.ai.baseDelay,
-    maxDelay: config.ai?.maxDelay ?? DEFAULT_CONFIG.ai.maxDelay,
+    maxRetries: geminiConfig.maxRetries,
+    baseDelay: geminiConfig.baseDelay,
+    maxDelay: geminiConfig.maxDelay,
     onRetry: (attempt: number, maxRetries: number, error: Error, delay: number) => {
       const delaySec = (delay / 1000).toFixed(1);
       logger.warn(`  AI 重试 (${attempt}/${maxRetries}) [${delaySec}s 后]`);
@@ -250,7 +246,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     // Apply the system prompt before sending the analysis payload.
     await provider.createSession(request.systemPrompt, {
       thinkingLevel,
-      timeout: config.ai?.timeout,
+      timeout: geminiConfig.timeout,
     });
 
     logger.section('发送完整分析数据至 AI...');

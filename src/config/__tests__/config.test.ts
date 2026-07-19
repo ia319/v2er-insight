@@ -134,6 +134,35 @@ describe('config/storage', () => {
   });
 });
 
+describe('config/ai', () => {
+  it('should prefer provider-specific Gemini settings', async () => {
+    const { resolveGeminiConfig } = await import('../ai');
+
+    const result = resolveGeminiConfig({
+      model: 'legacy-model',
+      thinkingLevel: 'low',
+      gemini: {
+        model: 'provider-model',
+        thinkingLevel: 'medium',
+      },
+    });
+
+    expect(result.model).toBe('provider-model');
+    expect(result.thinkingLevel).toBe('medium');
+  });
+
+  it('should preserve legacy Gemini settings and current defaults', async () => {
+    const { resolveGeminiConfig } = await import('../ai');
+
+    expect(resolveGeminiConfig({ model: 'legacy-model' }).model).toBe('legacy-model');
+    expect(resolveGeminiConfig()).toMatchObject({
+      model: 'gemini-3.1-pro-preview',
+      thinkingLevel: 'high',
+      timeout: 60_000,
+    });
+  });
+});
+
 describe('config/proxy', () => {
   beforeEach(() => {
     vi.resetModules();

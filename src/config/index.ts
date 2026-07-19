@@ -24,4 +24,6 @@ export type { LogLevel } from '@/infra/logger';
 export { getConfigDir, getConfigPath } from './path';
 export { readConfig, writeConfig, getConfig } from './storage';
 export { DEFAULT_CONFIG } from './defaults';
+export type { ResolvedGeminiConfig } from './ai';
+export { resolveGeminiConfig } from './ai';
 export { getProxyUrl, initFetchProxy } from './proxy';
