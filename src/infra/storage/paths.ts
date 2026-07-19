@@ -21,6 +21,14 @@ const DATA_DIR = 'data';
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /**
+ * Resolves the shared root directory for persisted user data.
+ * @returns The data directory under the configured application directory.
+ */
+export function getDataRootDir(): string {
+  return path.join(getConfigDir(), DATA_DIR);
+}
+
+/**
  * 校验用户名是否合法
  * @throws Error 用户名包含非法字符时抛出
  */
@@ -38,7 +46,7 @@ function validateUsername(username: string): void {
  */
 export function getUserDataDir(username: string): string {
   validateUsername(username);
-  return path.join(getConfigDir(), DATA_DIR, username);
+  return path.join(getDataRootDir(), username);
 }
 
 /**

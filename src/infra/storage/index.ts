@@ -1,6 +1,6 @@
 export type { DataFileType, WriteOptions } from './types';
 export { DATA_FILE_NAMES } from './types';
-export { getUserDataDir, getDataFilePath } from './paths';
+export { getDataRootDir, getUserDataDir, getDataFilePath } from './paths';
 export type { DataFileReadResult } from './reader';
 export { readDataFile, readDataFileResult } from './reader';
 export { DataFilePostWriteError, writeDataFile, writeDataFileWithRollback } from './writer';

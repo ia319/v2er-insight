@@ -27,6 +27,13 @@ describe('storage/paths', () => {
     vi.restoreAllMocks();
   });
 
+  describe('getDataRootDir', () => {
+    it('should return the shared data directory path', async () => {
+      const { getDataRootDir } = await import('../paths');
+      expect(getDataRootDir()).toBe(mockDataBase);
+    });
+  });
+
   describe('getUserDataDir', () => {
     it('should return user data directory path', async () => {
       const { getUserDataDir } = await import('../paths');
