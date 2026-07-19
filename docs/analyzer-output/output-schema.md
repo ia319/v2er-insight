@@ -74,7 +74,7 @@
 | `replyCount`               | `number`                         | 该周期内总回复数   | 该阶段的社交互动活跃水平。                                         |
 | `avgReplyLength`           | `number`                         | 平均回复字符长度   | 衡量表达的认真程度与交流深度。                                     |
 | `directReplyRatio`         | `number`                         | 直接回复主帖的比率 | **高**：更关注主旨，倾向开启新讨论；**低**：倾向于跟帖与他人互动。 |
-| `avgRepliedTopicHeat`      | `number`                         | 参与话题的平均热度 | **高**：追逐热点话题；**低**：更关注分众/小众领域。                |
+| `avgRepliedTopicHeat`      | `number \| null`                 | 参与话题的平均热度 | 非空值越高表示参与话题越热门；null 表示没有可用的话题回复总数。    |
 | `replyWeekdayDistribution` | `Record<string, number> \| null` | 7 天百分比分布     | 识别周内活动规律（如：工作日活跃还是周末活跃）。                   |
 | `replyNodeDistribution`    | `Record<string, number>`         | 前 3 个回复节点    | 定义用户在该阶段的**活跃领域和社交边界**。                         |
 

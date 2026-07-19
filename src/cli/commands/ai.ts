@@ -9,6 +9,7 @@ import { isAnalyzerOutput } from '@/core/analyzer';
 import {
   GeminiProvider,
   buildAnalysisRequest,
+  isAIAnalysisResult,
   parseResponse,
   resolveApiKey,
   withRetry,
@@ -19,15 +20,17 @@ import {
   computeProviderStateKey,
   hasProviderReceivedAnalysis,
   recordProviderDelivery,
+  type AnalysisStateV1,
 } from '@/core/provenance';
 import { getConfig, THINKING_LEVELS, DEFAULT_CONFIG } from '@/config';
 import type { ThinkingLevel } from '@/config';
 import {
   cleanExpiredData,
+  DataFilePostWriteError,
   readAnalysisState,
   readDataFile,
   updateAnalysisState,
-  writeDataFile,
+  writeDataFileWithRollback,
 } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
@@ -188,12 +191,17 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     providerKey,
     provenance.analysisFingerprint,
   );
+  const savedResult = readDataFile<unknown>(username, 'result');
   const currentResultIsReusable =
     !options.resend &&
     providerAlreadyReceived &&
     analysisState.state.currentResult?.analysisFingerprint === provenance.analysisFingerprint &&
     !analysisState.state.currentResult.stale &&
-    readDataFile<unknown>(username, 'result') !== null;
+    isAIAnalysisResult(savedResult);
+
+  if (provenance.basedOnPartial) {
+    logger.warn('当前分析基于不完整抓取数据；缺失记录状态未知');
+  }
 
   if (currentResultIsReusable) {
     logger.info('分析数据未发生有效变化，跳过 AI 调用');
@@ -222,10 +230,6 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       recoverable: true,
       recoverActions: getRecoveryActions('AI_API_KEY_MISSING', { username }),
     };
-  }
-
-  if (provenance.basedOnPartial) {
-    logger.warn('当前分析基于不完整抓取数据；缺失记录状态未知');
   }
 
   const provider = new GeminiProvider(apiKey, model);
@@ -280,10 +284,71 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     }
   }
 
+  const assertAnalyzedProvenanceUnchanged = (state: AnalysisStateV1): void => {
+    const latest = checkAnalyzedProvenance(state, analyzed, config.analyzer);
+    if (
+      latest.status !== 'valid' ||
+      latest.analysisFingerprint !== provenance.analysisFingerprint ||
+      latest.payloadHash !== provenance.payloadHash
+    ) {
+      throw new Error('analyzed provenance changed during AI delivery');
+    }
+  };
+
   try {
-    writeDataFile(username, 'result', result);
+    const stateBeforeWrite = readAnalysisState(username);
+    if (stateBeforeWrite.status !== 'valid') {
+      throw new Error('analysis state changed during AI delivery');
+    }
+    assertAnalyzedProvenanceUnchanged(stateBeforeWrite.state);
   } catch (error) {
     const { message, raw } = extractErrorDetails(error);
+    logger.error(`提交 AI provenance 状态失败: ${message}`);
+    return {
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'PROVENANCE_UPDATE_FAILED',
+      message: `result.json 未变更，provenance 状态校验失败: ${message}`,
+      recoverable: true,
+      recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+      meta: { rawError: raw },
+    };
+  }
+
+  try {
+    writeDataFileWithRollback(username, 'result', result, () => {
+      updateAnalysisState(username, (state) => {
+        assertAnalyzedProvenanceUnchanged(state);
+
+        return recordProviderDelivery(state, {
+          providerKey,
+          analysisFingerprint: provenance.analysisFingerprint,
+          payloadHash: provenance.payloadHash,
+          basedOnPartial: provenance.basedOnPartial,
+          deliveryMode: options.resend ? 'resend' : 'change',
+        });
+      });
+    });
+  } catch (error) {
+    const { message, raw } = extractErrorDetails(error);
+
+    if (error instanceof DataFilePostWriteError) {
+      const resultState =
+        error.rollbackError === undefined
+          ? 'result.json 已恢复原内容'
+          : 'result.json 回滚失败，请保留当前数据用于诊断';
+      logger.error(`提交 AI provenance 状态失败: ${message}`);
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'PROVENANCE_UPDATE_FAILED',
+        message: `${resultState}；provenance 状态更新失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+        meta: { rawError: raw },
+      };
+    }
+
     logger.error(`保存 AI 分析结果失败: ${message}`);
     return {
       step: 'ai',
@@ -292,39 +357,6 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       message: `AI 已返回结果，但 result.json 保存失败: ${message}`,
       recoverable: true,
       recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
-      meta: { rawError: raw },
-    };
-  }
-
-  try {
-    updateAnalysisState(username, (state) => {
-      const latest = checkAnalyzedProvenance(state, analyzed, config.analyzer);
-      if (
-        latest.status !== 'valid' ||
-        latest.analysisFingerprint !== provenance.analysisFingerprint ||
-        latest.payloadHash !== provenance.payloadHash
-      ) {
-        throw new Error('analyzed provenance changed during AI delivery');
-      }
-
-      return recordProviderDelivery(state, {
-        providerKey,
-        analysisFingerprint: provenance.analysisFingerprint,
-        payloadHash: provenance.payloadHash,
-        basedOnPartial: provenance.basedOnPartial,
-        deliveryMode: options.resend ? 'resend' : 'change',
-      });
-    });
-  } catch (error) {
-    const { message, raw } = extractErrorDetails(error);
-    logger.error(`更新 AI provenance 状态失败: ${message}`);
-    return {
-      step: 'ai',
-      status: 'failed',
-      reasonCode: 'PROVENANCE_UPDATE_FAILED',
-      message: `result.json 已保存，但 provenance 状态更新失败: ${message}`,
-      recoverable: true,
-      recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
       meta: { rawError: raw },
     };
   }

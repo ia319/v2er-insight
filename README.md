@@ -57,7 +57,7 @@ v2er <username>
 | `--resend`                 | 强制重新发送完整分析数据                                           |
 | `-v, --verbose`            | 显示调试输出                                                       |
 
-一键命令根据本地 `raw.json`、`analyzed.json` 和 `result.json` 选择执行起点。`--force` 从抓取步骤重新执行。
+一键命令根据本地 `raw.json`、`analyzed.json` 和 `result.json` 选择执行起点。`analysis-state.json` 提供 analyze 与 AI 步骤的 provenance 校验状态。`--force` 从抓取步骤重新执行。
 
 ---
 

@@ -43,7 +43,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
     {
       type: 'instruction',
       content: '检查数据目录权限和可用磁盘空间后重试',
-      description: '数据文件可能已写入，但 provenance 状态没有同步完成',
+      description: '数据文件与 provenance 状态的一致性提交未完成',
     },
     {
       type: 'command',
@@ -185,6 +185,13 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       type: 'command',
       content: 'v2er ai <username>',
       description: '先生成 result.json，再执行展示',
+    },
+  ],
+  SHOW_RESULT_INVALID: [
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '重新生成结构完整的 result.json',
     },
   ],
   UNKNOWN_ERROR: [],

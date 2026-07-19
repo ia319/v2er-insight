@@ -108,8 +108,9 @@ export interface SinglePeriodStats {
    * 参与话题的平均热度
    * 计算方式：Avg(topicReplyCount)
    * 高 = 追热点；低 = 关注小众话题
+   * null = 当前活跃期没有可用的话题回复总数
    */
-  avgRepliedTopicHeat: number;
+  avgRepliedTopicHeat: number | null;
   /**
    * 回复星期分布（全部 7 天，百分比）
    * 通过相对时间（如"3天前"）计算星期几

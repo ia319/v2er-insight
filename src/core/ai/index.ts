@@ -22,6 +22,8 @@ export { GeminiProvider } from './providers';
 
 export { parseResponse, type ValidationResult } from './parser';
 
+export { isAIAnalysisResult } from './result-validator';
+
 export { resolveApiKey, withRetry, type RetryOptions } from './utils';
 
 export { buildAnalysisRequest, type AnalysisRequest } from './prompt';

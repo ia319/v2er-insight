@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AnalyzerOutput } from '@/core/analyzer';
+import type { AIAnalysisResult } from '@/core/ai';
 import type { ThinkingLevel } from '@/config';
 import {
   computeAnalysisConfigHash,
@@ -10,7 +11,7 @@ import {
 } from '@/core/provenance';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
-const mockedWriteDataFile = vi.hoisted(() => vi.fn());
+const mockedWriteDataFileWithRollback = vi.hoisted(() => vi.fn());
 const mockedCleanExpiredData = vi.hoisted(() => vi.fn());
 const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
 const mockedUpdateAnalysisState = vi.hoisted(() => vi.fn());
@@ -44,20 +45,24 @@ vi.mock('@/infra/storage', async (importOriginal) => {
   return {
     ...actual,
     readDataFile: mockedReadDataFile,
-    writeDataFile: mockedWriteDataFile,
+    writeDataFileWithRollback: mockedWriteDataFileWithRollback,
     cleanExpiredData: mockedCleanExpiredData,
     readAnalysisState: mockedReadAnalysisState,
     updateAnalysisState: mockedUpdateAnalysisState,
   };
 });
 
-vi.mock('@/core/ai', () => ({
-  GeminiProvider: MockGeminiProvider,
-  buildAnalysisRequest: mockedBuildAnalysisRequest,
-  parseResponse: mockedParseResponse,
-  resolveApiKey: mockedResolveApiKey,
-  withRetry: mockedWithRetry,
-}));
+vi.mock('@/core/ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/core/ai')>();
+  return {
+    ...actual,
+    GeminiProvider: MockGeminiProvider,
+    buildAnalysisRequest: mockedBuildAnalysisRequest,
+    parseResponse: mockedParseResponse,
+    resolveApiKey: mockedResolveApiKey,
+    withRetry: mockedWithRetry,
+  };
+});
 
 vi.mock('@/config', async () => {
   const actual = await vi.importActual<typeof import('@/config')>('@/config');
@@ -82,6 +87,7 @@ vi.mock('@/infra/logger', () => ({
 }));
 
 import { runAi } from '../ai';
+import { DataFilePostWriteError } from '@/infra/storage';
 
 const SOURCE_HASH = 'a'.repeat(64);
 const defaultRequest = {
@@ -119,6 +125,38 @@ function createAnalyzedData(partial = false): AnalyzerOutput {
     },
     summary: { totalPeriods: 0, periods: [] },
     contents: [],
+  };
+}
+
+function createAiResult(summary = 'Saved result'): AIAnalysisResult {
+  return {
+    summary,
+    professional: {
+      tech_stack: ['TypeScript'],
+      career_path: 'Backend',
+      level: 'Senior',
+      focus_coherence: 'High',
+      evolution: { summary: 'Stable growth', timeline: [] },
+    },
+    personal: { hobbies: ['Reading'], life_stage: 'Career growth', values: ['Quality'] },
+    psychological: {
+      scores: {
+        openness: 80,
+        conscientiousness: 70,
+        extraversion: 50,
+        agreeableness: 60,
+        neuroticism: 30,
+      },
+      keywords: ['Analytical'],
+    },
+    behavioral: {
+      role: 'Contributor',
+      interaction_style: 'Constructive',
+      active_pattern: 'Weekday',
+      heat_sensitivity: 'Low',
+    },
+    social: { content_appeal: 'Technical depth', discussion_depth: 'Deep' },
+    risk: { level: 'safe', reason: 'Normal activity' },
   };
 }
 
@@ -197,7 +235,15 @@ function markDelivered(state: AnalysisStateV1): void {
 describe('runAi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedWriteDataFile.mockReset();
+    mockedWriteDataFileWithRollback.mockImplementation(
+      (_username: string, _type: string, _data: unknown, afterWrite: () => void) => {
+        try {
+          afterWrite();
+        } catch (error) {
+          throw new DataFilePostWriteError(error);
+        }
+      },
+    );
     mockInput();
     mockedBuildAnalysisRequest.mockReturnValue(defaultRequest);
     mockedCleanExpiredData.mockReturnValue(noCleanupResult);
@@ -264,7 +310,7 @@ describe('runAi', () => {
   });
 
   it('should skip an unchanged delivered analysis without requiring an API key', async () => {
-    const context = mockInput(createAnalyzedData(), { summary: 'saved result' });
+    const context = mockInput(createAnalyzedData(), createAiResult());
     markDelivered(context.getState());
     mockedResolveApiKey.mockReturnValue(undefined);
 
@@ -273,12 +319,38 @@ describe('runAi', () => {
     expect(result.status).toBe('skipped');
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
     expect(MockGeminiProvider).not.toHaveBeenCalled();
-    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
   });
 
+  it('should send again when the persisted result does not satisfy the result contract', async () => {
+    const context = mockInput(createAnalyzedData(), { summary: 'Incomplete result' });
+    markDelivered(context.getState());
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('response');
+    mockedParseResponse.mockReturnValue({ data: createAiResult('Rebuilt result'), warnings: [] });
+
+    const result = await runAi('testuser', {});
+
+    expect(result.status).toBe('success');
+    expect(mockSendMessage).toHaveBeenCalledOnce();
+  });
+
+  it('should warn when reusing a result based on partial capture data', async () => {
+    const context = mockInput(createAnalyzedData(true), createAiResult());
+    markDelivered(context.getState());
+
+    const result = await runAi('testuser', {});
+
+    expect(result.status).toBe('skipped');
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('不完整抓取数据'));
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
   it('should resend an unchanged delivered analysis when explicitly requested', async () => {
-    const context = mockInput(createAnalyzedData(), { summary: 'saved result' });
+    const context = mockInput(createAnalyzedData(), createAiResult());
     markDelivered(context.getState());
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
@@ -309,7 +381,7 @@ describe('runAi', () => {
   });
 
   it('should send unchanged analysis to a different model target', async () => {
-    const context = mockInput(createAnalyzedData(), { summary: 'saved result' });
+    const context = mockInput(createAnalyzedData(), createAiResult());
     markDelivered(context.getState());
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
@@ -375,10 +447,15 @@ describe('runAi', () => {
     );
     expect(mockedParseResponse).toHaveBeenCalledOnce();
     expect(mockedParseResponse).toHaveBeenCalledWith('raw response');
-    expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', aiResult);
+    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledWith(
+      'testuser',
+      'result',
+      aiResult,
+      expect.any(Function),
+    );
     expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
     expect(context.getState().currentResult?.deliveryMode).toBe('change');
-    const [writeOrder] = mockedWriteDataFile.mock.invocationCallOrder;
+    const [writeOrder] = mockedWriteDataFileWithRollback.mock.invocationCallOrder;
     const [stateOrder] = mockedUpdateAnalysisState.mock.invocationCallOrder;
     if (writeOrder === undefined || stateOrder === undefined) {
       throw new Error('Expected result and provenance writes');
@@ -415,7 +492,7 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({ data: { summary: 'result' }, warnings: [] });
-    mockedWriteDataFile.mockImplementation(() => {
+    mockedWriteDataFileWithRollback.mockImplementation(() => {
       throw new Error('disk full');
     });
 
@@ -423,6 +500,24 @@ describe('runAi', () => {
 
     expect(result.reasonCode).toBe('AI_RESULT_WRITE_FAILED');
     expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
+    expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+  });
+
+  it('should stop before writing when provenance changes after provider delivery', async () => {
+    const context = mockInput();
+    mockedReadAnalysisState
+      .mockReturnValueOnce({ status: 'valid', state: context.getState() })
+      .mockReturnValue({ status: 'invalid' });
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('response');
+    mockedParseResponse.mockReturnValue({ data: { summary: 'result' }, warnings: [] });
+
+    const result = await runAi('testuser', {});
+
+    expect(result.reasonCode).toBe('PROVENANCE_UPDATE_FAILED');
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 
@@ -439,9 +534,12 @@ describe('runAi', () => {
     const result = await runAi('testuser', {});
 
     expect(result.reasonCode).toBe('PROVENANCE_UPDATE_FAILED');
-    expect(mockedWriteDataFile).toHaveBeenCalledWith('testuser', 'result', {
-      summary: 'result',
-    });
+    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledWith(
+      'testuser',
+      'result',
+      { summary: 'result' },
+      expect.any(Function),
+    );
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 
@@ -516,7 +614,7 @@ describe('runAi', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));
-    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
@@ -538,7 +636,7 @@ describe('runAi', () => {
     const result = await runAi('testuser', {});
 
     expect(mockedParseResponse).toHaveBeenCalledOnce();
-    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
@@ -558,7 +656,7 @@ describe('runAi', () => {
 
     expect(mockSendMessage).toHaveBeenCalledOnce();
     expect(mockedParseResponse).not.toHaveBeenCalled();
-    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));

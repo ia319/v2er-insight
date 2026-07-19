@@ -78,11 +78,13 @@ function createSemanticProjection(snapshot: RawSnapshotV2) {
     },
     replies: {
       ...projectCollectionQuality(snapshot.replies),
-      items: [...snapshot.replies.items]
-        .sort((left, right) =>
-          compareStrings(getReplySemanticSortKey(left), getReplySemanticSortKey(right)),
-        )
-        .map(projectReply),
+      items: snapshot.replies.items
+        .map((reply) => ({
+          sortKey: getReplySemanticSortKey(reply),
+          value: projectReply(reply),
+        }))
+        .sort((left, right) => compareStrings(left.sortKey, right.sortKey))
+        .map(({ value }) => value),
     },
   };
 }

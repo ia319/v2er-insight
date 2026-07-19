@@ -69,7 +69,7 @@ function isPeriodStats(value: unknown): value is SinglePeriodStats {
     isNonNegativeInteger(value.replyCount) &&
     isFiniteNumber(value.avgReplyLength) &&
     isFiniteNumber(value.directReplyRatio) &&
-    isFiniteNumber(value.avgRepliedTopicHeat) &&
+    isNullableNumber(value.avgRepliedTopicHeat) &&
     (value.replyWeekdayDistribution === null || isNumberRecord(value.replyWeekdayDistribution)) &&
     isNumberRecord(value.replyNodeDistribution)
   );

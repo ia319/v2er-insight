@@ -29,6 +29,7 @@ export type ReasonCode =
   | 'AI_PROVIDER_FAILED'
   | 'AI_RESULT_WRITE_FAILED'
   | 'SHOW_RESULT_MISSING'
+  | 'SHOW_RESULT_INVALID'
   | 'UNKNOWN_ERROR';
 
 /** 步骤失败或部分成功时可提供给用户的恢复动作 */

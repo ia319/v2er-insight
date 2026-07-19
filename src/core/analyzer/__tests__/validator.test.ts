@@ -64,6 +64,13 @@ describe('isAnalyzerOutput', () => {
     expect(isAnalyzerOutput(createOutput())).toBe(true);
   });
 
+  it('accepts unavailable replied-topic heat', () => {
+    const output = createOutput();
+    output.summary.periods[0]!.avgRepliedTopicHeat = null;
+
+    expect(isAnalyzerOutput(output)).toBe(true);
+  });
+
   it.each([
     {
       field: 'schemaVersion',

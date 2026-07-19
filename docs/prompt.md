@@ -53,7 +53,7 @@ interface SinglePeriodStats {
   replyCount: number;
   avgReplyLength: number; // Effort: Average reply length (chars)
   directReplyRatio: number; // Interaction style: Direct reply ratio
-  avgRepliedTopicHeat: number; // Interest: Average heat of replied topics
+  avgRepliedTopicHeat: number | null; // Interest: Average heat of replied topics; null when unavailable
   replyWeekdayDistribution: Record<string, number> | null; // Weekly distribution
   replyNodeDistribution: Record<string, number>; // Top nodes for replies
 }
@@ -139,16 +139,16 @@ The `contents` array contains elements of either `PeriodContent` (complete) or `
 
 Map the provided metrics to the following psychological and behavioral dimensions:
 
-| Input Metric (Source)                          | Analysis Dimension (Target)          | Logic / Insight                                                            |
-| :--------------------------------------------- | :----------------------------------- | :------------------------------------------------------------------------- |
-| `topicInteractionRatio` & `avgTopicReplyCount` | **Social: Content Appeal**           | High = Influential/Engaging; Low = Self-expression/Niche.                  |
-| `avgTopicLifecycleDays`                        | **Social: Discussion Depth**         | Long = Deep discussions; Short = Q&A or News.                              |
-| `avgRepliedTopicHeat`                          | **Behavioral: Heat Sensitivity**     | High = Trend Follower (Eating Melons); Low = Independent/Niche.            |
-| `topicNodeDistribution`                        | **Professional: Focus**              | Identify tech stack and expertise areas.                                   |
-| `replyWeekdayDistribution`                     | **Behavioral: Work Pattern**         | Weekday high = Professional/Work-related; Weekend high = Hobbyist/Student. |
-| `avgReplyLength`                               | **Psychological: Conscientiousness** | Long = Serious/Detail-oriented; Short = Casual/Quick.                      |
-| `directReplyRatio`                             | **Interaction Style**                | High = Starts new threads/Direct answers; Low = Conversationalist/Debater. |
-| `isTopicsHidden`                               | **Psychological: Privacy**           | True = High privacy concern.                                               |
+| Input Metric (Source)                          | Analysis Dimension (Target)          | Logic / Insight                                                                  |
+| :--------------------------------------------- | :----------------------------------- | :------------------------------------------------------------------------------- |
+| `topicInteractionRatio` & `avgTopicReplyCount` | **Social: Content Appeal**           | High = Influential/Engaging; Low = Self-expression/Niche.                        |
+| `avgTopicLifecycleDays`                        | **Social: Discussion Depth**         | Long = Deep discussions; Short = Q&A or News.                                    |
+| `avgRepliedTopicHeat`                          | **Behavioral: Heat Sensitivity**     | Infer only from non-null values. High = Trend Follower; Low = Independent/Niche. |
+| `topicNodeDistribution`                        | **Professional: Focus**              | Identify tech stack and expertise areas.                                         |
+| `replyWeekdayDistribution`                     | **Behavioral: Work Pattern**         | Weekday high = Professional/Work-related; Weekend high = Hobbyist/Student.       |
+| `avgReplyLength`                               | **Psychological: Conscientiousness** | Long = Serious/Detail-oriented; Short = Casual/Quick.                            |
+| `directReplyRatio`                             | **Interaction Style**                | High = Starts new threads/Direct answers; Low = Conversationalist/Debater.       |
+| `isTopicsHidden`                               | **Psychological: Privacy**           | True = High privacy concern.                                                     |
 
 ## Analysis Guidelines
 

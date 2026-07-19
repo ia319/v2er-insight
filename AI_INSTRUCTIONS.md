@@ -143,6 +143,7 @@ root
 │   │   └── ai/              # [Complete] AI integration module
 │   │       ├── index.ts         # Public API exports
 │   │       ├── config.ts        # AI model constants
+│   │       ├── result-validator.ts # Persisted AIAnalysisResult validation
 │   │       ├── types/           # Type definitions
 │   │       │   ├── index.ts         # Re-exports all types
 │   │       │   ├── options.ts       # AIAnalysisInput, AnalysisOptions
@@ -178,7 +179,7 @@ root
 │       │   ├── types.ts      # DataFileType, WriteOptions
 │       │   ├── paths.ts      # User data dir/file path resolution
 │       │   ├── reader.ts     # JSON file reading
-│       │   ├── writer.ts     # Atomic JSON replacement (auto-mkdir, 0600 temp file)
+│       │   ├── writer.ts     # Atomic JSON replacement and compensating rollback
 │       │   ├── analysis-state.ts # Validated sidecar reads and protected updates
 │       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
@@ -296,6 +297,7 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `canonicalJsonStringify(value)` → Plain JSON serialization with recursively sorted object keys.
 - `computeSemanticDataHash(snapshot)` → SHA-256 identity of stable Snapshot facts.
 - Semantic hash inputs: topic identities, reply semantic facts with source multiplicity, content, interaction counts, visibility, and collection completeness diagnostics.
+- Reply semantic sort keys are computed once before deterministic ordering.
 - Transient fields outside semantic identity: capture time, daily ranking, item order, reply display time, and normalized reply-time drift.
 - `computeAnalysisConfigHash(config)` → Identity of inactivity and TopN settings; content chunk limits remain operational settings.
 - `computeAnalysisFingerprint(input)` → Combined semantic data identity, Analyzer schema version, and semantic configuration identity.
@@ -371,12 +373,14 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 
 - Persisted `AnalyzerOutput V2` validation covers raw, schema, config, fingerprint, payload, and capture-quality provenance before provider access.
 - Gemini delivery identity consists of provider, model, system prompt, thinking level, and the default logical session.
-- Unchanged delivery reuse requires the same target fingerprint and a matching fresh `result.json`.
+- Unchanged delivery reuse requires the same target fingerprint and a fresh `result.json` that satisfies the complete `AIAnalysisResult` contract.
 - `--resend` bypasses reuse and records `currentResult.deliveryMode = 'resend'`.
-- Partial-capture analysis produces a warning before provider delivery.
-- `result.json` persistence precedes provider last-sent state updates; provider, parse, and result-write failures retain the previous delivery state.
-- The protected state update rechecks analyzed provenance before intermediate-file cleanup.
-- `runShow()` derives stale and partial notices from valid current-result provenance. Legacy results with absent sidecars remain displayable with unknown provenance.
+- Partial-capture analysis produces a warning for provider delivery and unchanged-result reuse.
+- Analyzed provenance is revalidated immediately before `result.json` persistence and during the protected state update.
+- `result.json` persistence and provider last-sent state updates form a compensating transaction; state-update failures restore the previous result bytes.
+- Provider, parse, initial result-write, and provenance-validation failures retain the previous delivery state.
+- `runShow()` accepts complete `AIAnalysisResult` values and derives stale and partial notices from valid current-result provenance.
+- Legacy results with absent sidecars retain unknown provenance; structurally invalid results produce `SHOW_RESULT_INVALID`.
 - stdout carries JSON report content; stderr carries command and workflow notices.
 
 ### 6. Config Module (Complete)
@@ -424,7 +428,7 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 **Public API**:
 
 - `buildAnalyzerOutputFromSnapshot(snapshot)` → Consumes normalized snapshot reply occurrences and returns `AnalyzerOutput`
-- `isAnalyzerOutput(value)` → Validates persisted AnalyzerOutput V2 before provider use
+- `isAnalyzerOutput(value)` → Validates persisted AnalyzerOutput V2 before provider use, including nullable replied-topic heat
 - `ANALYZER_OUTPUT_SCHEMA_VERSION` → Literal Analyzer output version `2`
   - `userOverview` → User overview statistics
   - `summary` → All periods statistics summary
@@ -457,6 +461,7 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 - `totalTopics`: `null` for hidden or unrequested topics.
 - `totalReplies`: `null` for unrequested replies.
 - `topicReplyRatio`: available for visible, requested topic and reply collections with at least one reply.
+- `avgRepliedTopicHeat`: average of available topic reply-count metadata; `null` when a period has no valid samples.
 
 **Data Quality Contract**:
 
@@ -485,6 +490,7 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 - **Parser** (`parser/`):
   - `parseResponse(text)` → Extracts JSON from AI response (prioritizes ```json blocks).
   - `validateResponse(data)` → Lenient validator with deep merge, score clamping (0-100), and warnings.
+- **Result Validation** (`result-validator.ts`): Complete persisted `AIAnalysisResult` shape, string-array, score-range, timeline, and risk-level validation.
 - **Utils** (`utils/`):
   - `resolveApiKey()` → API key resolution (explicit > config > GOOGLE_API_KEY > GEMINI_API_KEY).
   - `withRetry(fn, options)` → Re-export from `infra/retry`.

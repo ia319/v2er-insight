@@ -208,6 +208,46 @@ describe('storage/writer', () => {
       expect(mockedFs.unlinkSync).toHaveBeenCalledWith(tempPath);
     });
   });
+
+  describe('writeDataFileWithRollback', () => {
+    it('should restore the previous file content when the dependent write fails', async () => {
+      mockedFs.existsSync.mockReturnValue(true);
+      mockedFs.readFileSync.mockReturnValue('{"summary":"previous"}');
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
+      const { DataFilePostWriteError, writeDataFileWithRollback } = await import('../writer');
+
+      expect(() =>
+        writeDataFileWithRollback('livid', 'result', { summary: 'next' }, () => {
+          throw new Error('state write failed');
+        }),
+      ).toThrow(DataFilePostWriteError);
+
+      expect(mockedFs.writeFileSync).toHaveBeenCalledTimes(2);
+      expect(mockedFs.writeFileSync.mock.calls[1]?.[1]).toBe('{"summary":"previous"}');
+      expect(mockedFs.renameSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('should remove a newly created file when the dependent write fails', async () => {
+      mockedFs.existsSync.mockReturnValueOnce(false).mockReturnValueOnce(true);
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.renameSync.mockImplementation(() => {});
+      mockedFs.unlinkSync.mockImplementation(() => {});
+      const { writeDataFileWithRollback } = await import('../writer');
+
+      expect(() =>
+        writeDataFileWithRollback('livid', 'result', { summary: 'next' }, () => {
+          throw new Error('state write failed');
+        }),
+      ).toThrow('state write failed');
+
+      expect(mockedFs.unlinkSync).toHaveBeenCalledWith(
+        path.join(mockDataBase, 'livid', 'result.json'),
+      );
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

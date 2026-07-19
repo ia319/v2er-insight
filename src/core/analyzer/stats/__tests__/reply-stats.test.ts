@@ -73,7 +73,7 @@ describe('calculateReplyStats', () => {
 
     expect(result.replyCount).toBe(0);
     expect(result.avgReplyLength).toBe(0);
-    expect(result.avgRepliedTopicHeat).toBe(0);
+    expect(result.avgRepliedTopicHeat).toBeNull();
     expect(result.replyWeekdayDistribution).toBeNull();
   });
 
@@ -105,5 +105,43 @@ describe('calculateReplyStats', () => {
 
     expect(result.replyCount).toBe(2);
     expect(result.avgRepliedTopicHeat).toBe(100);
+  });
+
+  it('should return null when no reply contains topic heat metadata', () => {
+    const result = calculateReplyStats({
+      replies: [
+        {
+          topicId: null,
+          topicReplyCount: null,
+          topicTitle: 'Unknown topic',
+          nodeName: 'go',
+          occurredAt: null,
+          content: 'Reply without topic metadata',
+          isDirectReply: true,
+          replyTo: null,
+        },
+      ],
+    });
+
+    expect(result.avgRepliedTopicHeat).toBeNull();
+  });
+
+  it('should preserve a measured topic heat of zero', () => {
+    const result = calculateReplyStats({
+      replies: [
+        {
+          topicId: '100001',
+          topicReplyCount: 0,
+          topicTitle: 'Topic without replies',
+          nodeName: 'go',
+          occurredAt: null,
+          content: 'Reply',
+          isDirectReply: true,
+          replyTo: null,
+        },
+      ],
+    });
+
+    expect(result.avgRepliedTopicHeat).toBe(0);
   });
 });

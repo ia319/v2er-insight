@@ -5,7 +5,7 @@
  * 支持 --json 原始输出和 --brief 简略版。
  */
 
-import type { AIAnalysisResult, PsychologicalProfile } from '@/core/ai';
+import { isAIAnalysisResult, type AIAnalysisResult, type PsychologicalProfile } from '@/core/ai';
 import { readAnalysisState, readDataFile } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { COLORS } from '@/infra/logger/colors';
@@ -134,9 +134,9 @@ export async function runShow(
   username: string,
   options: ShowCommandOptions,
 ): Promise<StepRunResult> {
-  const result = readDataFile<AIAnalysisResult>(username, 'result');
+  const resultValue = readDataFile<unknown>(username, 'result');
 
-  if (!result) {
+  if (resultValue === null) {
     logger.error(`未找到 ${username} 的分析结果`);
     logger.info('请先运行: v2er ai <username>');
     return {
@@ -148,6 +148,19 @@ export async function runShow(
       recoverActions: getRecoveryActions('SHOW_RESULT_MISSING', { username }),
     };
   }
+
+  if (!isAIAnalysisResult(resultValue)) {
+    logger.error(`${username} 的 result.json 格式无效或不受支持`);
+    return {
+      step: 'show',
+      status: 'failed',
+      reasonCode: 'SHOW_RESULT_INVALID',
+      message: 'result.json 格式无效或不受支持，无法展示报告',
+      recoverable: true,
+      recoverActions: getRecoveryActions('SHOW_RESULT_INVALID', { username }),
+    };
+  }
+  const result = resultValue;
 
   const analysisState = readAnalysisState(username);
   const notices =

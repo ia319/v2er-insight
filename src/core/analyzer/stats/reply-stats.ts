@@ -31,7 +31,7 @@ export function calculateReplyStats(
       replyCount: 0,
       avgReplyLength: 0,
       directReplyRatio: 0,
-      avgRepliedTopicHeat: 0,
+      avgRepliedTopicHeat: null,
       replyWeekdayDistribution: null,
       replyNodeDistribution: {},
     };
@@ -61,7 +61,7 @@ export function calculateReplyStats(
     replyCount: replies.length,
     avgReplyLength: average(lengths),
     directReplyRatio: directReplies / replies.length,
-    avgRepliedTopicHeat: average(topicReplyCounts),
+    avgRepliedTopicHeat: topicReplyCounts.length > 0 ? average(topicReplyCounts) : null,
     replyWeekdayDistribution: weekdayDist,
     replyNodeDistribution: topN(
       replies,
