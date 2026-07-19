@@ -1,6 +1,12 @@
 export type { CodexModelSelectionErrorCode, ResolvedCodexModel } from './model-selection';
 export { CodexModelSelectionError, resolveCodexModel } from './model-selection';
 export type {
+  CodexSessionCreationCause,
+  CodexSessionSelection,
+  CodexSessionTarget,
+} from './session-selection';
+export { selectCodexSession } from './session-selection';
+export type {
   CodexProjectPathErrorCode,
   CodexProjectPathSource,
   ResolvedCodexProjectPath,
