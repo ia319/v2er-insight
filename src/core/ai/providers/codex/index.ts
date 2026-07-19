@@ -1,12 +1,23 @@
+export type {
+  ActivateCodexInitialAnalysisTurnOptions,
+  CodexAnalysisTurnErrorCode,
+  CompletedCodexInitialAnalysisTurn,
+  SendCodexInitialAnalysisTurnOptions,
+} from './analysis-turn';
+export {
+  CodexAnalysisTurnError,
+  activateCodexInitialAnalysisTurn,
+  sendCodexInitialAnalysisTurn,
+} from './analysis-turn';
 export type { CodexModelSelectionErrorCode, ResolvedCodexModel } from './model-selection';
 export { CodexModelSelectionError, resolveCodexModel } from './model-selection';
 export type {
   CodexPromptTurnErrorCode,
-  CodexRegistryUpdate,
   CompletedCodexPromptTurn,
   SendCodexPromptTurnOptions,
 } from './prompt-turn';
 export { CodexPromptTurnError, sendCodexPromptTurn } from './prompt-turn';
+export type { CodexRegistryUpdate } from './registry-update';
 export type {
   CodexSessionCreationCause,
   CodexSessionSelection,

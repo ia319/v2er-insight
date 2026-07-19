@@ -1,12 +1,9 @@
 import type { CodexTurnInfo } from '@/infra/codex';
+import type { CodexRegistryUpdate } from './registry-update';
 import type { CodexRuntimeConnection } from './runtime-selection';
 import type { CodexThreadRegistryV1, CodexThreadState } from './thread-state';
 import { completeCodexPromptTurn, recordCodexPromptTurn } from './thread-registry';
 import { assertCodexTurnCompleted } from './turn-result';
-
-export type CodexRegistryUpdate = (
-  update: (registry: CodexThreadRegistryV1) => CodexThreadRegistryV1,
-) => CodexThreadRegistryV1 | Promise<CodexThreadRegistryV1>;
 
 export type CodexPromptTurnErrorCode =
   | 'invalid_stage'
