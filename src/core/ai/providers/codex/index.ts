@@ -9,6 +9,12 @@ export {
   activateCodexInitialAnalysisTurn,
   sendCodexInitialAnalysisTurn,
 } from './analysis-turn';
+export type {
+  CodexBootstrapRecovery,
+  CodexBootstrapRecoveryErrorCode,
+  RecoverCodexBootstrapOptions,
+} from './bootstrap-recovery';
+export { CodexBootstrapRecoveryError, recoverCodexBootstrap } from './bootstrap-recovery';
 export type { CodexModelSelectionErrorCode, ResolvedCodexModel } from './model-selection';
 export { CodexModelSelectionError, resolveCodexModel } from './model-selection';
 export type {
