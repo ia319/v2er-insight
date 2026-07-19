@@ -16,6 +16,7 @@ function createSession(overrides: Partial<CodexThreadState> = {}): CodexThreadSt
     bootstrapStatus: 'ready',
     promptTurnId: 'turn-prompt',
     initialAnalysisTurnId: 'turn-analysis',
+    lastTurnId: 'turn-analysis',
     model: 'gpt-current',
     lastReasoningEffort: 'high',
     executablePath: 'C:\\App\\codex.exe',
@@ -46,6 +47,20 @@ describe('isCodexThreadRegistryV1', () => {
             bootstrapStatus: 'promptPending',
             promptTurnId: null,
             initialAnalysisTurnId: null,
+            lastTurnId: null,
+          }),
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      isCodexThreadRegistryV1({
+        schemaVersion: 1,
+        activeSessionId: null,
+        sessions: [
+          createSession({
+            bootstrapStatus: 'analysisPending',
+            initialAnalysisTurnId: null,
+            lastTurnId: 'turn-prompt',
           }),
         ],
       }),
@@ -71,6 +86,22 @@ describe('isCodexThreadRegistryV1', () => {
       isCodexThreadRegistryV1(
         createRegistry([createSession({ bootstrapStatus: 'ready', initialAnalysisTurnId: null })]),
       ),
+    ).toBe(false);
+    expect(isCodexThreadRegistryV1(createRegistry([createSession({ lastTurnId: null })]))).toBe(
+      false,
+    );
+    expect(
+      isCodexThreadRegistryV1({
+        schemaVersion: 1,
+        activeSessionId: null,
+        sessions: [
+          createSession({
+            bootstrapStatus: 'promptPending',
+            initialAnalysisTurnId: null,
+            lastTurnId: 'different-turn',
+          }),
+        ],
+      }),
     ).toBe(false);
   });
 

@@ -14,6 +14,7 @@ export interface CodexThreadState {
   bootstrapStatus: CodexBootstrapStatus;
   promptTurnId: string | null;
   initialAnalysisTurnId: string | null;
+  lastTurnId: string | null;
   model: string;
   lastReasoningEffort: string | null;
   executablePath: string;

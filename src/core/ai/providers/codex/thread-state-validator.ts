@@ -28,14 +28,15 @@ function hasValidBootstrapTurns(
   status: CodexBootstrapStatus,
   promptTurnId: string | null,
   initialAnalysisTurnId: string | null,
+  lastTurnId: string | null,
 ): boolean {
   switch (status) {
     case 'promptPending':
-      return initialAnalysisTurnId === null;
+      return initialAnalysisTurnId === null && lastTurnId === promptTurnId;
     case 'analysisPending':
-      return promptTurnId !== null;
+      return promptTurnId !== null && lastTurnId === (initialAnalysisTurnId ?? promptTurnId);
     case 'ready':
-      return promptTurnId !== null && initialAnalysisTurnId !== null;
+      return promptTurnId !== null && initialAnalysisTurnId !== null && lastTurnId !== null;
   }
 }
 
@@ -59,6 +60,7 @@ function isCodexThreadState(value: unknown): value is CodexThreadState {
     !isBootstrapStatus(value.bootstrapStatus) ||
     !isNullableNonBlankString(value.promptTurnId) ||
     !isNullableNonBlankString(value.initialAnalysisTurnId) ||
+    !isNullableNonBlankString(value.lastTurnId) ||
     !isNonBlankString(value.model) ||
     !isNullableNonBlankString(value.lastReasoningEffort) ||
     !isNonBlankString(value.executablePath) ||
@@ -73,7 +75,12 @@ function isCodexThreadState(value: unknown): value is CodexThreadState {
 
   return (
     value.createdAt <= value.lastUsedAt &&
-    hasValidBootstrapTurns(value.bootstrapStatus, value.promptTurnId, value.initialAnalysisTurnId)
+    hasValidBootstrapTurns(
+      value.bootstrapStatus,
+      value.promptTurnId,
+      value.initialAnalysisTurnId,
+      value.lastTurnId,
+    )
   );
 }
 
