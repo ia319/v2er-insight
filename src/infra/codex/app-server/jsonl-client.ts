@@ -17,6 +17,7 @@ import {
 } from './protocol';
 
 export type JsonResultDecoder<T> = (value: unknown) => T;
+export type JsonRpcNotificationListener = (notification: JsonRpcNotification) => void;
 
 export interface JsonlRpcClientOptions {
   defaultTimeoutMs: number;
@@ -30,6 +31,10 @@ interface PendingRequest {
   reject: (error: Error) => void;
 }
 
+interface NotificationSubscription {
+  listener: JsonRpcNotificationListener;
+}
+
 /** Strict JSONL request client for a single Codex App Server stdio connection. */
 export class JsonlRpcClient {
   private readonly input: Writable;
@@ -37,6 +42,7 @@ export class JsonlRpcClient {
   private readonly options: JsonlRpcClientOptions;
   private readonly decoder = new StringDecoder('utf8');
   private readonly pending = new Map<number, PendingRequest>();
+  private readonly notificationSubscriptions = new Set<NotificationSubscription>();
   private buffer = '';
   private nextRequestId = 1;
   private closed = false;
@@ -45,6 +51,9 @@ export class JsonlRpcClient {
     this.input = input;
     this.output = output;
     this.options = options;
+    if (options.onNotification) {
+      this.notificationSubscriptions.add({ listener: options.onNotification });
+    }
     output.on('data', this.handleData);
     output.once('end', this.handleEnd);
     output.once('error', this.handleOutputError);
@@ -111,6 +120,21 @@ export class JsonlRpcClient {
    */
   notify(method: string, params?: JsonValue): void {
     this.writeMessage({ method, ...(params === undefined ? {} : { params }) });
+  }
+
+  /** Adds a notification listener and returns an idempotent unsubscribe callback. */
+  subscribeNotifications(listener: JsonRpcNotificationListener): () => void {
+    if (this.closed) {
+      throw new CodexAppServerTransportError('Codex App Server connection is closed');
+    }
+    const subscription = { listener };
+    this.notificationSubscriptions.add(subscription);
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      this.notificationSubscriptions.delete(subscription);
+    };
   }
 
   /** Rejects pending requests and removes stream listeners owned by this client. */
@@ -184,7 +208,7 @@ export class JsonlRpcClient {
     }
 
     if (isJsonRpcNotification(message)) {
-      this.options.onNotification?.(message);
+      for (const { listener } of this.notificationSubscriptions) listener(message);
       return;
     }
 
@@ -260,5 +284,6 @@ export class JsonlRpcClient {
     this.output.off('end', this.handleEnd);
     this.output.off('error', this.handleOutputError);
     this.input.off('error', this.handleInputError);
+    this.notificationSubscriptions.clear();
   }
 }

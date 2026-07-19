@@ -38,6 +38,28 @@ describe('JsonlRpcClient', () => {
     client.dispose();
   });
 
+  it('should add and remove notification subscribers', () => {
+    const { input, output } = createHarness();
+    const initial = vi.fn();
+    const subscribed = vi.fn();
+    const client = new JsonlRpcClient(input, output, {
+      defaultTimeoutMs: 1000,
+      onNotification: initial,
+    });
+    const unsubscribe = client.subscribeNotifications(subscribed);
+
+    output.write('{"method":"turn/started","params":{"turnId":"turn-1"}}\n');
+    expect(initial).toHaveBeenCalledTimes(1);
+    expect(subscribed).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    unsubscribe();
+    output.write('{"method":"turn/completed","params":{"turnId":"turn-1"}}\n');
+    expect(initial).toHaveBeenCalledTimes(2);
+    expect(subscribed).toHaveBeenCalledTimes(1);
+    client.dispose();
+  });
+
   it('should reject server requests with a method-not-found response', () => {
     const { input, output, writes } = createHarness();
     const warnings: string[] = [];
