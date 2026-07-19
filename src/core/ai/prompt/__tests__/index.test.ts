@@ -53,7 +53,7 @@ function createInput(
 describe('buildAnalysisRequest', () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.mocked(fs.readFileSync).mockReturnValue('# System Prompt\nTest prompt content');
+    vi.mocked(fs.readFileSync).mockReturnValue('# System Prompt\r\nTest prompt content');
   });
 
   it('should build one compact JSON payload with the system prompt', async () => {
@@ -62,7 +62,10 @@ describe('buildAnalysisRequest', () => {
 
     const result = buildAnalysisRequest(input);
 
-    expect(result.systemPrompt).toContain('Test prompt content');
+    expect(result.systemPrompt).toBe('# System Prompt\nTest prompt content');
+    expect(result.promptHash).toBe(
+      'fa201a5fe03da3d64c7ccf9ef243881aa7f0d8b429e44fcda6436592f999f3cd',
+    );
     expect(result.payload).toBe(JSON.stringify(input));
     expect(JSON.parse(result.payload)).toEqual(input);
   });
