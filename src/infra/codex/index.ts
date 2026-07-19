@@ -10,9 +10,11 @@ export {
   CodexAppServerProtocolError,
   CodexAppServerRequestTimeoutError,
   CodexAppServerRpcError,
+  CodexAppServerConnection,
   CodexAppServerProcess,
   CodexAppServerTransportError,
   JsonlRpcClient,
+  connectCodexAppServer,
   decodeAccountReadResponse,
   decodeInitializeResponse,
   decodeModelListResponse,
@@ -20,6 +22,7 @@ export {
 } from './app-server';
 export type {
   CodexAccountStatus,
+  CodexAppServerConnectionOptions,
   CodexAppServerExit,
   CodexAppServerProcessOptions,
   CodexModelInfo,

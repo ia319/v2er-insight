@@ -4,6 +4,8 @@ export {
   CodexAppServerRpcError,
   CodexAppServerTransportError,
 } from './errors';
+export type { CodexAppServerConnectionOptions } from './connection';
+export { CodexAppServerConnection, connectCodexAppServer } from './connection';
 export type { JsonResultDecoder, JsonlRpcClientOptions } from './jsonl-client';
 export { JsonlRpcClient } from './jsonl-client';
 export {
