@@ -24,15 +24,14 @@ export type DataFileReadResult =
 export function readDataFileResult(username: string, type: DataFileType): DataFileReadResult {
   const filePath = getDataFilePath(username, type);
 
-  if (!fs.existsSync(filePath)) {
-    return { status: 'missing' };
-  }
-
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const data: unknown = JSON.parse(content);
     return { status: 'success', data };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return { status: 'missing' };
+    }
     return { status: 'invalid' };
   }
 }
