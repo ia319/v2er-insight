@@ -31,6 +31,15 @@ describe('resolveCodexProjectPath', () => {
   });
 });
 
+describe('areCodexProjectPathsEqual', () => {
+  it('should follow the target platform case semantics', async () => {
+    const { areCodexProjectPathsEqual } = await import('../project-path');
+
+    expect(areCodexProjectPathsEqual('D:\\Data', 'd:\\data', 'win32')).toBe(true);
+    expect(areCodexProjectPathsEqual('/Data', '/data', 'linux')).toBe(false);
+  });
+});
+
 describe('assertCodexProjectDirectory', () => {
   it('should accept an existing directory', async () => {
     const { assertCodexProjectDirectory } = await import('../project-path');

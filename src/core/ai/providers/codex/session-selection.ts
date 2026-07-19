@@ -1,3 +1,4 @@
+import { areCodexProjectPathsEqual } from './project-path';
 import type { CodexThreadRegistryV1, CodexThreadState } from './thread-state';
 
 export type CodexSessionCreationCause =
@@ -26,15 +27,15 @@ export type CodexSessionSelection =
       causes: CodexSessionCreationCause[];
     };
 
-function pathsEqual(first: string, second: string, platform: NodeJS.Platform): boolean {
-  return platform === 'win32' ? first.toLowerCase() === second.toLowerCase() : first === second;
-}
-
 function matchesTarget(session: CodexThreadState, target: CodexSessionTarget): boolean {
   return (
     session.promptHash === target.promptHash &&
     session.model === target.model &&
-    pathsEqual(session.projectPath, target.projectPath, target.platform ?? process.platform)
+    areCodexProjectPathsEqual(
+      session.projectPath,
+      target.projectPath,
+      target.platform ?? process.platform,
+    )
   );
 }
 
@@ -89,7 +90,13 @@ export function selectCodexSession(
   const causes: CodexSessionCreationCause[] = [];
   if (active.promptHash !== target.promptHash) causes.push('prompt_changed');
   if (active.model !== target.model) causes.push('model_changed');
-  if (!pathsEqual(active.projectPath, target.projectPath, target.platform ?? process.platform)) {
+  if (
+    !areCodexProjectPathsEqual(
+      active.projectPath,
+      target.projectPath,
+      target.platform ?? process.platform,
+    )
+  ) {
     causes.push('project_changed');
   }
   return { kind: 'create', causes };

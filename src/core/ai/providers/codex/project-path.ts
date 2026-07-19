@@ -21,6 +21,21 @@ export class CodexProjectPathError extends Error {
   }
 }
 
+/**
+ * Compares normalized Codex Project paths with target-platform case semantics.
+ * @param first - First normalized absolute path.
+ * @param second - Second normalized absolute path.
+ * @param platform - Platform that owns both paths.
+ * @returns Whether both paths identify the same normalized Project location.
+ */
+export function areCodexProjectPathsEqual(
+  first: string,
+  second: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === 'win32' ? first.toLowerCase() === second.toLowerCase() : first === second;
+}
+
 function normalizePath(value: string, baseDir: string): string {
   const trimmed = value.trim();
   if (trimmed === '') throw new CodexProjectPathError('missing', 'Codex Project path is empty');

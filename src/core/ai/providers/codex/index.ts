@@ -13,6 +13,7 @@ export type {
 } from './project-path';
 export {
   CodexProjectPathError,
+  areCodexProjectPathsEqual,
   assertCodexProjectDirectory,
   resolveCodexProjectPath,
 } from './project-path';
