@@ -68,6 +68,13 @@ describe('storage/paths', () => {
         path.join(mockDataBase, 'livid', 'analysis-state.json'),
       );
     });
+
+    it('should return codex-sessions.json path', async () => {
+      const { getDataFilePath } = await import('../paths');
+      expect(getDataFilePath('livid', 'codexSessions')).toBe(
+        path.join(mockDataBase, 'livid', 'codex-sessions.json'),
+      );
+    });
   });
 
   describe('username validation', () => {

@@ -6,7 +6,8 @@
  *     ├── raw.json       # 抓取的原始数据
  *     ├── analyzed.json   # Analyzer 输出
  *     ├── result.json     # AI 分析结果
- *     └── analysis-state.json # 持久化 provenance 状态
+ *     ├── analysis-state.json # 持久化 provenance 状态
+ *     └── codex-sessions.json # Codex thread 注册表
  */
 
 import path from 'path';

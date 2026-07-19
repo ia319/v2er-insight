@@ -5,7 +5,7 @@
  */
 
 /** 数据文件类型 */
-export type DataFileType = 'raw' | 'analyzed' | 'result' | 'analysisState';
+export type DataFileType = 'raw' | 'analyzed' | 'result' | 'analysisState' | 'codexSessions';
 
 /**
  * 数据文件类型到文件名的映射
@@ -16,6 +16,7 @@ export const DATA_FILE_NAMES: Record<DataFileType, string> = {
   analyzed: 'analyzed.json',
   result: 'result.json',
   analysisState: 'analysis-state.json',
+  codexSessions: 'codex-sessions.json',
 };
 
 /** 写入选项 */

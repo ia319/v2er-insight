@@ -17,3 +17,9 @@ export {
   readAnalysisState,
   updateAnalysisState,
 } from './analysis-state';
+export type { CodexThreadRegistryReadResult } from './codex-thread-registry';
+export {
+  CodexThreadRegistryCorruptError,
+  readCodexThreadRegistry,
+  updateCodexThreadRegistry,
+} from './codex-thread-registry';
