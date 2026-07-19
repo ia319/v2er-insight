@@ -23,3 +23,21 @@ export type {
 export type { CodexAppServerExit, CodexAppServerProcessOptions } from './process';
 export { CodexAppServerProcess, startCodexAppServer } from './process';
 export type { JsonRpcNotification, JsonValue } from './protocol';
+export {
+  decodeThreadReadResponse,
+  decodeThreadResumeResponse,
+  decodeThreadSetNameResponse,
+  decodeThreadStartResponse,
+  decodeTurnStartResponse,
+} from './thread-decoders';
+export type {
+  CodexAgentMessage,
+  CodexMessagePhase,
+  CodexThreadActiveFlag,
+  CodexThreadInfo,
+  CodexThreadSessionInfo,
+  CodexThreadStatus,
+  CodexTurnFailure,
+  CodexTurnInfo,
+  CodexTurnStatus,
+} from './thread-types';
