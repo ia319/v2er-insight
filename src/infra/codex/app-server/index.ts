@@ -8,6 +8,7 @@ export type {
   CodexAppServerConnectionOptions,
   CodexThreadResumeOptions,
   CodexThreadStartOptions,
+  CodexTurnStartOptions,
 } from './connection';
 export { CodexAppServerConnection, connectCodexAppServer } from './connection';
 export type {

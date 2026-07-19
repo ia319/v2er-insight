@@ -10,6 +10,7 @@ import {
   decodeThreadResumeResponse,
   decodeThreadSetNameResponse,
   decodeThreadStartResponse,
+  decodeTurnStartResponse,
 } from './thread-decoders';
 import type {
   CodexAccountStatus,
@@ -17,7 +18,10 @@ import type {
   CodexModelPage,
   CodexServerInfo,
 } from './method-types';
-import type { CodexThreadInfo, CodexThreadSessionInfo } from './thread-types';
+import { decodeSessionNotification } from './notification-decoder';
+import type { CodexSessionNotification } from './notification-types';
+import type { JsonValue } from './protocol';
+import type { CodexThreadInfo, CodexThreadSessionInfo, CodexTurnInfo } from './thread-types';
 import type {
   CodexAppServerExit,
   CodexAppServerProcess,
@@ -39,6 +43,16 @@ export interface CodexThreadStartOptions {
 
 export interface CodexThreadResumeOptions extends CodexThreadStartOptions {
   threadId: string;
+}
+
+export interface CodexTurnStartOptions {
+  threadId: string;
+  text: string;
+  cwd: string;
+  model: string;
+  effort: string;
+  clientUserMessageId?: string;
+  outputSchema?: JsonValue;
 }
 
 /** Initialized App Server methods used by provider discovery and sessions. */
@@ -146,6 +160,47 @@ export class CodexAppServerConnection {
       { threadId, name },
       decodeThreadSetNameResponse,
     );
+  }
+
+  /** Starts one text turn with explicit model, effort, cwd, and read-only policy. */
+  async startTurn(options: CodexTurnStartOptions): Promise<CodexTurnInfo> {
+    await this.initialize();
+    return this.process.client.request(
+      'turn/start',
+      {
+        threadId: options.threadId,
+        ...(options.clientUserMessageId === undefined
+          ? {}
+          : { clientUserMessageId: options.clientUserMessageId }),
+        input: [{ type: 'text', text: options.text, text_elements: [] }],
+        cwd: options.cwd,
+        approvalPolicy: 'never',
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+        model: options.model,
+        effort: options.effort,
+        ...(options.outputSchema === undefined ? {} : { outputSchema: options.outputSchema }),
+      },
+      decodeTurnStartResponse,
+    );
+  }
+
+  /** Subscribes to decoded session notifications and reports decoder failures separately. */
+  subscribeSessionNotifications(
+    onNotification: (notification: CodexSessionNotification) => void,
+    onError: (error: Error) => void,
+  ): () => void {
+    return this.process.client.subscribeNotifications((notification) => {
+      try {
+        const decoded = decodeSessionNotification(notification);
+        if (decoded) onNotification(decoded);
+      } catch (error) {
+        onError(
+          error instanceof Error
+            ? error
+            : new CodexAppServerProtocolError('Invalid App Server session notification'),
+        );
+      }
+    });
   }
 
   /** Closes the owned App Server process. */

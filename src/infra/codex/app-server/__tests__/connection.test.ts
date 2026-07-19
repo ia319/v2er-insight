@@ -176,6 +176,78 @@ describe('CodexAppServerConnection', () => {
     });
     await connection.close();
   });
+
+  it('should start read-only text turns with explicit runtime settings', async () => {
+    const { connection, output, requests } = createHarness();
+    const starting = connection.startTurn({
+      threadId: 'thread-1',
+      text: '{"schemaVersion":2}',
+      cwd: 'D:\\data',
+      model: 'gpt-current',
+      effort: 'high',
+      clientUserMessageId: 'delivery-1',
+      outputSchema: { type: 'object' },
+    });
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({
+        id: 2,
+        result: { turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] } },
+      })}\n`,
+    );
+
+    await expect(starting).resolves.toEqual({
+      id: 'turn-1',
+      status: 'inProgress',
+      error: null,
+      agentMessages: [],
+    });
+    expect(requests).toContainEqual({
+      id: 2,
+      method: 'turn/start',
+      params: {
+        threadId: 'thread-1',
+        clientUserMessageId: 'delivery-1',
+        input: [{ type: 'text', text: '{"schemaVersion":2}', text_elements: [] }],
+        cwd: 'D:\\data',
+        approvalPolicy: 'never',
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+        model: 'gpt-current',
+        effort: 'high',
+        outputSchema: { type: 'object' },
+      },
+    });
+    await connection.close();
+  });
+
+  it('should decode subscribed session notifications and isolate decoder failures', () => {
+    const { connection, output } = createHarness();
+    const notifications = vi.fn();
+    const errors = vi.fn();
+    const unsubscribe = connection.subscribeSessionNotifications(notifications, errors);
+
+    output.write(
+      `${JSON.stringify({
+        method: 'turn/started',
+        params: {
+          threadId: 'thread-1',
+          turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] },
+        },
+      })}\n`,
+    );
+    output.write('{"method":"turn/completed","params":{}}\n');
+
+    expect(notifications).toHaveBeenCalledWith({
+      kind: 'turnStarted',
+      threadId: 'thread-1',
+      turn: { id: 'turn-1', status: 'inProgress', error: null, agentMessages: [] },
+    });
+    expect(errors).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
 });
 
 function createThreadSessionResult() {
