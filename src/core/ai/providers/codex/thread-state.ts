@@ -1,7 +1,22 @@
+import type { ResultDeliveryMode } from '@/core/provenance';
+
 export const CODEX_THREAD_STATE_SCHEMA_VERSION = 1 as const;
 export const CODEX_THREAD_REGISTRY_SCHEMA_VERSION = 1 as const;
 
 export type CodexBootstrapStatus = 'promptPending' | 'analysisPending' | 'ready';
+
+export interface CodexPendingAnalysisDelivery {
+  deliveryId: string;
+  providerKey: string;
+  analysisFingerprint: string;
+  payloadHash: string;
+  basedOnPartial: boolean;
+  deliveryMode: ResultDeliveryMode;
+  reasoningEffort: string;
+  turnId: string | null;
+}
+
+export type PrepareCodexAnalysisDeliveryInput = Omit<CodexPendingAnalysisDelivery, 'turnId'>;
 
 export interface CodexThreadState {
   kind: 'codex';
@@ -15,6 +30,7 @@ export interface CodexThreadState {
   promptTurnId: string | null;
   initialAnalysisTurnId: string | null;
   lastTurnId: string | null;
+  pendingAnalysis?: CodexPendingAnalysisDelivery;
   model: string;
   lastReasoningEffort: string | null;
   executablePath: string;

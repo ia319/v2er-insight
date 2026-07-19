@@ -6,6 +6,7 @@ import {
   completeCodexPromptTurn,
   completeCodexThreadTurn,
   createPendingCodexThreadState,
+  prepareCodexAnalysisDelivery,
   recordCodexInitialAnalysisTurn,
   recordCodexPromptTurn,
   recordCodexThreadTurnStart,
@@ -13,6 +14,16 @@ import {
 import type { CodexThreadRegistryV1, CodexThreadState } from '../thread-state';
 
 const HASH = 'a'.repeat(64);
+
+const DELIVERY = {
+  deliveryId: 'delivery-1',
+  providerKey: `codex:${HASH}`,
+  analysisFingerprint: HASH,
+  payloadHash: HASH,
+  basedOnPartial: false,
+  deliveryMode: 'change' as const,
+  reasoningEffort: 'high',
+};
 
 function createPendingSession(): CodexThreadState {
   return createPendingCodexThreadState({
@@ -101,6 +112,12 @@ describe('Codex thread registry stage transitions', () => {
 
   it('should record a ready-session turn before updating successful effort', () => {
     let registry = createRegistry();
+    registry = prepareCodexAnalysisDelivery(
+      registry,
+      'session-1',
+      DELIVERY,
+      '2026-07-19T02:00:30.000Z',
+    );
     registry = recordCodexThreadTurnStart(
       registry,
       'session-1',
@@ -110,6 +127,7 @@ describe('Codex thread registry stage transitions', () => {
     expect(getSession(registry, 'session-1')).toMatchObject({
       lastTurnId: 'update-turn',
       lastReasoningEffort: 'low',
+      pendingAnalysis: { ...DELIVERY, turnId: 'update-turn' },
     });
 
     registry = completeCodexThreadTurn(
@@ -120,6 +138,41 @@ describe('Codex thread registry stage transitions', () => {
       '2026-07-19T02:02:00.000Z',
     );
     expect(getSession(registry, 'session-1').lastReasoningEffort).toBe('high');
+    expect(getSession(registry, 'session-1').pendingAnalysis).toBeUndefined();
+  });
+
+  it('should persist initial analysis identity before assigning its external turn', () => {
+    let registry = createRegistry();
+    registry = recordCodexPromptTurn(
+      registry,
+      'session-2',
+      'new-prompt',
+      '2026-07-19T02:01:00.000Z',
+    );
+    registry = completeCodexPromptTurn(
+      registry,
+      'session-2',
+      'new-prompt',
+      '2026-07-19T02:02:00.000Z',
+    );
+    registry = prepareCodexAnalysisDelivery(
+      registry,
+      'session-2',
+      DELIVERY,
+      '2026-07-19T02:03:00.000Z',
+    );
+    expect(getSession(registry, 'session-2').pendingAnalysis).toEqual({
+      ...DELIVERY,
+      turnId: null,
+    });
+
+    registry = recordCodexInitialAnalysisTurn(
+      registry,
+      'session-2',
+      'new-analysis',
+      '2026-07-19T02:04:00.000Z',
+    );
+    expect(getSession(registry, 'session-2').pendingAnalysis?.turnId).toBe('new-analysis');
   });
 
   it('should reject missing sessions, out-of-order stages, and mismatched turn IDs', () => {
@@ -139,6 +192,16 @@ describe('Codex thread registry stage transitions', () => {
     );
     expect(() =>
       completeCodexPromptTurn(prompted, 'session-2', 'different', '2026-07-19T02:02:00.000Z'),
+    ).toThrow(CodexThreadRegistryError);
+
+    const prepared = prepareCodexAnalysisDelivery(
+      registry,
+      'session-1',
+      DELIVERY,
+      '2026-07-19T02:01:00.000Z',
+    );
+    expect(() =>
+      prepareCodexAnalysisDelivery(prepared, 'session-1', DELIVERY, '2026-07-19T02:02:00.000Z'),
     ).toThrow(CodexThreadRegistryError);
   });
 

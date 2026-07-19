@@ -60,7 +60,13 @@ export type {
   SelectedCodexRuntime,
 } from './runtime-selection';
 export { CodexRuntimeSelectionError, selectCodexRuntime } from './runtime-selection';
-export type { CodexBootstrapStatus, CodexThreadRegistryV1, CodexThreadState } from './thread-state';
+export type {
+  CodexBootstrapStatus,
+  CodexPendingAnalysisDelivery,
+  CodexThreadRegistryV1,
+  CodexThreadState,
+  PrepareCodexAnalysisDeliveryInput,
+} from './thread-state';
 export {
   CODEX_THREAD_REGISTRY_SCHEMA_VERSION,
   CODEX_THREAD_STATE_SCHEMA_VERSION,
@@ -85,6 +91,7 @@ export {
   completeCodexPromptTurn,
   completeCodexThreadTurn,
   createPendingCodexThreadState,
+  prepareCodexAnalysisDelivery,
   recordCodexInitialAnalysisTurn,
   recordCodexPromptTurn,
   recordCodexThreadTurnStart,

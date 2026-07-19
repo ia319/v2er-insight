@@ -2,6 +2,7 @@ import { isCodexThreadRegistryV1 } from './thread-state-validator';
 import {
   CODEX_THREAD_REGISTRY_SCHEMA_VERSION,
   CODEX_THREAD_STATE_SCHEMA_VERSION,
+  type PrepareCodexAnalysisDeliveryInput,
   type CodexThreadRegistryV1,
   type CodexThreadState,
 } from './thread-state';
@@ -170,6 +171,62 @@ export function completeCodexPromptTurn(
   });
 }
 
+/**
+ * Persists one analysis identity before external submission.
+ * @param registry - Latest validated Codex registry.
+ * @param localSessionId - Session receiving the analysis.
+ * @param input - Delivery identity and provenance captured before the request.
+ * @param usedAt - ISO timestamp for the preparation boundary.
+ * @returns A registry with an unaccepted pending delivery.
+ * @throws {CodexThreadRegistryError} When the session cannot accept a new analysis.
+ */
+export function prepareCodexAnalysisDelivery(
+  registry: CodexThreadRegistryV1,
+  localSessionId: string,
+  input: PrepareCodexAnalysisDeliveryInput,
+  usedAt: string,
+): CodexThreadRegistryV1 {
+  return updateSession(registry, localSessionId, (session) => {
+    assertUsageTime(session, usedAt);
+    if (session.bootstrapStatus === 'promptPending') {
+      return invalidTransition('Codex analysis delivery requires an analysis-capable session');
+    }
+    if (session.bootstrapStatus === 'ready' && registry.activeSessionId !== localSessionId) {
+      return invalidTransition('Codex analysis delivery requires the active ready session');
+    }
+    if (session.pendingAnalysis !== undefined) {
+      return invalidTransition('Codex session already has a pending analysis delivery');
+    }
+    if (session.bootstrapStatus === 'analysisPending' && session.initialAnalysisTurnId !== null) {
+      return invalidTransition('Codex initial analysis turn is already assigned');
+    }
+    return {
+      ...session,
+      pendingAnalysis: { ...input, turnId: null },
+      lastUsedAt: usedAt,
+    };
+  });
+}
+
+function attachPendingAnalysisTurn(
+  session: CodexThreadState,
+  turnId: string,
+): CodexThreadState['pendingAnalysis'] {
+  const pending = session.pendingAnalysis;
+  if (pending === undefined) return undefined;
+  if (pending.turnId !== null && pending.turnId !== turnId) {
+    return invalidTransition('Codex pending analysis turn ID is already assigned');
+  }
+  return { ...pending, turnId };
+}
+
+function completePendingAnalysisTurn(session: CodexThreadState, turnId: string): undefined {
+  if (session.pendingAnalysis !== undefined && session.pendingAnalysis.turnId !== turnId) {
+    return invalidTransition('Codex analysis completion does not match the pending delivery');
+  }
+  return undefined;
+}
+
 /** Records the accepted initial analysis turn before waiting for its completion. */
 export function recordCodexInitialAnalysisTurn(
   registry: CodexThreadRegistryV1,
@@ -187,6 +244,7 @@ export function recordCodexInitialAnalysisTurn(
       ...session,
       initialAnalysisTurnId: turnId,
       lastTurnId: turnId,
+      pendingAnalysis: attachPendingAnalysisTurn(session, turnId),
       lastUsedAt: usedAt,
     };
   });
@@ -212,6 +270,7 @@ export function activateCodexThreadSession(
       return {
         ...session,
         bootstrapStatus: 'ready',
+        pendingAnalysis: completePendingAnalysisTurn(session, turnId),
         lastReasoningEffort: reasoningEffort,
         lastUsedAt: usedAt,
       };
@@ -230,7 +289,12 @@ export function recordCodexThreadTurnStart(
   return updateSession(registry, localSessionId, (session) => {
     requireStatus(session, 'ready');
     assertUsageTime(session, usedAt);
-    return { ...session, lastTurnId: turnId, lastUsedAt: usedAt };
+    return {
+      ...session,
+      lastTurnId: turnId,
+      pendingAnalysis: attachPendingAnalysisTurn(session, turnId),
+      lastUsedAt: usedAt,
+    };
   });
 }
 
@@ -248,6 +312,11 @@ export function completeCodexThreadTurn(
     if (session.lastTurnId !== turnId) {
       return invalidTransition('Codex turn completion does not match the latest accepted turn');
     }
-    return { ...session, lastReasoningEffort: reasoningEffort, lastUsedAt: usedAt };
+    return {
+      ...session,
+      pendingAnalysis: completePendingAnalysisTurn(session, turnId),
+      lastReasoningEffort: reasoningEffort,
+      lastUsedAt: usedAt,
+    };
   });
 }

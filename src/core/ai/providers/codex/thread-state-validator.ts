@@ -1,4 +1,9 @@
-import type { CodexBootstrapStatus, CodexThreadRegistryV1, CodexThreadState } from './thread-state';
+import type {
+  CodexBootstrapStatus,
+  CodexPendingAnalysisDelivery,
+  CodexThreadRegistryV1,
+  CodexThreadState,
+} from './thread-state';
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
@@ -12,6 +17,10 @@ function isNonBlankString(value: unknown): value is string {
 
 function isNullableNonBlankString(value: unknown): value is string | null {
   return value === null || isNonBlankString(value);
+}
+
+function isNormalizedNonBlankString(value: unknown): value is string {
+  return isNonBlankString(value) && value.trim() === value;
 }
 
 function isTimestamp(value: unknown): value is string {
@@ -44,6 +53,39 @@ function isInstructionSources(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isNonBlankString);
 }
 
+function isPendingAnalysisDelivery(value: unknown): value is CodexPendingAnalysisDelivery {
+  return (
+    isRecord(value) &&
+    isNormalizedNonBlankString(value.deliveryId) &&
+    isNormalizedNonBlankString(value.providerKey) &&
+    typeof value.analysisFingerprint === 'string' &&
+    SHA256_PATTERN.test(value.analysisFingerprint) &&
+    typeof value.payloadHash === 'string' &&
+    SHA256_PATTERN.test(value.payloadHash) &&
+    typeof value.basedOnPartial === 'boolean' &&
+    (value.deliveryMode === 'change' || value.deliveryMode === 'resend') &&
+    isNormalizedNonBlankString(value.reasoningEffort) &&
+    isNullableNonBlankString(value.turnId)
+  );
+}
+
+function hasValidPendingAnalysis(
+  status: CodexBootstrapStatus,
+  initialAnalysisTurnId: string | null,
+  lastTurnId: string | null,
+  pending: CodexPendingAnalysisDelivery | undefined,
+): boolean {
+  if (pending === undefined) return true;
+  if (status === 'promptPending') return false;
+  if (pending.turnId === null) {
+    return status === 'ready' || initialAnalysisTurnId === null;
+  }
+  return (
+    lastTurnId === pending.turnId &&
+    (status === 'ready' || initialAnalysisTurnId === pending.turnId)
+  );
+}
+
 function isCodexThreadState(value: unknown): value is CodexThreadState {
   if (
     !isRecord(value) ||
@@ -61,6 +103,7 @@ function isCodexThreadState(value: unknown): value is CodexThreadState {
     !isNullableNonBlankString(value.promptTurnId) ||
     !isNullableNonBlankString(value.initialAnalysisTurnId) ||
     !isNullableNonBlankString(value.lastTurnId) ||
+    (value.pendingAnalysis !== undefined && !isPendingAnalysisDelivery(value.pendingAnalysis)) ||
     !isNonBlankString(value.model) ||
     !isNullableNonBlankString(value.lastReasoningEffort) ||
     !isNonBlankString(value.executablePath) ||
@@ -80,6 +123,12 @@ function isCodexThreadState(value: unknown): value is CodexThreadState {
       value.promptTurnId,
       value.initialAnalysisTurnId,
       value.lastTurnId,
+    ) &&
+    hasValidPendingAnalysis(
+      value.bootstrapStatus,
+      value.initialAnalysisTurnId,
+      value.lastTurnId,
+      value.pendingAnalysis,
     )
   );
 }

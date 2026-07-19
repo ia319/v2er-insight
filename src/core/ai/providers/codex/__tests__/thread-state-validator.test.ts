@@ -4,6 +4,19 @@ import { isCodexThreadRegistryV1 } from '../thread-state-validator';
 
 const HASH = 'a'.repeat(64);
 
+function createPendingAnalysis(turnId: string | null = null) {
+  return {
+    deliveryId: 'delivery-1',
+    providerKey: `codex:${HASH}`,
+    analysisFingerprint: HASH,
+    payloadHash: HASH,
+    basedOnPartial: false,
+    deliveryMode: 'change' as const,
+    reasoningEffort: 'high',
+    turnId,
+  };
+}
+
 function createSession(overrides: Partial<CodexThreadState> = {}): CodexThreadState {
   return {
     kind: 'codex',
@@ -66,6 +79,13 @@ describe('isCodexThreadRegistryV1', () => {
       }),
     ).toBe(true);
     expect(isCodexThreadRegistryV1(createRegistry())).toBe(true);
+    expect(
+      isCodexThreadRegistryV1(
+        createRegistry([
+          createSession({ pendingAnalysis: createPendingAnalysis('turn-analysis') }),
+        ]),
+      ),
+    ).toBe(true);
   });
 
   it('should enforce bootstrap turn invariants', () => {
@@ -153,6 +173,40 @@ describe('isCodexThreadRegistryV1', () => {
           }),
         ]),
       ),
+    ).toBe(false);
+  });
+
+  it('should enforce pending analysis identity and turn alignment', () => {
+    expect(
+      isCodexThreadRegistryV1(
+        createRegistry([
+          createSession({
+            pendingAnalysis: { ...createPendingAnalysis('turn-analysis'), payloadHash: 'invalid' },
+          }),
+        ]),
+      ),
+    ).toBe(false);
+    expect(
+      isCodexThreadRegistryV1(
+        createRegistry([
+          createSession({ pendingAnalysis: createPendingAnalysis('different-turn') }),
+        ]),
+      ),
+    ).toBe(false);
+    expect(
+      isCodexThreadRegistryV1({
+        schemaVersion: 1,
+        activeSessionId: null,
+        sessions: [
+          createSession({
+            bootstrapStatus: 'promptPending',
+            promptTurnId: null,
+            initialAnalysisTurnId: null,
+            lastTurnId: null,
+            pendingAnalysis: createPendingAnalysis(),
+          }),
+        ],
+      }),
     ).toBe(false);
   });
 });
