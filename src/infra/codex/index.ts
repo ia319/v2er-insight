@@ -5,7 +5,14 @@ export type {
   CodexExecutableSource,
 } from './executable';
 export type { CodexCliExit, CodexCliInvocation, CodexCliProcess } from './executable';
-export { discoverCodexExecutables, launchCodexCli, spawnCodexCli } from './executable';
+export type { CodexVersionProbeErrorCode } from './executable';
+export {
+  CodexVersionProbeError,
+  discoverCodexExecutables,
+  launchCodexCli,
+  probeCodexCliVersion,
+  spawnCodexCli,
+} from './executable';
 export {
   CodexAppServerProtocolError,
   CodexAppServerRequestTimeoutError,
