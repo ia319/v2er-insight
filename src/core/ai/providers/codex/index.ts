@@ -26,3 +26,12 @@ export {
 export { isCodexThreadRegistryV1 } from './thread-state-validator';
 export type { NextCodexThreadIdentity } from './thread-naming';
 export { resolveNextCodexThreadIdentity } from './thread-naming';
+export type {
+  CodexThreadRegistryErrorCode,
+  CreatePendingCodexThreadInput,
+} from './thread-registry';
+export {
+  CodexThreadRegistryError,
+  appendPendingCodexThreadState,
+  createPendingCodexThreadState,
+} from './thread-registry';
