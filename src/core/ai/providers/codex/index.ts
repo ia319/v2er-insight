@@ -30,6 +30,12 @@ export type {
   CodexThreadRegistryErrorCode,
   CreatePendingCodexThreadInput,
 } from './thread-registry';
+export type { CodexTurnResultErrorCode } from './turn-result';
+export {
+  CodexTurnResultError,
+  assertCodexTurnCompleted,
+  selectCodexFinalMessage,
+} from './turn-result';
 export {
   CodexThreadRegistryError,
   activateCodexThreadSession,

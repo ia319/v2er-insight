@@ -36,6 +36,8 @@ export type {
   CodexModelPage,
   CodexReasoningEffortOption,
   CodexServerInfo,
+  CodexAgentMessage,
+  CodexTurnInfo,
   JsonResultDecoder,
   JsonlRpcClientOptions,
   JsonRpcNotification,
