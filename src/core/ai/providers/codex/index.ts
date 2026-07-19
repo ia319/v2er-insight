@@ -24,3 +24,5 @@ export {
   CODEX_THREAD_STATE_SCHEMA_VERSION,
 } from './thread-state';
 export { isCodexThreadRegistryV1 } from './thread-state-validator';
+export type { NextCodexThreadIdentity } from './thread-naming';
+export { resolveNextCodexThreadIdentity } from './thread-naming';
