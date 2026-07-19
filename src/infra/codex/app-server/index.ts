@@ -6,4 +6,6 @@ export {
 } from './errors';
 export type { JsonResultDecoder, JsonlRpcClientOptions } from './jsonl-client';
 export { JsonlRpcClient } from './jsonl-client';
+export type { CodexAppServerExit, CodexAppServerProcessOptions } from './process';
+export { CodexAppServerProcess, startCodexAppServer } from './process';
 export type { JsonRpcNotification, JsonValue } from './protocol';

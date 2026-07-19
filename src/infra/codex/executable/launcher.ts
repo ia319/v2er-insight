@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
+import type { Readable, Writable } from 'stream';
 import type { CodexExecutableCandidate } from './types';
 
 export type CodexCliInvocation = 'version' | 'app-server';
@@ -8,6 +9,19 @@ interface CodexLaunchSpec {
   command: string;
   args: string[];
   windowsVerbatimArguments: boolean;
+}
+
+export interface CodexCliExit {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
+
+export interface CodexCliProcess {
+  stdin: Writable;
+  stdout: Readable;
+  stderr: Readable;
+  exit: Promise<CodexCliExit>;
+  terminate(): boolean;
 }
 
 const INVOCATION_ARGS = {
@@ -73,4 +87,29 @@ export function spawnCodexCli(
     windowsVerbatimArguments: launch.windowsVerbatimArguments,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+}
+
+/**
+ * Starts a Codex CLI operation and exposes an owned lifecycle handle.
+ * @param candidate - Discovered executable candidate.
+ * @param invocation - Allowed fixed CLI operation.
+ * @returns Piped streams, exit status, and termination for this child only.
+ */
+export function launchCodexCli(
+  candidate: CodexExecutableCandidate,
+  invocation: CodexCliInvocation,
+): CodexCliProcess {
+  const child = spawnCodexCli(candidate, invocation);
+  const exit = new Promise<CodexCliExit>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+
+  return {
+    stdin: child.stdin,
+    stdout: child.stdout,
+    stderr: child.stderr,
+    exit,
+    terminate: () => child.kill(),
+  };
 }
