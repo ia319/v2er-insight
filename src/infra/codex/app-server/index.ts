@@ -20,6 +20,8 @@ export type {
   CodexReasoningEffortOption,
   CodexServerInfo,
 } from './method-types';
+export { decodeSessionNotification } from './notification-decoder';
+export type { CodexSessionNotification } from './notification-types';
 export type { CodexAppServerExit, CodexAppServerProcessOptions } from './process';
 export { CodexAppServerProcess, startCodexAppServer } from './process';
 export type { JsonRpcNotification, JsonValue } from './protocol';
