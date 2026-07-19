@@ -32,6 +32,12 @@ export type {
 } from './thread-registry';
 export {
   CodexThreadRegistryError,
+  activateCodexThreadSession,
   appendPendingCodexThreadState,
+  completeCodexPromptTurn,
+  completeCodexThreadTurn,
   createPendingCodexThreadState,
+  recordCodexInitialAnalysisTurn,
+  recordCodexPromptTurn,
+  recordCodexThreadTurnStart,
 } from './thread-registry';
