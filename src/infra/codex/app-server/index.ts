@@ -3,6 +3,7 @@ export {
   CodexAppServerRequestTimeoutError,
   CodexAppServerRpcError,
   CodexAppServerTransportError,
+  CodexTurnWaitTimeoutError,
 } from './errors';
 export type {
   CodexAppServerConnectionOptions,
@@ -52,3 +53,4 @@ export type {
   CodexTurnInfo,
   CodexTurnStatus,
 } from './thread-types';
+export { CodexTurnCompletionCollector } from './turn-completion';

@@ -27,6 +27,20 @@ export class CodexAppServerRequestTimeoutError extends Error {
   }
 }
 
+export class CodexTurnWaitTimeoutError extends Error {
+  readonly threadId: string;
+  readonly turnId: string;
+  readonly timeoutMs: number;
+
+  constructor(threadId: string, turnId: string, timeoutMs: number) {
+    super(`Codex turn "${turnId}" timed out after ${timeoutMs} ms`);
+    this.name = 'CodexTurnWaitTimeoutError';
+    this.threadId = threadId;
+    this.turnId = turnId;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export class CodexAppServerRpcError extends Error {
   readonly code: number;
   readonly data?: unknown;
