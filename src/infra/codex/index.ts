@@ -4,7 +4,8 @@ export type {
   CodexExecutableKind,
   CodexExecutableSource,
 } from './executable';
-export { discoverCodexExecutables } from './executable';
+export type { CodexCliInvocation } from './executable';
+export { discoverCodexExecutables, spawnCodexCli } from './executable';
 export {
   CodexAppServerProtocolError,
   CodexAppServerRequestTimeoutError,
