@@ -7,17 +7,24 @@ import type { CodexRuntimeConnection } from './runtime-selection';
 import {
   activateCodexThreadSession,
   completeCodexThreadTurn,
+  prepareCodexAnalysisDelivery,
   recordCodexInitialAnalysisTurn,
   recordCodexThreadTurnStart,
 } from './thread-registry';
-import type { CodexThreadRegistryV1, CodexThreadState } from './thread-state';
+import type {
+  CodexPendingAnalysisDelivery,
+  CodexThreadRegistryV1,
+  CodexThreadState,
+  PrepareCodexAnalysisDeliveryInput,
+} from './thread-state';
 import { assertCodexTurnCompleted, selectCodexFinalMessage } from './turn-result';
 
 export type CodexAnalysisTurnErrorCode =
   | 'invalid_stage'
   | 'turn_already_started'
-  | 'delivery_id_invalid'
+  | 'delivery_identity_invalid'
   | 'session_not_active'
+  | 'preparation_not_persisted'
   | 'acceptance_not_persisted'
   | 'activation_not_persisted'
   | 'completion_not_persisted';
@@ -34,10 +41,10 @@ export class CodexAnalysisTurnError extends Error {
 }
 
 interface SendCodexAnalysisTurnOptions {
+  registry: CodexThreadRegistryV1;
   state: CodexThreadState;
   payload: string;
-  deliveryId: string;
-  reasoningEffort: string;
+  delivery: PrepareCodexAnalysisDeliveryInput;
   timeoutMs: number;
   connection: Pick<CodexRuntimeConnection, 'runTurn'>;
   updateRegistry: CodexRegistryUpdate;
@@ -46,9 +53,7 @@ interface SendCodexAnalysisTurnOptions {
 
 export type SendCodexInitialAnalysisTurnOptions = SendCodexAnalysisTurnOptions;
 
-export interface SendCodexAnalysisUpdateTurnOptions extends SendCodexAnalysisTurnOptions {
-  registry: CodexThreadRegistryV1;
-}
+export type SendCodexAnalysisUpdateTurnOptions = SendCodexAnalysisTurnOptions;
 
 export interface CompletedCodexAnalysisTurn {
   registry: CodexThreadRegistryV1;
@@ -74,6 +79,7 @@ export interface CompleteCodexAnalysisUpdateTurnOptions {
 }
 
 function assertAnalysisCanStart(options: SendCodexInitialAnalysisTurnOptions): void {
+  assertSessionSnapshot(options);
   if (options.state.bootstrapStatus !== 'analysisPending') {
     throw new CodexAnalysisTurnError(
       'invalid_stage',
@@ -88,17 +94,76 @@ function assertAnalysisCanStart(options: SendCodexInitialAnalysisTurnOptions): v
   }
 }
 
-function assertDeliveryId(deliveryId: string): void {
-  if (deliveryId.trim() === '' || deliveryId.trim() !== deliveryId) {
-    throw new CodexAnalysisTurnError('delivery_id_invalid', 'Codex delivery ID is invalid');
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+
+function isNormalizedNonBlank(value: string): boolean {
+  return value.trim() !== '' && value.trim() === value;
+}
+
+function assertDeliveryIdentity(delivery: PrepareCodexAnalysisDeliveryInput): void {
+  if (
+    !isNormalizedNonBlank(delivery.deliveryId) ||
+    !isNormalizedNonBlank(delivery.providerKey) ||
+    !SHA256_PATTERN.test(delivery.analysisFingerprint) ||
+    !SHA256_PATTERN.test(delivery.payloadHash) ||
+    !isNormalizedNonBlank(delivery.reasoningEffort)
+  ) {
+    throw new CodexAnalysisTurnError(
+      'delivery_identity_invalid',
+      'Codex analysis delivery identity is invalid',
+    );
   }
 }
 
-function assertUpdateCanStart(options: SendCodexAnalysisUpdateTurnOptions): void {
+function pendingMatchesDelivery(
+  pending: CodexPendingAnalysisDelivery,
+  delivery: PrepareCodexAnalysisDeliveryInput,
+): boolean {
+  return (
+    pending.deliveryId === delivery.deliveryId &&
+    pending.providerKey === delivery.providerKey &&
+    pending.analysisFingerprint === delivery.analysisFingerprint &&
+    pending.payloadHash === delivery.payloadHash &&
+    pending.basedOnPartial === delivery.basedOnPartial &&
+    pending.deliveryMode === delivery.deliveryMode &&
+    pending.reasoningEffort === delivery.reasoningEffort
+  );
+}
+
+function pendingStatesMatch(
+  first: CodexPendingAnalysisDelivery | undefined,
+  second: CodexPendingAnalysisDelivery | undefined,
+): boolean {
+  if (first === undefined || second === undefined) return first === second;
+  return first.turnId === second.turnId && pendingMatchesDelivery(first, second);
+}
+
+function assertSessionSnapshot(options: SendCodexAnalysisTurnOptions): CodexThreadState {
   const persisted = options.registry.sessions.find(
     (session) => session.localSessionId === options.state.localSessionId,
   );
-  if (options.state.bootstrapStatus !== 'ready' || persisted?.bootstrapStatus !== 'ready') {
+  if (
+    persisted?.threadId !== options.state.threadId ||
+    persisted.promptHash !== options.state.promptHash ||
+    persisted.bootstrapStatus !== options.state.bootstrapStatus ||
+    persisted.promptTurnId !== options.state.promptTurnId ||
+    persisted.initialAnalysisTurnId !== options.state.initialAnalysisTurnId ||
+    persisted.lastTurnId !== options.state.lastTurnId ||
+    persisted.model !== options.state.model ||
+    persisted.projectPath !== options.state.projectPath ||
+    !pendingStatesMatch(persisted.pendingAnalysis, options.state.pendingAnalysis)
+  ) {
+    throw new CodexAnalysisTurnError(
+      'session_not_active',
+      `Codex session "${options.state.localSessionId}" changed before analysis delivery`,
+    );
+  }
+  return persisted;
+}
+
+function assertUpdateCanStart(options: SendCodexAnalysisUpdateTurnOptions): void {
+  const persisted = assertSessionSnapshot(options);
+  if (options.state.bootstrapStatus !== 'ready' || persisted.bootstrapStatus !== 'ready') {
     throw new CodexAnalysisTurnError(
       'invalid_stage',
       `Codex session "${options.state.localSessionId}" is not ready for analysis updates`,
@@ -116,6 +181,57 @@ function assertUpdateCanStart(options: SendCodexAnalysisUpdateTurnOptions): void
   }
 }
 
+function assertPreparedAnalysisTransition(
+  registry: CodexThreadRegistryV1,
+  state: CodexThreadState,
+  delivery: PrepareCodexAnalysisDeliveryInput,
+): void {
+  const persisted = registry.sessions.find(
+    (session) => session.localSessionId === state.localSessionId,
+  );
+  if (
+    persisted?.bootstrapStatus !== state.bootstrapStatus ||
+    persisted.threadId !== state.threadId ||
+    persisted.lastTurnId !== state.lastTurnId ||
+    persisted.pendingAnalysis?.turnId !== null ||
+    !pendingMatchesDelivery(persisted.pendingAnalysis, delivery)
+  ) {
+    throw new CodexAnalysisTurnError(
+      'preparation_not_persisted',
+      `Codex analysis delivery "${delivery.deliveryId}" was not persisted`,
+    );
+  }
+}
+
+async function ensureAnalysisDeliveryPrepared(
+  options: SendCodexAnalysisTurnOptions,
+): Promise<void> {
+  assertDeliveryIdentity(options.delivery);
+  if (options.state.pendingAnalysis !== undefined) {
+    if (
+      options.state.pendingAnalysis.turnId !== null ||
+      !pendingMatchesDelivery(options.state.pendingAnalysis, options.delivery)
+    ) {
+      throw new CodexAnalysisTurnError(
+        'turn_already_started',
+        `Codex session "${options.state.localSessionId}" has a different pending analysis`,
+      );
+    }
+    return;
+  }
+
+  const preparedAt = (options.now ?? (() => new Date()))().toISOString();
+  const registry = await options.updateRegistry((current) =>
+    prepareCodexAnalysisDelivery(
+      current,
+      options.state.localSessionId,
+      options.delivery,
+      preparedAt,
+    ),
+  );
+  assertPreparedAnalysisTransition(registry, options.state, options.delivery);
+}
+
 function assertInitialAnalysisTransitionPersisted(
   registry: CodexThreadRegistryV1,
   localSessionId: string,
@@ -123,16 +239,25 @@ function assertInitialAnalysisTransitionPersisted(
   status: 'analysisPending' | 'ready',
   code: 'acceptance_not_persisted' | 'activation_not_persisted',
   reasoningEffort?: string,
+  delivery?: PrepareCodexAnalysisDeliveryInput,
 ): void {
   const state = registry.sessions.find((session) => session.localSessionId === localSessionId);
   const activeMatches = status !== 'ready' || registry.activeSessionId === localSessionId;
   const effortMatches = status !== 'ready' || state?.lastReasoningEffort === reasoningEffort;
+  const pendingMatches =
+    status === 'ready'
+      ? state?.pendingAnalysis === undefined
+      : state?.pendingAnalysis !== undefined &&
+        state.pendingAnalysis.turnId === turnId &&
+        delivery !== undefined &&
+        pendingMatchesDelivery(state.pendingAnalysis, delivery);
   if (
     state?.bootstrapStatus !== status ||
     state.initialAnalysisTurnId !== turnId ||
     state.lastTurnId !== turnId ||
     !activeMatches ||
-    !effortMatches
+    !effortMatches ||
+    !pendingMatches
   ) {
     throw new CodexAnalysisTurnError(
       code,
@@ -147,15 +272,23 @@ function assertReadyAnalysisTransitionPersisted(
   turnId: string,
   code: 'acceptance_not_persisted' | 'completion_not_persisted',
   reasoningEffort?: string | null,
+  delivery?: PrepareCodexAnalysisDeliveryInput,
 ): void {
   const state = registry.sessions.find((session) => session.localSessionId === localSessionId);
   const effortMatches =
     reasoningEffort === undefined || state?.lastReasoningEffort === reasoningEffort;
+  const pendingMatches =
+    delivery === undefined
+      ? state?.pendingAnalysis === undefined
+      : state?.pendingAnalysis !== undefined &&
+        state.pendingAnalysis.turnId === turnId &&
+        pendingMatchesDelivery(state.pendingAnalysis, delivery);
   if (
     registry.activeSessionId !== localSessionId ||
     state?.bootstrapStatus !== 'ready' ||
     state.lastTurnId !== turnId ||
-    !effortMatches
+    !effortMatches ||
+    !pendingMatches
   ) {
     throw new CodexAnalysisTurnError(
       code,
@@ -173,7 +306,6 @@ async function runStructuredAnalysisTurn(
   options: SendCodexAnalysisTurnOptions,
   persistAccepted: PersistAcceptedAnalysisTurn,
 ): Promise<CompletedCodexAnalysisTurn> {
-  assertDeliveryId(options.deliveryId);
   const now = options.now ?? (() => new Date());
   let acceptedRegistry: CodexThreadRegistryV1 | undefined;
 
@@ -183,8 +315,8 @@ async function runStructuredAnalysisTurn(
       text: options.payload,
       cwd: options.state.projectPath,
       model: options.state.model,
-      effort: options.reasoningEffort,
-      clientUserMessageId: options.deliveryId,
+      effort: options.delivery.reasoningEffort,
+      clientUserMessageId: options.delivery.deliveryId,
       outputSchema: AI_ANALYSIS_RESULT_JSON_SCHEMA,
     },
     options.timeoutMs,
@@ -215,6 +347,7 @@ export async function sendCodexInitialAnalysisTurn(
   options: SendCodexInitialAnalysisTurnOptions,
 ): Promise<CompletedCodexAnalysisTurn> {
   assertAnalysisCanStart(options);
+  await ensureAnalysisDeliveryPrepared(options);
   return runStructuredAnalysisTurn(options, async (turnId, usedAt) => {
     const registry = await options.updateRegistry((current) =>
       recordCodexInitialAnalysisTurn(current, options.state.localSessionId, turnId, usedAt),
@@ -225,6 +358,8 @@ export async function sendCodexInitialAnalysisTurn(
       turnId,
       'analysisPending',
       'acceptance_not_persisted',
+      undefined,
+      options.delivery,
     );
     return registry;
   });
@@ -240,6 +375,7 @@ export async function sendCodexAnalysisUpdateTurn(
   options: SendCodexAnalysisUpdateTurnOptions,
 ): Promise<CompletedCodexAnalysisTurn> {
   assertUpdateCanStart(options);
+  await ensureAnalysisDeliveryPrepared(options);
   return runStructuredAnalysisTurn(options, async (turnId, usedAt) => {
     const registry = await options.updateRegistry((current) => {
       if (current.activeSessionId !== options.state.localSessionId) {
@@ -256,6 +392,7 @@ export async function sendCodexAnalysisUpdateTurn(
       turnId,
       'acceptance_not_persisted',
       options.state.lastReasoningEffort,
+      options.delivery,
     );
     return registry;
   });

@@ -6,6 +6,7 @@ import {
   activateCodexThreadSession,
   completeCodexPromptTurn,
   createPendingCodexThreadState,
+  prepareCodexAnalysisDelivery,
   recordCodexInitialAnalysisTurn,
 } from '../thread-registry';
 import type { CodexThreadRegistryV1 } from '../thread-state';
@@ -18,13 +19,25 @@ import {
   type SendCodexInitialAnalysisTurnOptions,
 } from '../analysis-turn';
 
+const HASH = 'a'.repeat(64);
+
+const DELIVERY = {
+  deliveryId: 'delivery-1',
+  providerKey: `codex:${HASH}`,
+  analysisFingerprint: HASH,
+  payloadHash: HASH,
+  basedOnPartial: false,
+  deliveryMode: 'change' as const,
+  reasoningEffort: 'high',
+};
+
 function createFixture(turnId = 'turn-analysis') {
   const pending = createPendingCodexThreadState({
     localSessionId: 'local-1',
     threadId: 'thread-1',
     generation: 1,
     displayName: 'alice-insight',
-    promptHash: 'a'.repeat(64),
+    promptHash: HASH,
     model: 'gpt-current',
     reasoningEffort: 'high',
     executablePath: 'C:\\App\\codex.exe',
@@ -79,12 +92,16 @@ function createFixture(turnId = 'turn-analysis') {
       return registry;
     },
   );
-  const times = [new Date('2026-07-19T01:02:00.000Z'), new Date('2026-07-19T01:03:00.000Z')];
+  const times = [
+    new Date('2026-07-19T01:02:00.000Z'),
+    new Date('2026-07-19T01:03:00.000Z'),
+    new Date('2026-07-19T01:04:00.000Z'),
+  ];
   const options: SendCodexInitialAnalysisTurnOptions = {
+    registry,
     state,
     payload: '{"schemaVersion":2}',
-    deliveryId: 'delivery-1',
-    reasoningEffort: 'high',
+    delivery: DELIVERY,
     timeoutMs: 60_000,
     connection,
     updateRegistry,
@@ -149,7 +166,8 @@ describe('sendCodexInitialAnalysisTurn', () => {
       bootstrapStatus: 'analysisPending',
       initialAnalysisTurnId: 'turn-analysis',
       lastTurnId: 'turn-analysis',
-      lastUsedAt: '2026-07-19T01:02:00.000Z',
+      pendingAnalysis: { ...DELIVERY, turnId: 'turn-analysis' },
+      lastUsedAt: '2026-07-19T01:03:00.000Z',
     });
 
     const activated = await activateCodexInitialAnalysisTurn({
@@ -163,7 +181,7 @@ describe('sendCodexInitialAnalysisTurn', () => {
     expect(activated.sessions[0]).toMatchObject({
       bootstrapStatus: 'ready',
       lastReasoningEffort: 'high',
-      lastUsedAt: '2026-07-19T01:03:00.000Z',
+      lastUsedAt: '2026-07-19T01:04:00.000Z',
     });
   });
 
@@ -180,12 +198,31 @@ describe('sendCodexInitialAnalysisTurn', () => {
     await expect(sendCodexInitialAnalysisTurn(fixture.options)).rejects.toMatchObject({
       code: 'invalid_result',
     });
-    expect(fixture.updateRegistry).toHaveBeenCalledOnce();
+    expect(fixture.updateRegistry).toHaveBeenCalledTimes(2);
     expect(fixture.getRegistry().sessions[0]).toMatchObject({
       bootstrapStatus: 'analysisPending',
       initialAnalysisTurnId: 'turn-analysis',
       lastTurnId: 'turn-analysis',
+      pendingAnalysis: { ...DELIVERY, turnId: 'turn-analysis' },
     });
+  });
+
+  it('should reuse a matching prepared attempt without preparing it again', async () => {
+    const fixture = createFixture();
+    const registry = await fixture.options.updateRegistry((current) =>
+      prepareCodexAnalysisDelivery(current, 'local-1', DELIVERY, '2026-07-19T01:02:00.000Z'),
+    );
+    const state = registry.sessions[0];
+    if (!state) throw new Error('Missing prepared session fixture');
+
+    const result = await sendCodexInitialAnalysisTurn({
+      ...fixture.options,
+      registry,
+      state,
+    });
+
+    expect(result.turn.id).toBe('turn-analysis');
+    expect(fixture.updateRegistry).toHaveBeenCalledTimes(2);
   });
 
   it('should reject an analysis turn that already has an external ID', async () => {
@@ -195,10 +232,11 @@ describe('sendCodexInitialAnalysisTurn', () => {
       initialAnalysisTurnId: 'existing-turn',
       lastTurnId: 'existing-turn',
     };
+    const registry = { ...fixture.options.registry, sessions: [state] };
 
-    await expect(sendCodexInitialAnalysisTurn({ ...fixture.options, state })).rejects.toMatchObject(
-      { code: 'turn_already_started' },
-    );
+    await expect(
+      sendCodexInitialAnalysisTurn({ ...fixture.options, registry, state }),
+    ).rejects.toMatchObject({ code: 'turn_already_started' });
     expect(fixture.connection.runTurn).not.toHaveBeenCalled();
   });
 
@@ -206,21 +244,43 @@ describe('sendCodexInitialAnalysisTurn', () => {
     const fixture = createFixture();
 
     await expect(
-      sendCodexInitialAnalysisTurn({ ...fixture.options, deliveryId: '  ' }),
-    ).rejects.toMatchObject({ code: 'delivery_id_invalid' });
+      sendCodexInitialAnalysisTurn({
+        ...fixture.options,
+        delivery: { ...fixture.options.delivery, deliveryId: '  ' },
+      }),
+    ).rejects.toMatchObject({ code: 'delivery_identity_invalid' });
     expect(fixture.connection.runTurn).not.toHaveBeenCalled();
   });
 
   it('should reject an acceptance transition that was not persisted', async () => {
     const fixture = createFixture();
-    const initial = fixture.getRegistry();
+    const updateRegistry = vi.fn(
+      async (update: (current: CodexThreadRegistryV1) => CodexThreadRegistryV1) => {
+        if (updateRegistry.mock.calls.length === 1) {
+          return fixture.options.updateRegistry(update);
+        }
+        return fixture.getRegistry();
+      },
+    );
 
     await expect(
       sendCodexInitialAnalysisTurn({
         ...fixture.options,
-        updateRegistry: async () => initial,
+        updateRegistry,
       }),
     ).rejects.toMatchObject({ code: 'acceptance_not_persisted' });
+  });
+
+  it('should reject a preparation transition that was not persisted', async () => {
+    const fixture = createFixture();
+
+    await expect(
+      sendCodexInitialAnalysisTurn({
+        ...fixture.options,
+        updateRegistry: async () => fixture.getRegistry(),
+      }),
+    ).rejects.toMatchObject({ code: 'preparation_not_persisted' });
+    expect(fixture.connection.runTurn).not.toHaveBeenCalled();
   });
 
   it('should reject an activation transition that was not persisted', async () => {
@@ -251,13 +311,20 @@ describe('sendCodexAnalysisUpdateTurn', () => {
         return registry;
       },
     );
-    const times = [new Date('2026-07-19T01:04:00.000Z'), new Date('2026-07-19T01:05:00.000Z')];
+    const times = [
+      new Date('2026-07-19T01:04:00.000Z'),
+      new Date('2026-07-19T01:05:00.000Z'),
+      new Date('2026-07-19T01:06:00.000Z'),
+    ];
     const options: SendCodexAnalysisUpdateTurnOptions = {
       registry,
       state,
       payload: '{"schemaVersion":2,"update":true}',
-      deliveryId: 'delivery-2',
-      reasoningEffort: 'low',
+      delivery: {
+        ...DELIVERY,
+        deliveryId: 'delivery-2',
+        reasoningEffort: 'low',
+      },
       timeoutMs: 60_000,
       connection: fixture.connection,
       updateRegistry,
@@ -280,7 +347,13 @@ describe('sendCodexAnalysisUpdateTurn', () => {
       bootstrapStatus: 'ready',
       lastTurnId: 'turn-update',
       lastReasoningEffort: 'high',
-      lastUsedAt: '2026-07-19T01:04:00.000Z',
+      pendingAnalysis: {
+        ...DELIVERY,
+        deliveryId: 'delivery-2',
+        reasoningEffort: 'low',
+        turnId: 'turn-update',
+      },
+      lastUsedAt: '2026-07-19T01:05:00.000Z',
     });
 
     const completed = await completeCodexAnalysisUpdateTurn({
@@ -293,7 +366,7 @@ describe('sendCodexAnalysisUpdateTurn', () => {
     expect(completed.sessions[0]).toMatchObject({
       lastTurnId: 'turn-update',
       lastReasoningEffort: 'low',
-      lastUsedAt: '2026-07-19T01:05:00.000Z',
+      lastUsedAt: '2026-07-19T01:06:00.000Z',
     });
   });
 
