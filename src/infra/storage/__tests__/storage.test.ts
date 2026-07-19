@@ -229,8 +229,11 @@ describe('storage/writer', () => {
       expect(mockedFs.renameSync).toHaveBeenCalledTimes(2);
     });
 
-    it('should remove a newly created file when the dependent write fails', async () => {
-      mockedFs.existsSync.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    it('should remove a newly created file after the restore source disappears', async () => {
+      mockedFs.readFileSync.mockImplementation(() => {
+        throw Object.assign(new Error('file disappeared'), { code: 'ENOENT' });
+      });
+      mockedFs.existsSync.mockReturnValue(true);
       mockedFs.mkdirSync.mockImplementation(() => '' as never);
       mockedFs.writeFileSync.mockImplementation(() => {});
       mockedFs.renameSync.mockImplementation(() => {});

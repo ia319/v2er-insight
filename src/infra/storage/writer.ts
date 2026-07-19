@@ -56,8 +56,14 @@ function writeFileAtomically(dataDir: string, filePath: string, content: string)
 }
 
 function captureRestorePoint(filePath: string): DataFileRestorePoint {
-  if (!fs.existsSync(filePath)) return { status: 'missing' };
-  return { status: 'present', content: fs.readFileSync(filePath, 'utf-8') };
+  try {
+    return { status: 'present', content: fs.readFileSync(filePath, 'utf-8') };
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return { status: 'missing' };
+    }
+    throw error;
+  }
 }
 
 function restoreDataFile(
