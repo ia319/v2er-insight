@@ -9,6 +9,7 @@ export type {
   CodexAppServerConnectionOptions,
   CodexThreadResumeOptions,
   CodexThreadStartOptions,
+  CodexTurnStartedHandler,
   CodexTurnStartOptions,
 } from './connection';
 export { CodexAppServerConnection, connectCodexAppServer } from './connection';

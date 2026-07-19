@@ -225,6 +225,7 @@ describe('CodexAppServerConnection', () => {
 
   it('should wait for a completion that arrives before the start response', async () => {
     const { connection, output, requests } = createHarness();
+    const acceptedTurnIds: string[] = [];
     const running = connection.runTurn(
       {
         threadId: 'thread-1',
@@ -234,6 +235,10 @@ describe('CodexAppServerConnection', () => {
         effort: 'high',
       },
       1000,
+      async (turn) => {
+        await Promise.resolve();
+        acceptedTurnIds.push(turn.id);
+      },
     );
     output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
     await vi.waitFor(() => {
@@ -262,6 +267,7 @@ describe('CodexAppServerConnection', () => {
       status: 'completed',
       agentMessages: [{ id: 'message-1', text: 'done', phase: 'final_answer' }],
     });
+    expect(acceptedTurnIds).toEqual(['turn-1']);
     await connection.close();
   });
 

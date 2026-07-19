@@ -56,6 +56,8 @@ export interface CodexTurnStartOptions {
   outputSchema?: JsonValue;
 }
 
+export type CodexTurnStartedHandler = (turn: CodexTurnInfo) => void | Promise<void>;
+
 /** Initialized App Server methods used by provider discovery and sessions. */
 export class CodexAppServerConnection {
   private readonly process: AppServerProcessHandle;
@@ -186,7 +188,11 @@ export class CodexAppServerConnection {
   }
 
   /** Starts a turn and waits for its terminal notification without a subscription race. */
-  async runTurn(options: CodexTurnStartOptions, timeoutMs: number): Promise<CodexTurnInfo> {
+  async runTurn(
+    options: CodexTurnStartOptions,
+    timeoutMs: number,
+    onStarted?: CodexTurnStartedHandler,
+  ): Promise<CodexTurnInfo> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new RangeError('timeoutMs must be a positive finite number');
     }
@@ -203,6 +209,7 @@ export class CodexAppServerConnection {
           `turn/start returned terminal status "${started.status}" for turn "${started.id}"`,
         );
       }
+      await onStarted?.(started);
       return await collector.waitFor(started.id, timeoutMs);
     } finally {
       unsubscribe();
