@@ -4,7 +4,11 @@ export {
   CodexAppServerRpcError,
   CodexAppServerTransportError,
 } from './errors';
-export type { CodexAppServerConnectionOptions } from './connection';
+export type {
+  CodexAppServerConnectionOptions,
+  CodexThreadResumeOptions,
+  CodexThreadStartOptions,
+} from './connection';
 export { CodexAppServerConnection, connectCodexAppServer } from './connection';
 export type {
   JsonResultDecoder,

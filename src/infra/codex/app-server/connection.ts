@@ -5,12 +5,19 @@ import {
   decodeInitializeResponse,
   decodeModelListResponse,
 } from './method-decoders';
+import {
+  decodeThreadReadResponse,
+  decodeThreadResumeResponse,
+  decodeThreadSetNameResponse,
+  decodeThreadStartResponse,
+} from './thread-decoders';
 import type {
   CodexAccountStatus,
   CodexModelInfo,
   CodexModelPage,
   CodexServerInfo,
 } from './method-types';
+import type { CodexThreadInfo, CodexThreadSessionInfo } from './thread-types';
 import type {
   CodexAppServerExit,
   CodexAppServerProcess,
@@ -23,6 +30,15 @@ type AppServerProcessHandle = Pick<CodexAppServerProcess, 'client' | 'close'>;
 
 export interface CodexAppServerConnectionOptions {
   startupTimeoutMs: number;
+}
+
+export interface CodexThreadStartOptions {
+  model: string;
+  cwd: string;
+}
+
+export interface CodexThreadResumeOptions extends CodexThreadStartOptions {
+  threadId: string;
 }
 
 /** Initialized App Server methods used by provider discovery and sessions. */
@@ -76,6 +92,60 @@ export class CodexAppServerConnection {
       seenCursors.add(page.nextCursor);
       cursor = page.nextCursor;
     }
+  }
+
+  /** Starts one persisted read-only thread without setting instruction fields. */
+  async startThread(options: CodexThreadStartOptions): Promise<CodexThreadSessionInfo> {
+    await this.initialize();
+    return this.process.client.request(
+      'thread/start',
+      {
+        model: options.model,
+        cwd: options.cwd,
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        serviceName: 'v2er-insight',
+        ephemeral: false,
+      },
+      decodeThreadStartResponse,
+    );
+  }
+
+  /** Resumes one persisted thread with the provider's read-only runtime settings. */
+  async resumeThread(options: CodexThreadResumeOptions): Promise<CodexThreadSessionInfo> {
+    await this.initialize();
+    return this.process.client.request(
+      'thread/resume',
+      {
+        threadId: options.threadId,
+        model: options.model,
+        cwd: options.cwd,
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        excludeTurns: true,
+      },
+      decodeThreadResumeResponse,
+    );
+  }
+
+  /** Reads persisted thread state together with loaded turns. */
+  async readThread(threadId: string): Promise<CodexThreadInfo> {
+    await this.initialize();
+    return this.process.client.request(
+      'thread/read',
+      { threadId, includeTurns: true },
+      decodeThreadReadResponse,
+    );
+  }
+
+  /** Sets the user-facing name of a thread. */
+  async setThreadName(threadId: string, name: string): Promise<void> {
+    await this.initialize();
+    await this.process.client.request(
+      'thread/name/set',
+      { threadId, name },
+      decodeThreadSetNameResponse,
+    );
   }
 
   /** Closes the owned App Server process. */

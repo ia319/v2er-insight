@@ -99,7 +99,100 @@ describe('CodexAppServerConnection', () => {
     });
     await connection.close();
   });
+
+  it('should start and name persisted read-only threads', async () => {
+    const { connection, output, requests } = createHarness();
+    const starting = connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' });
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'thread/start')).toBe(true);
+    });
+    output.write(`${JSON.stringify({ id: 2, result: createThreadSessionResult() })}\n`);
+
+    await expect(starting).resolves.toMatchObject({
+      thread: { id: 'thread-1' },
+      model: 'gpt-current',
+    });
+    expect(requests).toContainEqual({
+      id: 2,
+      method: 'thread/start',
+      params: {
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        serviceName: 'v2er-insight',
+        ephemeral: false,
+      },
+    });
+
+    const naming = connection.setThreadName('thread-1', 'alice-insight');
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'thread/name/set')).toBe(true);
+    });
+    output.write(`${JSON.stringify({ id: 3, result: {} })}\n`);
+    await expect(naming).resolves.toBeUndefined();
+    await connection.close();
+  });
+
+  it('should resume and read threads with persisted turns', async () => {
+    const { connection, output, requests } = createHarness();
+    const resuming = connection.resumeThread({
+      threadId: 'thread-1',
+      model: 'gpt-current',
+      cwd: 'D:\\data',
+    });
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'thread/resume')).toBe(true);
+    });
+    output.write(`${JSON.stringify({ id: 2, result: createThreadSessionResult() })}\n`);
+    await expect(resuming).resolves.toMatchObject({ thread: { id: 'thread-1' } });
+    expect(requests).toContainEqual({
+      id: 2,
+      method: 'thread/resume',
+      params: {
+        threadId: 'thread-1',
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        excludeTurns: true,
+      },
+    });
+
+    const reading = connection.readThread('thread-1');
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'thread/read')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({ id: 3, result: { thread: createThreadSessionResult().thread } })}\n`,
+    );
+    await expect(reading).resolves.toMatchObject({ id: 'thread-1', turns: [] });
+    expect(requests).toContainEqual({
+      id: 3,
+      method: 'thread/read',
+      params: { threadId: 'thread-1', includeTurns: true },
+    });
+    await connection.close();
+  });
 });
+
+function createThreadSessionResult() {
+  return {
+    thread: {
+      id: 'thread-1',
+      name: null,
+      cwd: 'D:\\data',
+      status: { type: 'idle' },
+      turns: [],
+    },
+    model: 'gpt-current',
+    cwd: 'D:\\data',
+    instructionSources: [],
+    reasoningEffort: 'low',
+  };
+}
 
 function createModel(model: string) {
   return {
