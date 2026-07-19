@@ -2,15 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CodexTurnInfo } from '@/infra/codex';
 import { AI_ANALYSIS_RESULT_JSON_SCHEMA } from '../../../result-schema';
 import { createAIAnalysisResultFixture } from '../../../__tests__/result-fixture';
-import { createPendingCodexThreadState, completeCodexPromptTurn } from '../thread-registry';
+import {
+  activateCodexThreadSession,
+  completeCodexPromptTurn,
+  createPendingCodexThreadState,
+  recordCodexInitialAnalysisTurn,
+} from '../thread-registry';
 import type { CodexThreadRegistryV1 } from '../thread-state';
 import {
   activateCodexInitialAnalysisTurn,
+  completeCodexAnalysisUpdateTurn,
+  sendCodexAnalysisUpdateTurn,
   sendCodexInitialAnalysisTurn,
+  type SendCodexAnalysisUpdateTurnOptions,
   type SendCodexInitialAnalysisTurnOptions,
 } from '../analysis-turn';
 
-function createFixture() {
+function createFixture(turnId = 'turn-analysis') {
   const pending = createPendingCodexThreadState({
     localSessionId: 'local-1',
     threadId: 'thread-1',
@@ -39,7 +47,7 @@ function createFixture() {
   if (!state) throw new Error('Missing analysis-pending fixture');
 
   const started: CodexTurnInfo = {
-    id: 'turn-analysis',
+    id: turnId,
     status: 'inProgress',
     error: null,
     agentMessages: [],
@@ -96,6 +104,24 @@ function createFixture() {
     options,
     getRegistry: () => registry,
   };
+}
+
+function createReadyRegistry(): CodexThreadRegistryV1 {
+  const fixture = createFixture();
+  let registry = recordCodexInitialAnalysisTurn(
+    fixture.getRegistry(),
+    'local-1',
+    'turn-initial',
+    '2026-07-19T01:02:00.000Z',
+  );
+  registry = activateCodexThreadSession(
+    registry,
+    'local-1',
+    'turn-initial',
+    'high',
+    '2026-07-19T01:03:00.000Z',
+  );
+  return registry;
 }
 
 describe('sendCodexInitialAnalysisTurn', () => {
@@ -210,5 +236,101 @@ describe('sendCodexInitialAnalysisTurn', () => {
         now: fixture.options.now,
       }),
     ).rejects.toMatchObject({ code: 'activation_not_persisted' });
+  });
+});
+
+describe('sendCodexAnalysisUpdateTurn', () => {
+  function createUpdateFixture() {
+    let registry = createReadyRegistry();
+    const state = registry.sessions[0];
+    if (!state) throw new Error('Missing ready session fixture');
+    const fixture = createFixture('turn-update');
+    const updateRegistry = vi.fn(
+      async (update: (current: CodexThreadRegistryV1) => CodexThreadRegistryV1) => {
+        registry = update(registry);
+        return registry;
+      },
+    );
+    const times = [new Date('2026-07-19T01:04:00.000Z'), new Date('2026-07-19T01:05:00.000Z')];
+    const options: SendCodexAnalysisUpdateTurnOptions = {
+      registry,
+      state,
+      payload: '{"schemaVersion":2,"update":true}',
+      deliveryId: 'delivery-2',
+      reasoningEffort: 'low',
+      timeoutMs: 60_000,
+      connection: fixture.connection,
+      updateRegistry,
+      now: () => {
+        const next = times.shift();
+        if (!next) throw new Error('Unexpected update clock read');
+        return next;
+      },
+    };
+    return { fixture, options, updateRegistry, getRegistry: () => registry };
+  }
+
+  it('should record a ready update before parsing and complete it after caller persistence', async () => {
+    const fixture = createUpdateFixture();
+    const result = await sendCodexAnalysisUpdateTurn(fixture.options);
+
+    expect(result.result).toEqual(fixture.fixture.expectedResult);
+    expect(result.registry).toMatchObject({ activeSessionId: 'local-1' });
+    expect(result.registry.sessions[0]).toMatchObject({
+      bootstrapStatus: 'ready',
+      lastTurnId: 'turn-update',
+      lastReasoningEffort: 'high',
+      lastUsedAt: '2026-07-19T01:04:00.000Z',
+    });
+
+    const completed = await completeCodexAnalysisUpdateTurn({
+      localSessionId: 'local-1',
+      turnId: result.turn.id,
+      reasoningEffort: 'low',
+      updateRegistry: fixture.options.updateRegistry,
+      now: fixture.options.now,
+    });
+    expect(completed.sessions[0]).toMatchObject({
+      lastTurnId: 'turn-update',
+      lastReasoningEffort: 'low',
+      lastUsedAt: '2026-07-19T01:05:00.000Z',
+    });
+  });
+
+  it('should reject a ready session that is not active before sending', async () => {
+    const fixture = createUpdateFixture();
+    const current = fixture.options.state;
+    const other = {
+      ...current,
+      localSessionId: 'local-2',
+      threadId: 'thread-2',
+      generation: 2,
+      displayName: 'alice-insight-2',
+    };
+    const registry: CodexThreadRegistryV1 = {
+      schemaVersion: 1,
+      activeSessionId: other.localSessionId,
+      sessions: [current, other],
+    };
+
+    await expect(
+      sendCodexAnalysisUpdateTurn({ ...fixture.options, registry }),
+    ).rejects.toMatchObject({ code: 'session_not_active' });
+    expect(fixture.fixture.connection.runTurn).not.toHaveBeenCalled();
+  });
+
+  it('should reject update completion that was not persisted', async () => {
+    const fixture = createUpdateFixture();
+    const result = await sendCodexAnalysisUpdateTurn(fixture.options);
+
+    await expect(
+      completeCodexAnalysisUpdateTurn({
+        localSessionId: 'local-1',
+        turnId: result.turn.id,
+        reasoningEffort: 'low',
+        updateRegistry: async () => result.registry,
+        now: fixture.options.now,
+      }),
+    ).rejects.toMatchObject({ code: 'completion_not_persisted' });
   });
 });

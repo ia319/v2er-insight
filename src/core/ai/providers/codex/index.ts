@@ -1,12 +1,16 @@
 export type {
   ActivateCodexInitialAnalysisTurnOptions,
   CodexAnalysisTurnErrorCode,
-  CompletedCodexInitialAnalysisTurn,
+  CompleteCodexAnalysisUpdateTurnOptions,
+  CompletedCodexAnalysisTurn,
+  SendCodexAnalysisUpdateTurnOptions,
   SendCodexInitialAnalysisTurnOptions,
 } from './analysis-turn';
 export {
   CodexAnalysisTurnError,
   activateCodexInitialAnalysisTurn,
+  completeCodexAnalysisUpdateTurn,
+  sendCodexAnalysisUpdateTurn,
   sendCodexInitialAnalysisTurn,
 } from './analysis-turn';
 export type {
