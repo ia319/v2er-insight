@@ -3,11 +3,10 @@ import {
   connectCodexAppServer,
   probeCodexCliVersion,
   type CodexAccountStatus,
+  type CodexAppServerConnection,
   type CodexAppServerConnectionOptions,
-  type CodexAppServerExit,
   type CodexAppServerProcessOptions,
   type CodexExecutableCandidate,
-  type CodexModelInfo,
   type CodexServerInfo,
 } from '@/infra/codex';
 import { resolveCodexModel, type ResolvedCodexModel } from './model-selection';
@@ -25,12 +24,18 @@ export interface CodexRuntimeAttempt {
   version?: string;
 }
 
-export interface CodexRuntimeConnection {
-  initialize(): Promise<CodexServerInfo>;
-  readAccount(): Promise<CodexAccountStatus>;
-  listModels(): Promise<CodexModelInfo[]>;
-  close(): Promise<CodexAppServerExit>;
-}
+export type CodexRuntimeConnection = Pick<
+  CodexAppServerConnection,
+  | 'initialize'
+  | 'readAccount'
+  | 'listModels'
+  | 'startThread'
+  | 'resumeThread'
+  | 'readThread'
+  | 'setThreadName'
+  | 'runTurn'
+  | 'close'
+>;
 
 export interface SelectedCodexRuntime {
   candidate: CodexExecutableCandidate;

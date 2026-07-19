@@ -120,6 +120,21 @@ function createConnection(
       Promise.resolve(options.account ?? { accountType: 'chatgpt', requiresOpenaiAuth: true }),
     ),
     listModels: vi.fn(async () => Promise.resolve([model])),
+    startThread: vi.fn(async () => {
+      throw new Error('Not used by runtime selection tests');
+    }),
+    resumeThread: vi.fn(async () => {
+      throw new Error('Not used by runtime selection tests');
+    }),
+    readThread: vi.fn(async () => {
+      throw new Error('Not used by runtime selection tests');
+    }),
+    setThreadName: vi.fn(async () => {
+      throw new Error('Not used by runtime selection tests');
+    }),
+    runTurn: vi.fn(async () => {
+      throw new Error('Not used by runtime selection tests');
+    }),
     close: vi.fn(async () => Promise.resolve(exit)),
   } satisfies CodexRuntimeConnection;
 }
