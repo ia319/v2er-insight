@@ -184,6 +184,7 @@ function mergeCandidateDiagnostics(
       selection:
         candidate === selected ? 'selected' : attempt === undefined ? 'not_checked' : 'rejected',
       ...(attempt ? { attemptCode: attempt.code } : {}),
+      ...(attempt?.modelErrorCode ? { modelErrorCode: attempt.modelErrorCode } : {}),
     };
   });
 }

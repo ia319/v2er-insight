@@ -10,7 +10,12 @@ import {
   type CodexModelInfo,
   type CodexServerInfo,
 } from '@/infra/codex';
-import { resolveCodexModel, type ResolvedCodexModel } from './model-selection';
+import {
+  CodexModelSelectionError,
+  resolveCodexModel,
+  type CodexModelSelectionErrorCode,
+  type ResolvedCodexModel,
+} from './model-selection';
 
 export type CodexRuntimeAttemptCode =
   | 'version_failed'
@@ -23,6 +28,7 @@ export interface CodexRuntimeAttempt {
   code: CodexRuntimeAttemptCode;
   message: string;
   version?: string;
+  modelErrorCode?: CodexModelSelectionErrorCode;
 }
 
 export type CodexRuntimeConnection = Pick<
@@ -153,7 +159,10 @@ export async function selectCodexRuntime(
       try {
         model = resolveCodexModel(models, options.model);
       } catch (error) {
-        attempts.push(createAttempt(candidate, 'model_invalid', error, version));
+        attempts.push({
+          ...createAttempt(candidate, 'model_invalid', error, version),
+          ...(error instanceof CodexModelSelectionError ? { modelErrorCode: error.code } : {}),
+        });
         await connection.close().catch(() => undefined);
         if (candidate.source === 'explicit') break;
         continue;

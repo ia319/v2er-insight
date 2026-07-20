@@ -37,7 +37,7 @@ function renderCandidates(report: CodexSessionCheckReport): void {
       entry.selection === 'selected'
         ? '已选择'
         : entry.selection === 'rejected'
-          ? `不可用: ${entry.attemptCode ?? 'unknown'}`
+          ? `不可用: ${entry.modelErrorCode ?? entry.attemptCode ?? 'unknown'}`
           : '未进入协议检查';
     logger.detail(
       `${entry.candidate.path} [${entry.candidate.source}, ${entry.candidate.kind}] ${version}; ${selection}`,

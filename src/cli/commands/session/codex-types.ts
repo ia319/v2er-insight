@@ -23,6 +23,7 @@ export interface CodexCandidateDiagnostic {
   version: CodexCandidateVersion;
   selection: 'selected' | 'rejected' | 'not_checked';
   attemptCode?: CodexRuntimeAttempt['code'];
+  modelErrorCode?: CodexRuntimeAttempt['modelErrorCode'];
 }
 
 export type CodexProjectDiagnostic =

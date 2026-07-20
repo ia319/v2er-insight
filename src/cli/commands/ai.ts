@@ -39,6 +39,7 @@ import type { StepRunResult } from '../workflow/types';
 import { extractErrorDetails } from '../utils/error';
 import { createDataFilesCleanedNotice } from '../workflow/data-retention-notices';
 import { executeCodexAnalysis } from './ai/codex';
+import { classifyCodexFailure } from './ai/codex-errors';
 import { executeGeminiAnalysis } from './ai/gemini';
 import { AiProviderOptionError, resolveAiProviderOptions } from './ai/provider-options';
 
@@ -277,6 +278,7 @@ async function runAiForProvider(
       logger.detail(`任务: ${execution.threadId}`);
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
+      const reasonCode = classifyCodexFailure(error);
       if (!options.pipeline) {
         logger.error(`Codex 分析请求失败: ${message}`);
         logger.debug(raw);
@@ -284,10 +286,10 @@ async function runAiForProvider(
       return {
         step: 'ai',
         status: 'failed',
-        reasonCode: 'AI_PROVIDER_FAILED',
+        reasonCode,
         message: `Codex 分析失败: ${message}`,
         recoverable: true,
-        recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
+        recoverActions: getRecoveryActions(reasonCode, { username }),
         meta: { rawError: raw },
       };
     }

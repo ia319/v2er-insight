@@ -233,6 +233,7 @@ describe('checkCodexSession', () => {
     const configuredAttempt: CodexRuntimeAttempt = {
       candidate: second,
       code: 'model_invalid',
+      modelErrorCode: 'model_unavailable',
       message: 'configured model is unavailable',
       version: '0.2.0',
     };
@@ -265,6 +266,13 @@ describe('checkCodexSession', () => {
       severity: 'error',
       message: 'configured model is unavailable',
     });
+    expect(report.candidates).toContainEqual(
+      expect.objectContaining({
+        candidate: second,
+        attemptCode: 'model_invalid',
+        modelErrorCode: 'model_unavailable',
+      }),
+    );
     expect(report.runtime).toMatchObject({
       modelSelection: 'fallback',
       requestedModel: 'removed-model',

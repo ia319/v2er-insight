@@ -20,6 +20,7 @@ export {
   CodexAppServerConnection,
   CodexAppServerProcess,
   CodexAppServerTransportError,
+  CodexTurnWaitTimeoutError,
   JsonlRpcClient,
   connectCodexAppServer,
   decodeAccountReadResponse,

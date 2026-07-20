@@ -85,6 +85,7 @@ vi.mock('@/infra/logger', () => ({
 }));
 
 import { runAi } from '../ai';
+import { CodexProjectPathError } from '@/core/ai/providers/codex';
 import { CodexExecutionLockBusyError, DataFilePostWriteError } from '@/infra/storage';
 
 const SOURCE_HASH = 'a'.repeat(64);
@@ -830,6 +831,28 @@ describe('runAi', () => {
     expect(output).toMatchObject({ status: 'failed', reasonCode: 'AI_CODEX_BUSY' });
     expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+  });
+
+  it('should return Codex-specific recovery for a typed provider failure', async () => {
+    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedExecuteCodexAnalysis.mockRejectedValue(
+      new CodexProjectPathError('missing', 'Codex Project directory does not exist'),
+    );
+
+    const output = await runAi('testuser', { provider: 'codex' });
+
+    expect(output).toMatchObject({
+      status: 'failed',
+      reasonCode: 'AI_CODEX_PROJECT_UNAVAILABLE',
+      recoverable: true,
+    });
+    expect(output.recoverActions).toContainEqual(
+      expect.objectContaining({ content: 'v2er session check testuser --provider codex' }),
+    );
+    expect(output.recoverActions).not.toContainEqual(
+      expect.objectContaining({ content: expect.stringContaining('config proxy') }),
+    );
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
   });
 
   it('should preserve a committed Codex result when session completion fails', async () => {

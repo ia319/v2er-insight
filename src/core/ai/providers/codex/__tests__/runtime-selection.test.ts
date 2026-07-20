@@ -69,6 +69,25 @@ describe('selectCodexRuntime', () => {
     expect(connection.listModels).not.toHaveBeenCalled();
     expect(connection.close).toHaveBeenCalledOnce();
   });
+
+  it('should retain the model selection error code for diagnostics', async () => {
+    const connection = createConnection();
+    const dependencies = {
+      probeVersion: vi.fn(async () => '0.144.5'),
+      connect: vi.fn(() => connection),
+    };
+
+    await expect(
+      selectCodexRuntime(
+        [first],
+        { ...createOptions(), model: { model: 'missing-model' } },
+        dependencies,
+      ),
+    ).rejects.toMatchObject({
+      attempts: [{ code: 'model_invalid', modelErrorCode: 'model_unavailable' }],
+    });
+    expect(connection.close).toHaveBeenCalledOnce();
+  });
 });
 
 function createOptions() {
