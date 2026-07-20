@@ -21,6 +21,7 @@ const mockedParseResponse = vi.hoisted(() => vi.fn());
 const mockedWithRetry = vi.hoisted(() => vi.fn());
 const mockedExecuteCodexAnalysis = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
+const mockedWithCodexExecutionLock = vi.hoisted(() => vi.fn());
 
 const mockCreateSession = vi.hoisted(() => vi.fn());
 const mockSendMessage = vi.hoisted(() => vi.fn());
@@ -51,6 +52,7 @@ vi.mock('@/infra/storage', async (importOriginal) => {
     cleanExpiredData: mockedCleanExpiredData,
     readAnalysisState: mockedReadAnalysisState,
     updateAnalysisState: mockedUpdateAnalysisState,
+    withCodexExecutionLock: mockedWithCodexExecutionLock,
   };
 });
 
@@ -83,7 +85,7 @@ vi.mock('@/infra/logger', () => ({
 }));
 
 import { runAi } from '../ai';
-import { DataFilePostWriteError } from '@/infra/storage';
+import { CodexExecutionLockBusyError, DataFilePostWriteError } from '@/infra/storage';
 
 const SOURCE_HASH = 'a'.repeat(64);
 const defaultRequest = {
@@ -243,6 +245,9 @@ describe('runAi', () => {
         maxDelay: 10_000,
       },
     });
+    mockedWithCodexExecutionLock.mockImplementation(
+      (_username: string, operation: () => Promise<unknown>) => operation(),
+    );
     mockedWriteDataFileWithRollback.mockImplementation(
       (_username: string, _type: string, _data: unknown, afterWrite: () => void) => {
         try {
@@ -730,6 +735,26 @@ describe('runAi', () => {
     const analyzedState = input.getState().analyzed;
     if (!analyzedState) throw new Error('Expected analyzed provenance');
     const complete = vi.fn().mockResolvedValue(undefined);
+    let lockHeld = false;
+    mockedWithCodexExecutionLock.mockImplementation(
+      async (_username: string, operation: () => Promise<unknown>) => {
+        lockHeld = true;
+        try {
+          return await operation();
+        } finally {
+          lockHeld = false;
+        }
+      },
+    );
+    mockedWriteDataFileWithRollback.mockImplementation(
+      (_username: string, _type: string, _data: unknown, afterWrite: () => void) => {
+        expect(lockHeld).toBe(true);
+        afterWrite();
+      },
+    );
+    complete.mockImplementation(async () => {
+      expect(lockHeld).toBe(true);
+    });
     mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
     mockedExecuteCodexAnalysis.mockResolvedValue({
       status: 'result',
@@ -758,9 +783,34 @@ describe('runAi', () => {
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
     expect(mockedWriteDataFileWithRollback).toHaveBeenCalledOnce();
     expect(complete).toHaveBeenCalledOnce();
+    expect(lockHeld).toBe(false);
     expect(mockedWriteDataFileWithRollback.mock.invocationCallOrder[0]).toBeLessThan(
       complete.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it('should return busy before Codex runtime access when another process holds the lock', async () => {
+    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedWithCodexExecutionLock.mockRejectedValue(
+      new CodexExecutionLockBusyError({
+        status: 'locked',
+        owner: {
+          schemaVersion: 1,
+          pid: 42,
+          acquiredAt: '2026-07-20T04:00:00.000Z',
+          token: 'lock-token',
+        },
+      }),
+    );
+
+    const output = await runAi('testuser', { provider: 'codex' });
+
+    expect(output).toMatchObject({
+      status: 'failed',
+      reasonCode: 'AI_CODEX_BUSY',
+      meta: { lockOwnerPid: 42, lockAcquiredAt: '2026-07-20T04:00:00.000Z' },
+    });
+    expect(mockedExecuteCodexAnalysis).not.toHaveBeenCalled();
   });
 
   it('should return busy without persisting or completing a Codex turn', async () => {

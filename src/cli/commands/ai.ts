@@ -5,7 +5,7 @@
  * provider response, and persist result.json.
  */
 
-import { isAnalyzerOutput } from '@/core/analyzer';
+import { isAnalyzerOutput, type AnalyzerOutput } from '@/core/analyzer';
 import { buildAnalysisRequest } from '@/core/ai';
 import type { AIAnalysisResult, ValidationResult } from '@/core/ai';
 import {
@@ -14,13 +14,22 @@ import {
   type AnalysisStateV1,
   type ProviderDeliveryRecordInput,
 } from '@/core/provenance';
-import { DEFAULT_CONFIG, getConfig, resolveCodexConfig, resolveGeminiConfig } from '@/config';
+import {
+  DEFAULT_CONFIG,
+  getConfig,
+  resolveCodexConfig,
+  resolveGeminiConfig,
+  type AIProviderId,
+  type V2erConfig,
+} from '@/config';
 import {
   cleanExpiredData,
+  CodexExecutionLockBusyError,
   DataFilePostWriteError,
   readAnalysisState,
   readDataFile,
   updateAnalysisState,
+  withCodexExecutionLock,
   writeDataFileWithRollback,
 } from '@/infra/storage';
 import { logger } from '@/infra/logger';
@@ -91,6 +100,53 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       },
     };
   }
+
+  const execute = () => runAiForProvider(username, options, analyzed, config, selectedProvider);
+  if (selectedProvider === 'gemini') return execute();
+
+  try {
+    return await withCodexExecutionLock(username, execute);
+  } catch (error) {
+    if (error instanceof CodexExecutionLockBusyError) {
+      logger.warn(`${username} 的 Codex 分析正在由另一个进程处理`);
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'AI_CODEX_BUSY',
+        message: '同一用户已有 Codex 分析正在执行',
+        recoverable: true,
+        recoverActions: getRecoveryActions('AI_CODEX_BUSY', { username }),
+        meta:
+          error.state.status === 'locked'
+            ? {
+                lockOwnerPid: error.state.owner.pid,
+                lockAcquiredAt: error.state.owner.acquiredAt,
+              }
+            : { lockState: 'invalid' },
+      };
+    }
+
+    const { message, raw } = extractErrorDetails(error);
+    logger.error(`Codex 执行锁失败: ${message}`);
+    return {
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'AI_CODEX_LOCK_FAILED',
+      message: `Codex 执行锁失败: ${message}`,
+      recoverable: true,
+      recoverActions: getRecoveryActions('AI_CODEX_LOCK_FAILED', { username }),
+      meta: { rawError: raw },
+    };
+  }
+}
+
+async function runAiForProvider(
+  username: string,
+  options: AiCommandOptions,
+  analyzed: AnalyzerOutput,
+  config: V2erConfig,
+  selectedProvider: AIProviderId,
+): Promise<StepRunResult> {
   const analysisState = readAnalysisState(username);
   if (analysisState.status === 'invalid') {
     logger.error(`${username} 的 analysis-state.json 无效或不可读`);

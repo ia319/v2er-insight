@@ -150,13 +150,25 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   AI_CODEX_BUSY: [
     {
       type: 'instruction',
-      content: '在 ChatGPT App 中查看当前任务状态，等待活动回合结束后重试',
-      description: '同一 Codex 任务已有活动回合，分析数据尚未重复发送',
+      content: '检查当前 v2er 进程和 ChatGPT App 任务状态，等待活动分析结束后重试',
+      description: '同一用户已有本地分析进程或 Codex 任务占用执行位置',
     },
     {
       type: 'command',
       content: 'v2er ai <username> --provider codex',
       description: '活动回合结束后恢复已记录状态',
+    },
+  ],
+  AI_CODEX_LOCK_FAILED: [
+    {
+      type: 'instruction',
+      content: '检查用户数据目录权限和当前 v2er 进程状态',
+      description: 'Codex 执行锁未能安全取得或释放',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '确认目录可写且没有活动分析进程后重试',
     },
   ],
   AI_CODEX_SESSION_UPDATE_FAILED: [

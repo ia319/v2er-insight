@@ -23,3 +23,11 @@ export {
   readCodexThreadRegistry,
   updateCodexThreadRegistry,
 } from './codex-thread-registry';
+export type { CodexExecutionLockOwner, CodexExecutionLockState } from './codex-execution-lock';
+export {
+  CodexExecutionLockBusyError,
+  CodexExecutionLockOwnershipError,
+  CodexExecutionLockReleaseError,
+  readCodexExecutionLock,
+  withCodexExecutionLock,
+} from './codex-execution-lock';
