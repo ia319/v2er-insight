@@ -15,7 +15,13 @@ export type CodexAnalysisDeliveryPlan =
     }
   | { kind: 'recover'; pending: CodexPendingAnalysisDelivery };
 
-function matchesCodexAnalysisDeliveryTarget(
+/**
+ * Compares every current target field while excluding attempt and external turn IDs.
+ * @param pending - Persisted delivery with attempt and external turn metadata.
+ * @param target - Current provider, analysis, quality, mode, and effort target.
+ * @returns Whether the unaccepted delivery can be reused for the target.
+ */
+export function matchesCodexAnalysisDeliveryTarget(
   pending: CodexPendingAnalysisDelivery,
   target: CodexAnalysisDeliveryTarget,
 ): boolean {

@@ -10,6 +10,7 @@ export type { CodexAnalysisDeliveryPlan, CodexAnalysisDeliveryTarget } from './a
 export {
   isCodexAnalysisResultApplicable,
   matchesCodexAnalysisDelivery,
+  matchesCodexAnalysisDeliveryTarget,
   planCodexAnalysisDelivery,
 } from './analysis-delivery';
 export {
@@ -19,6 +20,12 @@ export {
   sendCodexAnalysisUpdateTurn,
   sendCodexInitialAnalysisTurn,
 } from './analysis-turn';
+export type {
+  CodexAnalysisRunResult,
+  CodexAnalysisRunRuntime,
+  RunCodexAnalysisOptions,
+} from './analysis-run';
+export { runCodexAnalysis } from './analysis-run';
 export type {
   CodexBootstrapRecovery,
   CodexBootstrapRecoveryErrorCode,
