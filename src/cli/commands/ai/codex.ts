@@ -92,7 +92,7 @@ function hasReusableResult(options: ExecuteCodexAnalysisOptions, providerKey: st
 }
 
 /**
- * Executes the Codex provider boundary without committing result or analysis provenance files.
+ * Executes the Codex provider boundary and returns result and delivery data for persistence.
  * @param options - Resolved provider settings, current request, provenance, and CLI overrides.
  * @returns A skip, busy state, or parsed result with a post-commit session completion callback.
  * @throws When the registry, Project, runtime, session, or turn cannot be validated.
