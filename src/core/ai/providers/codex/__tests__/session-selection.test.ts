@@ -4,7 +4,7 @@ import type {
   CodexThreadRegistryV1,
   CodexThreadState,
 } from '../thread-state';
-import { selectCodexSession } from '../session-selection';
+import { selectCodexRuntimeModelRequest, selectCodexSession } from '../session-selection';
 
 const PROMPT_HASH = 'a'.repeat(64);
 
@@ -128,5 +128,70 @@ describe('selectCodexSession', () => {
         projectPath: 'd:\\data',
       }),
     ).toMatchObject({ kind: 'resume', source: 'active' });
+  });
+});
+
+describe('selectCodexRuntimeModelRequest', () => {
+  it('should preserve the latest compatible pending session model for app-default', () => {
+    const active = createSession(1, 'ready', { model: 'gpt-active' });
+    const pending = createSession(2, 'promptPending', { model: 'gpt-pending' });
+
+    expect(
+      selectCodexRuntimeModelRequest(createRegistry([active, pending], active.localSessionId), {
+        promptHash: PROMPT_HASH,
+        configuredModel: 'app-default',
+        projectPath: 'D:\\Data',
+        platform: 'win32',
+      }),
+    ).toEqual({ model: 'gpt-pending', source: 'session', localSessionId: 'session-2' });
+  });
+
+  it('should preserve a compatible active session model for app-default', () => {
+    const active = createSession(1, 'ready', { model: 'gpt-active' });
+
+    expect(
+      selectCodexRuntimeModelRequest(createRegistry([active], active.localSessionId), {
+        promptHash: PROMPT_HASH,
+        configuredModel: 'app-default',
+        projectPath: 'D:\\Data',
+        platform: 'win32',
+      }),
+    ).toEqual({ model: 'gpt-active', source: 'session', localSessionId: 'session-1' });
+  });
+
+  it('should use configuration for explicit models and new generations', () => {
+    const active = createSession(1, 'ready', { model: 'gpt-active' });
+    const registry = createRegistry([active], active.localSessionId);
+
+    expect(
+      selectCodexRuntimeModelRequest(registry, {
+        promptHash: PROMPT_HASH,
+        configuredModel: 'gpt-explicit',
+        projectPath: 'D:\\Data',
+        platform: 'win32',
+      }),
+    ).toEqual({ model: 'gpt-explicit', source: 'configuration' });
+    expect(
+      selectCodexRuntimeModelRequest(registry, {
+        promptHash: PROMPT_HASH,
+        configuredModel: 'app-default',
+        projectPath: 'D:\\Data',
+        forceNew: true,
+        platform: 'win32',
+      }),
+    ).toEqual({ model: 'app-default', source: 'configuration' });
+  });
+
+  it('should resolve the live default when session context changed', () => {
+    const active = createSession(1, 'ready', { model: 'gpt-active' });
+
+    expect(
+      selectCodexRuntimeModelRequest(createRegistry([active], active.localSessionId), {
+        promptHash: 'b'.repeat(64),
+        configuredModel: 'app-default',
+        projectPath: 'D:\\Other',
+        platform: 'win32',
+      }),
+    ).toEqual({ model: 'app-default', source: 'configuration' });
   });
 });

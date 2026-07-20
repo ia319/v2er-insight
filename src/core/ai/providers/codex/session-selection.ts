@@ -1,3 +1,4 @@
+import { CODEX_DEFAULT_MODEL } from '@/config';
 import { areCodexProjectPathsEqual } from './project-path';
 import type { CodexThreadRegistryV1, CodexThreadState } from './thread-state';
 
@@ -16,6 +17,18 @@ export interface CodexSessionTarget {
   platform?: NodeJS.Platform;
 }
 
+export interface CodexRuntimeModelTarget {
+  promptHash: string;
+  configuredModel: string;
+  projectPath: string;
+  forceNew?: boolean;
+  platform?: NodeJS.Platform;
+}
+
+export type CodexRuntimeModelRequest =
+  | { model: string; source: 'configuration' }
+  | { model: string; source: 'session'; localSessionId: string };
+
 export type CodexSessionSelection =
   | {
       kind: 'resume';
@@ -27,10 +40,12 @@ export type CodexSessionSelection =
       causes: CodexSessionCreationCause[];
     };
 
-function matchesTarget(session: CodexThreadState, target: CodexSessionTarget): boolean {
+function matchesContext(
+  session: CodexThreadState,
+  target: Pick<CodexSessionTarget, 'promptHash' | 'projectPath' | 'platform'>,
+): boolean {
   return (
     session.promptHash === target.promptHash &&
-    session.model === target.model &&
     areCodexProjectPathsEqual(
       session.projectPath,
       target.projectPath,
@@ -39,15 +54,19 @@ function matchesTarget(session: CodexThreadState, target: CodexSessionTarget): b
   );
 }
 
-function findLatestCompatiblePendingSession(
+function matchesTarget(session: CodexThreadState, target: CodexSessionTarget): boolean {
+  return session.model === target.model && matchesContext(session, target);
+}
+
+function findLatestPendingSession(
   registry: CodexThreadRegistryV1,
-  target: CodexSessionTarget,
+  matches: (session: CodexThreadState) => boolean,
 ): CodexThreadState | undefined {
   let latest: CodexThreadState | undefined;
   for (const session of registry.sessions) {
     if (
       session.bootstrapStatus !== 'ready' &&
-      matchesTarget(session, target) &&
+      matches(session) &&
       (latest === undefined || session.generation > latest.generation)
     ) {
       latest = session;
@@ -65,6 +84,32 @@ function findActiveSession(registry: CodexThreadRegistryV1): CodexThreadState | 
 }
 
 /**
+ * Selects the model request used to open a runtime before final session selection.
+ * @param registry - Validated per-user Codex session registry.
+ * @param target - Configured model selector and generation context.
+ * @returns A concrete session model for compatible reuse or the configured selector for creation.
+ */
+export function selectCodexRuntimeModelRequest(
+  registry: CodexThreadRegistryV1,
+  target: CodexRuntimeModelTarget,
+): CodexRuntimeModelRequest {
+  if (target.configuredModel !== CODEX_DEFAULT_MODEL || target.forceNew === true) {
+    return { model: target.configuredModel, source: 'configuration' };
+  }
+
+  const pending = findLatestPendingSession(registry, (session) => matchesContext(session, target));
+  if (pending) {
+    return { model: pending.model, source: 'session', localSessionId: pending.localSessionId };
+  }
+
+  const active = findActiveSession(registry);
+  if (active && matchesContext(active, target)) {
+    return { model: active.model, source: 'session', localSessionId: active.localSessionId };
+  }
+  return { model: target.configuredModel, source: 'configuration' };
+}
+
+/**
  * Selects a compatible persisted Codex session before any external operation.
  * @param registry - Validated per-user Codex session registry.
  * @param target - Prompt, model, Project, and explicit-generation requirements.
@@ -78,7 +123,7 @@ export function selectCodexSession(
     return { kind: 'create', causes: ['explicit_request'] };
   }
 
-  const pending = findLatestCompatiblePendingSession(registry, target);
+  const pending = findLatestPendingSession(registry, (session) => matchesTarget(session, target));
   if (pending) return { kind: 'resume', source: 'pending', session: pending };
 
   const active = findActiveSession(registry);

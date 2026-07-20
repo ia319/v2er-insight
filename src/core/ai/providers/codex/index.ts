@@ -29,11 +29,13 @@ export type {
 export { CodexPromptTurnError, sendCodexPromptTurn } from './prompt-turn';
 export type { CodexRegistryUpdate } from './registry-update';
 export type {
+  CodexRuntimeModelRequest,
+  CodexRuntimeModelTarget,
   CodexSessionCreationCause,
   CodexSessionSelection,
   CodexSessionTarget,
 } from './session-selection';
-export { selectCodexSession } from './session-selection';
+export { selectCodexRuntimeModelRequest, selectCodexSession } from './session-selection';
 export type {
   CodexThreadCreationErrorCode,
   CodexThreadCreationRuntime,
