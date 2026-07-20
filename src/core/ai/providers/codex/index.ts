@@ -35,6 +35,13 @@ export type {
 export { CodexPromptTurnError, sendCodexPromptTurn } from './prompt-turn';
 export type { CodexRegistryUpdate } from './registry-update';
 export type {
+  AdvanceCodexAnalysisSessionOptions,
+  CodexAnalysisCompletionKind,
+  CodexAnalysisSessionAdvanceErrorCode,
+  CodexAnalysisSessionAdvance,
+} from './session-advance';
+export { CodexAnalysisSessionAdvanceError, advanceCodexAnalysisSession } from './session-advance';
+export type {
   CodexAnalysisSessionRuntime,
   PrepareCodexAnalysisSessionOptions,
   PreparedCodexAnalysisSession,

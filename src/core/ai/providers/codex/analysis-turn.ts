@@ -385,7 +385,7 @@ export async function sendCodexAnalysisUpdateTurn(
 }
 
 /**
- * Activates an initial analysis turn after its result and provenance are stored.
+ * Activates an initial analysis turn after its completed result is persisted or superseded.
  * @param options - Completed turn identity, successful effort, clock, and registry boundary.
  * @returns The registry with the session active and ready.
  * @throws {CodexAnalysisTurnError} When the activation transition is not persisted.
@@ -415,7 +415,7 @@ export async function activateCodexInitialAnalysisTurn(
 }
 
 /**
- * Completes a ready-session analysis update after its result and provenance are stored.
+ * Completes a ready-session analysis update after its completed result is persisted or superseded.
  * @param options - Completed turn identity, successful effort, clock, and registry boundary.
  * @returns The active registry with updated successful effort metadata.
  * @throws {CodexAnalysisTurnError} When the session changes or completion is not persisted.
