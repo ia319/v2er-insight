@@ -44,6 +44,12 @@ export type {
 } from './thread-creation';
 export { CodexThreadCreationError, createCodexThreadGeneration } from './thread-creation';
 export type {
+  CodexThreadResumeErrorCode,
+  ResumedCodexThread,
+  ResumeCodexThreadOptions,
+} from './thread-resume';
+export { CodexThreadResumeError, resumeCodexThread } from './thread-resume';
+export type {
   CodexProjectPathErrorCode,
   CodexProjectPathSource,
   ResolvedCodexProjectPath,
