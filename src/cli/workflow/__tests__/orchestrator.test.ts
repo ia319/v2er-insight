@@ -63,8 +63,12 @@ describe('runWorkflow', () => {
     const outcome = await runWorkflow({
       username: 'alice',
       force: true,
+      provider: 'codex',
       model: 'gemini-2.0-flash',
       thinkingLevel: 'high',
+      reasoningEffort: 'high',
+      newThread: true,
+      codexProject: 'D:\\Data',
       resend: true,
     });
 
@@ -74,8 +78,12 @@ describe('runWorkflow', () => {
     expect(mockRunFetch).toHaveBeenCalledWith('alice', { force: true, pipeline: true });
     expect(mockRunAnalyze).toHaveBeenCalledWith('alice', { pipeline: true });
     expect(mockRunAi).toHaveBeenCalledWith('alice', {
+      provider: 'codex',
       model: 'gemini-2.0-flash',
       thinkingLevel: 'high',
+      reasoningEffort: 'high',
+      newThread: true,
+      codexProject: 'D:\\Data',
       resend: true,
       pipeline: true,
     });

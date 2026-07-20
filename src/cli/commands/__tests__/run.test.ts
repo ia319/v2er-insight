@@ -21,8 +21,12 @@ describe('resolveWorkflowOptions', () => {
   it('should pass through explicit model and thinking level', () => {
     const options: RunCommandOptions = {
       force: true,
+      provider: 'codex',
       model: 'gemini-2.5-pro',
       thinkingLevel: 'high',
+      reasoningEffort: 'high',
+      newThread: true,
+      codexProject: 'D:\\Data',
       resend: true,
       verbose: true,
     };
@@ -32,8 +36,12 @@ describe('resolveWorkflowOptions', () => {
     expect(result).toEqual({
       username: 'alice',
       force: true,
+      provider: 'codex',
       model: 'gemini-2.5-pro',
       thinkingLevel: 'high',
+      reasoningEffort: 'high',
+      newThread: true,
+      codexProject: 'D:\\Data',
       resend: true,
       verbose: true,
     });
@@ -73,8 +81,12 @@ describe('runPipeline', () => {
 
     await runPipeline('alice', {
       force: true,
+      provider: 'codex',
       model: 'gemini-2.0-flash',
       thinkingLevel: 'medium',
+      reasoningEffort: 'high',
+      newThread: true,
+      codexProject: 'D:\\Data',
       resend: true,
       verbose: true,
     });
@@ -82,8 +94,12 @@ describe('runPipeline', () => {
     expect(mockRunWorkflow).toHaveBeenCalledWith({
       username: 'alice',
       force: true,
+      provider: 'codex',
       model: 'gemini-2.0-flash',
       thinkingLevel: 'medium',
+      reasoningEffort: 'high',
+      newThread: true,
+      codexProject: 'D:\\Data',
       resend: true,
       verbose: true,
     });

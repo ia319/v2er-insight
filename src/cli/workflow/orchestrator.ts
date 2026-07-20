@@ -31,8 +31,12 @@ export function buildStepExecutors(options: RunWorkflowOptions): WorkflowExecuto
     pipeline: true,
   };
   const aiOptions: AiCommandOptions = {
+    provider: options.provider,
     model: options.model,
     thinkingLevel: options.thinkingLevel,
+    reasoningEffort: options.reasoningEffort,
+    newThread: options.newThread,
+    codexProject: options.codexProject,
     resend: options.resend,
     pipeline: true,
   };

@@ -93,8 +93,12 @@ export type WorkflowOverallStatus = 'success' | 'partial' | 'failed';
 export interface RunWorkflowOptions {
   username: string;
   force?: boolean;
+  provider?: string;
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  reasoningEffort?: string;
+  newThread?: boolean;
+  codexProject?: string;
   resend?: boolean;
   verbose?: boolean;
 }

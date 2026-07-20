@@ -39,8 +39,12 @@ program
 program
   .argument('[username]', 'V2EX username')
   .option('--force', 'Force re-fetch from scratch')
+  .option('--provider <provider>', 'Specify AI provider: gemini | codex')
   .option('--model [name]', 'Specify AI model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level (or select interactively)')
+  .option('--reasoning-effort <effort>', 'Specify Codex reasoning effort')
+  .option('--new-thread', 'Create a new Codex thread generation')
+  .option('--codex-project <path>', 'Specify the Codex Project path for a new thread')
   .option('--resend', 'Force resend complete analyzed data')
   .option('-v, --verbose', 'Show debug output')
   .action(async (username, options, command) => {
@@ -87,8 +91,12 @@ program
   .command('ai')
   .description('Generate AI user profile and analysis')
   .argument('<username>', 'V2EX username')
-  .option('--model [name]', 'Specify Gemini model (or select interactively)')
+  .option('--provider <provider>', 'Specify AI provider: gemini | codex')
+  .option('--model [name]', 'Specify provider model (or select interactively)')
   .option('--thinking-level [level]', 'Specify thinking level: minimal | low | medium | high')
+  .option('--reasoning-effort <effort>', 'Specify Codex reasoning effort')
+  .option('--new-thread', 'Create a new Codex thread generation')
+  .option('--codex-project <path>', 'Specify the Codex Project path for a new thread')
   .option('--resend', 'Force resend complete analyzed data')
   .option('-v, --verbose', 'Show debug output')
   .action(async (username, _, command) => {

@@ -65,7 +65,20 @@ describe('cli option forwarding', () => {
   });
 
   it('should forward AI options to the ai subcommand', async () => {
-    process.argv = ['node', 'v2er', 'ai', 'alice', '--thinking-level', 'low', '--resend'];
+    process.argv = [
+      'node',
+      'v2er',
+      'ai',
+      'alice',
+      '--provider',
+      'codex',
+      '--reasoning-effort',
+      'high',
+      '--new-thread',
+      '--codex-project',
+      'D:\\Data',
+      '--resend',
+    ];
 
     await import('../index');
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -74,7 +87,10 @@ describe('cli option forwarding', () => {
     expect(mockedRunAi).toHaveBeenCalledWith(
       'alice',
       expect.objectContaining({
-        thinkingLevel: 'low',
+        provider: 'codex',
+        reasoningEffort: 'high',
+        newThread: true,
+        codexProject: 'D:\\Data',
         resend: true,
       }),
     );
