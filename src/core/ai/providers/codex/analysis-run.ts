@@ -127,7 +127,7 @@ async function cancelSupersededUnacceptedDelivery(
 }
 
 /**
- * Runs one complete Codex analysis exchange without persisting result.json or delivery provenance.
+ * Runs one complete Codex analysis exchange and returns result and delivery data for persistence.
  * @param options - Current analysis identity, runtime, request, registry, and persistence boundary.
  * @returns A reusable-result skip, busy state, or parsed result awaiting durable commit.
  * @throws When session preparation, recovery, delivery planning, or turn execution is inconsistent.

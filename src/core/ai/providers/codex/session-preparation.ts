@@ -57,7 +57,7 @@ function withRegistry(
 }
 
 /**
- * Creates or reconciles one Codex analysis session without sending new messages.
+ * Creates or reconciles one Codex analysis session and selects its next safe action.
  * @param options - Session target, selected runtime, registry, and persistence boundary.
  * @returns A validated session and its next safe bootstrap or analysis action.
  * @throws When creation, resume identity, recovery state, or registry persistence is invalid.

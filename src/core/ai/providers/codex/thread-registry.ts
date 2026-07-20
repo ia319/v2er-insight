@@ -215,7 +215,7 @@ export function prepareCodexAnalysisDelivery(
  * @param localSessionId - Session containing the pending delivery.
  * @param delivery - Complete identity of the delivery being cancelled.
  * @param usedAt - ISO timestamp for the cancellation boundary.
- * @returns A registry without the matching unaccepted delivery.
+ * @returns A registry with the matching unaccepted delivery removed.
  * @throws {CodexThreadRegistryError} When the delivery is absent, different, or already accepted.
  */
 export function cancelPreparedCodexAnalysisDelivery(

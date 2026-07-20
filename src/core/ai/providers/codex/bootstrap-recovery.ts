@@ -283,7 +283,7 @@ function recoverReady(options: RecoverCodexBootstrapOptions): CodexBootstrapReco
 }
 
 /**
- * Reconciles one local bootstrap state with a persisted App Server thread without resending.
+ * Reconciles one local bootstrap state with persisted App Server thread history.
  * @param options - Local state, thread snapshot, registry boundary, clock, and path platform.
  * @returns The next safe bootstrap action or recovered analysis result.
  * @throws {CodexBootstrapRecoveryError} When local and App Server state are inconsistent.
