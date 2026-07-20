@@ -16,6 +16,7 @@ import {
   configShow,
   configSet,
   configReset,
+  runSessionCheck,
 } from './commands';
 import { logger } from '@/infra/logger';
 import { renderNotices } from './workflow/notices';
@@ -143,5 +144,20 @@ config
   .command('reset [group]')
   .description('Reset configuration to defaults (all or specific group)')
   .action(configReset);
+
+// session - Provider 会话诊断
+const session = program.command('session').description('Inspect provider session state');
+
+session
+  .command('check [username]')
+  .description('Run a read-only provider session check')
+  .option('--provider <provider>', 'Specify AI provider: gemini | codex')
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, _options, command) => {
+    const opts = command.optsWithGlobals();
+    if (opts.verbose) logger.setLevel('debug');
+    const result = await runSessionCheck(username, opts);
+    if (result.status === 'failed') process.exitCode = 1;
+  });
 
 program.parse();

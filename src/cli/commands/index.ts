@@ -7,4 +7,5 @@ export { runAnalyze } from './analyze';
 export { runAi } from './ai';
 export { runShow } from './show';
 export { runPipeline } from './run';
+export { runSessionCheck } from './session';
 export { configProxy, configShow, configSet, configReset } from './config';

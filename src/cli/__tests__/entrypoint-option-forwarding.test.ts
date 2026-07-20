@@ -9,6 +9,7 @@ const mockedConfigProxy = vi.hoisted(() => vi.fn());
 const mockedConfigShow = vi.hoisted(() => vi.fn());
 const mockedConfigSet = vi.hoisted(() => vi.fn());
 const mockedConfigReset = vi.hoisted(() => vi.fn());
+const mockedRunSessionCheck = vi.hoisted(() => vi.fn());
 const mockedInitFetchProxy = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedLoggerSetLevel = vi.hoisted(() => vi.fn());
@@ -25,6 +26,7 @@ vi.mock('../commands', () => ({
   configShow: mockedConfigShow,
   configSet: mockedConfigSet,
   configReset: mockedConfigReset,
+  runSessionCheck: mockedRunSessionCheck,
 }));
 
 vi.mock('@/config', () => ({
@@ -58,6 +60,7 @@ describe('cli option forwarding', () => {
         },
       ],
     });
+    mockedRunSessionCheck.mockResolvedValue({ status: 'success', provider: 'codex' });
   });
 
   afterEach(() => {
