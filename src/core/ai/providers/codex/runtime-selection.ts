@@ -7,6 +7,7 @@ import {
   type CodexAppServerConnectionOptions,
   type CodexAppServerProcessOptions,
   type CodexExecutableCandidate,
+  type CodexModelInfo,
   type CodexServerInfo,
 } from '@/infra/codex';
 import { resolveCodexModel, type ResolvedCodexModel } from './model-selection';
@@ -42,6 +43,7 @@ export interface SelectedCodexRuntime {
   version: string;
   server: CodexServerInfo;
   account: CodexAccountStatus;
+  models: readonly CodexModelInfo[];
   model: ResolvedCodexModel;
   connection: CodexRuntimeConnection;
   attempts: CodexRuntimeAttempt[];
@@ -157,7 +159,7 @@ export async function selectCodexRuntime(
         continue;
       }
 
-      return { candidate, version, server, account, model, connection, attempts };
+      return { candidate, version, server, account, models, model, connection, attempts };
     } catch (error) {
       attempts.push(createAttempt(candidate, 'protocol_failed', error, version));
       await connection.close().catch(() => undefined);

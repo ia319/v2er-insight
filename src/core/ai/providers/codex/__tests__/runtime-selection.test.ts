@@ -29,6 +29,7 @@ describe('selectCodexRuntime', () => {
     const runtime = await selectCodexRuntime([first, second], createOptions(), dependencies);
 
     expect(runtime.candidate).toBe(second);
+    expect(runtime.models).toMatchObject([{ model: 'default-model', isDefault: true }]);
     expect(runtime.model).toMatchObject({ model: 'default-model', reasoningEffort: 'low' });
     expect(runtime.attempts).toMatchObject([{ candidate: first, code: 'protocol_failed' }]);
     expect(firstConnection.close).toHaveBeenCalledOnce();
