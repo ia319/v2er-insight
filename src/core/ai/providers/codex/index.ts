@@ -29,6 +29,12 @@ export type {
 export { CodexPromptTurnError, sendCodexPromptTurn } from './prompt-turn';
 export type { CodexRegistryUpdate } from './registry-update';
 export type {
+  CodexAnalysisSessionRuntime,
+  PrepareCodexAnalysisSessionOptions,
+  PreparedCodexAnalysisSession,
+} from './session-preparation';
+export { prepareCodexAnalysisSession } from './session-preparation';
+export type {
   CodexRuntimeModelRequest,
   CodexRuntimeModelTarget,
   CodexSessionCreationCause,
