@@ -19,6 +19,8 @@ const mockedResolveApiKey = vi.hoisted(() => vi.fn());
 const mockedBuildAnalysisRequest = vi.hoisted(() => vi.fn());
 const mockedParseResponse = vi.hoisted(() => vi.fn());
 const mockedWithRetry = vi.hoisted(() => vi.fn());
+const mockedExecuteCodexAnalysis = vi.hoisted(() => vi.fn());
+const mockedGetConfig = vi.hoisted(() => vi.fn());
 
 const mockCreateSession = vi.hoisted(() => vi.fn());
 const mockSendMessage = vi.hoisted(() => vi.fn());
@@ -68,19 +70,13 @@ vi.mock('@/config', async () => {
   const actual = await vi.importActual<typeof import('@/config')>('@/config');
   return {
     ...actual,
-    getConfig: vi.fn().mockReturnValue({
-      ai: {
-        provider: 'gemini',
-        model: 'gemini-3.1-pro-preview',
-        thinkingLevel: 'high',
-        timeout: 60_000,
-        maxRetries: 3,
-        baseDelay: 1000,
-        maxDelay: 10_000,
-      },
-    }),
+    getConfig: mockedGetConfig,
   };
 });
+
+vi.mock('../ai/codex', () => ({
+  executeCodexAnalysis: mockedExecuteCodexAnalysis,
+}));
 
 vi.mock('@/infra/logger', () => ({
   logger: mockLogger,
@@ -92,6 +88,7 @@ import { DataFilePostWriteError } from '@/infra/storage';
 const SOURCE_HASH = 'a'.repeat(64);
 const defaultRequest = {
   systemPrompt: 'You are an analyst',
+  promptHash: 'c'.repeat(64),
   payload: '{"schemaVersion":2}',
 };
 const noCleanupResult = {
@@ -235,6 +232,17 @@ function markDelivered(state: AnalysisStateV1): void {
 describe('runAi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedGetConfig.mockReturnValue({
+      ai: {
+        provider: 'gemini',
+        model: 'gemini-3.1-pro-preview',
+        thinkingLevel: 'high',
+        timeout: 60_000,
+        maxRetries: 3,
+        baseDelay: 1000,
+        maxDelay: 10_000,
+      },
+    });
     mockedWriteDataFileWithRollback.mockImplementation(
       (_username: string, _type: string, _data: unknown, afterWrite: () => void) => {
         try {
@@ -715,5 +723,95 @@ describe('runAi', () => {
     expect(mockLogger.warn).not.toHaveBeenCalledWith(expect.stringContaining('DATA_FILES_CLEANED'));
     expect(mockLogger.success).not.toHaveBeenCalled();
     expect(mockLogger.detail).not.toHaveBeenCalledWith(expect.stringContaining('已清理中间数据'));
+  });
+
+  it('should commit a Codex result before completing its session state', async () => {
+    const input = mockInput();
+    const analyzedState = input.getState().analyzed;
+    if (!analyzedState) throw new Error('Expected analyzed provenance');
+    const complete = vi.fn().mockResolvedValue(undefined);
+    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedExecuteCodexAnalysis.mockResolvedValue({
+      status: 'result',
+      model: 'gpt-current',
+      reasoningEffort: 'high',
+      providerKey: 'codex:provider-key',
+      localSessionId: 'local-1',
+      threadId: 'thread-1',
+      result: createAiResult('Codex result'),
+      delivery: {
+        providerKey: 'codex:provider-key',
+        analysisFingerprint: analyzedState.analysisFingerprint,
+        payloadHash: analyzedState.payloadHash,
+        basedOnPartial: false,
+        deliveryMode: 'change',
+      },
+      complete,
+    });
+
+    const output = await runAi('testuser', { provider: 'codex' });
+
+    expect(output).toMatchObject({
+      status: 'success',
+      meta: { provider: 'codex', model: 'gpt-current' },
+    });
+    expect(mockedResolveApiKey).not.toHaveBeenCalled();
+    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledOnce();
+    expect(mockedWriteDataFileWithRollback.mock.invocationCallOrder[0]).toBeLessThan(
+      complete.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('should return busy without persisting or completing a Codex turn', async () => {
+    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedExecuteCodexAnalysis.mockResolvedValue({
+      status: 'busy',
+      model: 'gpt-current',
+      reasoningEffort: 'high',
+      providerKey: 'codex:provider-key',
+      localSessionId: 'local-1',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+    });
+
+    const output = await runAi('testuser', { provider: 'codex' });
+
+    expect(output).toMatchObject({ status: 'failed', reasonCode: 'AI_CODEX_BUSY' });
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
+    expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+  });
+
+  it('should preserve a committed Codex result when session completion fails', async () => {
+    const input = mockInput();
+    const analyzedState = input.getState().analyzed;
+    if (!analyzedState) throw new Error('Expected analyzed provenance');
+    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedExecuteCodexAnalysis.mockResolvedValue({
+      status: 'result',
+      model: 'gpt-current',
+      reasoningEffort: 'high',
+      providerKey: 'codex:provider-key',
+      localSessionId: 'local-1',
+      threadId: 'thread-1',
+      result: createAiResult('Codex result'),
+      delivery: {
+        providerKey: 'codex:provider-key',
+        analysisFingerprint: analyzedState.analysisFingerprint,
+        payloadHash: analyzedState.payloadHash,
+        basedOnPartial: false,
+        deliveryMode: 'change',
+      },
+      complete: vi.fn().mockRejectedValue(new Error('registry unavailable')),
+    });
+
+    const output = await runAi('testuser', { provider: 'codex' });
+
+    expect(output).toMatchObject({
+      status: 'failed',
+      reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
+    });
+    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledOnce();
+    expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 });

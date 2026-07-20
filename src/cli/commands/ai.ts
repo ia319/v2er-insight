@@ -6,24 +6,15 @@
  */
 
 import { isAnalyzerOutput } from '@/core/analyzer';
-import {
-  GeminiProvider,
-  buildAnalysisRequest,
-  isAIAnalysisResult,
-  parseResponse,
-  resolveApiKey,
-  withRetry,
-} from '@/core/ai';
-import type { ValidationResult } from '@/core/ai';
+import { buildAnalysisRequest } from '@/core/ai';
+import type { AIAnalysisResult, ValidationResult } from '@/core/ai';
 import {
   checkAnalyzedProvenance,
-  computeProviderStateKey,
-  hasProviderReceivedAnalysis,
   recordProviderDelivery,
   type AnalysisStateV1,
+  type ProviderDeliveryRecordInput,
 } from '@/core/provenance';
-import { getConfig, resolveGeminiConfig, THINKING_LEVELS } from '@/config';
-import type { ThinkingLevel } from '@/config';
+import { DEFAULT_CONFIG, getConfig, resolveCodexConfig, resolveGeminiConfig } from '@/config';
 import {
   cleanExpiredData,
   DataFilePostWriteError,
@@ -38,12 +29,9 @@ import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
 import { extractErrorDetails } from '../utils/error';
 import { createDataFilesCleanedNotice } from '../workflow/data-retention-notices';
-
-const GEMINI_LOGICAL_SESSION_KEY = 'default';
-
-function isThinkingLevel(value: string): value is ThinkingLevel {
-  return THINKING_LEVELS.some((level) => level === value);
-}
+import { executeCodexAnalysis } from './ai/codex';
+import { executeGeminiAnalysis } from './ai/gemini';
+import { AiProviderOptionError, resolveAiProviderOptions } from './ai/provider-options';
 
 /**
  * Run the AI analysis command for one user.
@@ -82,7 +70,27 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
   const analyzed = analyzedValue;
 
   const config = getConfig();
-  const geminiConfig = resolveGeminiConfig(config.ai);
+  let selectedProvider: ReturnType<typeof resolveAiProviderOptions>;
+  try {
+    selectedProvider = resolveAiProviderOptions(
+      config.ai?.provider ?? DEFAULT_CONFIG.ai.provider,
+      options,
+    );
+  } catch (error) {
+    const { message } = extractErrorDetails(error);
+    logger.error(message);
+    return {
+      step: 'ai',
+      status: 'failed',
+      reasonCode: 'AI_INVALID_PROVIDER_OPTIONS',
+      message,
+      recoverable: false,
+      recoverActions: getRecoveryActions('AI_INVALID_PROVIDER_OPTIONS', { username }),
+      meta: {
+        optionErrorCode: error instanceof AiProviderOptionError ? error.code : undefined,
+      },
+    };
+  }
   const analysisState = readAnalysisState(username);
   if (analysisState.status === 'invalid') {
     logger.error(`${username} 的 analysis-state.json 无效或不可读`);
@@ -148,130 +156,158 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     };
   }
 
-  // Commander maps optional flags without values to true, so only strings override config.
-  const model = typeof options.model === 'string' ? options.model : geminiConfig.model;
-
-  const rawThinkingLevel =
-    typeof options.thinkingLevel === 'string' ? options.thinkingLevel : geminiConfig.thinkingLevel;
-
-  if (rawThinkingLevel && !isThinkingLevel(rawThinkingLevel)) {
-    logger.error(`无效的思考等级: "${rawThinkingLevel}"`);
-    logger.info(`可选值: ${THINKING_LEVELS.join(' | ')}`);
-    return {
-      step: 'ai',
-      status: 'failed',
-      reasonCode: 'AI_INVALID_THINKING_LEVEL',
-      message: `无效的 thinkingLevel: ${rawThinkingLevel}`,
-      recoverable: false,
-      recoverActions: getRecoveryActions('AI_INVALID_THINKING_LEVEL', { username }),
-    };
-  }
-  const thinkingLevel = rawThinkingLevel;
-
-  logger.info(`\nAI 分析: ${username} (模型: ${model})`);
-  if (thinkingLevel) {
-    logger.detail(`思考等级: ${thinkingLevel}`);
-  }
-
-  // One request supplies both the delivery identity and transmitted content.
   const request = buildAnalysisRequest(analyzed);
-  const providerKey = computeProviderStateKey({
-    provider: 'gemini',
-    model,
-    systemPrompt: request.systemPrompt,
-    thinkingLevel,
-    sessionKey: GEMINI_LOGICAL_SESSION_KEY,
-  });
-  const providerAlreadyReceived = hasProviderReceivedAnalysis(
-    analysisState.state,
-    providerKey,
-    provenance.analysisFingerprint,
-  );
   const savedResult = readDataFile<unknown>(username, 'result');
-  const currentResultIsReusable =
-    !options.resend &&
-    providerAlreadyReceived &&
-    analysisState.state.currentResult?.analysisFingerprint === provenance.analysisFingerprint &&
-    !analysisState.state.currentResult.stale &&
-    isAIAnalysisResult(savedResult);
-
   if (provenance.basedOnPartial) {
     logger.warn('当前分析基于不完整抓取数据；缺失记录状态未知');
   }
 
-  if (currentResultIsReusable) {
-    logger.info('分析数据未发生有效变化，跳过 AI 调用');
-    return {
-      step: 'ai',
-      status: 'skipped',
-      message: '分析数据未发生有效变化',
-      meta: {
-        model,
-        analysisFingerprint: provenance.analysisFingerprint,
-      },
-    };
-  }
+  let model: string;
+  let result: AIAnalysisResult;
+  let delivery: ProviderDeliveryRecordInput;
+  let completeCodexSession: (() => Promise<void>) | undefined;
+  let warnings: ValidationResult['warnings'] = [];
 
-  const apiKey = resolveApiKey();
-  if (!apiKey) {
-    logger.error('未找到 API Key');
-    logger.info('请通过以下方式之一配置:');
-    logger.detail('1. 环境变量: GOOGLE_API_KEY 或 GEMINI_API_KEY');
-    logger.detail('2. 配置文件: v2er config ai.apiKey <key>');
-    return {
-      step: 'ai',
-      status: 'failed',
-      reasonCode: 'AI_API_KEY_MISSING',
-      message: '缺少 API Key，无法发起 AI 请求',
-      recoverable: true,
-      recoverActions: getRecoveryActions('AI_API_KEY_MISSING', { username }),
-    };
-  }
+  if (selectedProvider === 'codex') {
+    const codexConfig = resolveCodexConfig(config.ai);
+    logger.info(`\nAI 分析: ${username} (Provider: Codex)`);
+    try {
+      const execution = await executeCodexAnalysis({
+        username,
+        config: codexConfig,
+        request,
+        analysisState: analysisState.state,
+        provenance,
+        savedResult,
+        ...(typeof options.model === 'string' ? { model: options.model } : {}),
+        ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
+        ...(options.codexProject ? { codexProject: options.codexProject } : {}),
+        newThread: options.newThread,
+        resend: options.resend,
+      });
+      if (execution.status === 'skipped') {
+        logger.info('分析数据未发生有效变化，跳过 Codex 调用');
+        return {
+          step: 'ai',
+          status: 'skipped',
+          message: '分析数据未发生有效变化',
+          meta: {
+            provider: 'codex',
+            model: execution.model,
+            threadId: execution.threadId,
+            analysisFingerprint: provenance.analysisFingerprint,
+          },
+        };
+      }
+      if (execution.status === 'busy') {
+        logger.warn(`Codex 任务 ${execution.threadId} 仍有活动回合`);
+        return {
+          step: 'ai',
+          status: 'failed',
+          reasonCode: 'AI_CODEX_BUSY',
+          message: 'Codex 任务仍有活动回合，分析数据未发送',
+          recoverable: true,
+          recoverActions: getRecoveryActions('AI_CODEX_BUSY', { username }),
+          meta: { threadId: execution.threadId, turnId: execution.turnId },
+        };
+      }
 
-  const provider = new GeminiProvider(apiKey, model);
-
-  const retryOptions = {
-    maxRetries: geminiConfig.maxRetries,
-    baseDelay: geminiConfig.baseDelay,
-    maxDelay: geminiConfig.maxDelay,
-    onRetry: (attempt: number, maxRetries: number, error: Error, delay: number) => {
-      const delaySec = (delay / 1000).toFixed(1);
-      logger.warn(`  AI 重试 (${attempt}/${maxRetries}) [${delaySec}s 后]`);
-      logger.debug(`  原因: ${error.message}`);
-    },
-  };
-
-  let parsedResponse: ValidationResult;
-  try {
-    // Apply the system prompt before sending the analysis payload.
-    await provider.createSession(request.systemPrompt, {
-      thinkingLevel,
-      timeout: geminiConfig.timeout,
-    });
-
-    logger.section('发送完整分析数据至 AI...');
-    const rawResponse = await withRetry(() => provider.sendMessage(request.payload), retryOptions);
-
-    parsedResponse = parseResponse(rawResponse);
-  } catch (error) {
-    const { message, raw } = extractErrorDetails(error);
-    if (!options.pipeline) {
-      logger.error(`AI 单次分析请求失败: ${message}`);
-      logger.debug(raw);
+      model = execution.model;
+      result = execution.result;
+      delivery = execution.delivery;
+      completeCodexSession = execution.complete;
+      logger.detail(`模型: ${execution.model}`);
+      logger.detail(`思考深度: ${execution.reasoningEffort}`);
+      logger.detail(`任务: ${execution.threadId}`);
+    } catch (error) {
+      const { message, raw } = extractErrorDetails(error);
+      if (!options.pipeline) {
+        logger.error(`Codex 分析请求失败: ${message}`);
+        logger.debug(raw);
+      }
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'AI_PROVIDER_FAILED',
+        message: `Codex 分析失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
+        meta: { rawError: raw },
+      };
     }
-    return {
-      step: 'ai',
-      status: 'failed',
-      reasonCode: 'AI_PROVIDER_FAILED',
-      message: `AI 分析失败: ${message}`,
-      recoverable: true,
-      recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
-      meta: {
-        rawError: raw,
-      },
-    };
+  } else {
+    const geminiConfig = resolveGeminiConfig(config.ai);
+    const configuredModel = typeof options.model === 'string' ? options.model : undefined;
+    const configuredThinkingLevel =
+      typeof options.thinkingLevel === 'string' ? options.thinkingLevel : undefined;
+    let execution: Awaited<ReturnType<typeof executeGeminiAnalysis>>;
+    try {
+      execution = await executeGeminiAnalysis({
+        username,
+        config: geminiConfig,
+        request,
+        analysisState: analysisState.state,
+        provenance,
+        savedResult,
+        ...(configuredModel ? { model: configuredModel } : {}),
+        ...(configuredThinkingLevel ? { thinkingLevel: configuredThinkingLevel } : {}),
+        resend: options.resend,
+      });
+    } catch (error) {
+      const { message, raw } = extractErrorDetails(error);
+      if (!options.pipeline) {
+        logger.error(`AI 单次分析请求失败: ${message}`);
+        logger.debug(raw);
+      }
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'AI_PROVIDER_FAILED',
+        message: `AI 分析失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
+        meta: { rawError: raw },
+      };
+    }
+    model = execution.model;
+    if (execution.status === 'invalidThinkingLevel') {
+      logger.error(`无效的思考等级: "${execution.value}"`);
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'AI_INVALID_THINKING_LEVEL',
+        message: `无效的 thinkingLevel: ${execution.value}`,
+        recoverable: false,
+        recoverActions: getRecoveryActions('AI_INVALID_THINKING_LEVEL', { username }),
+      };
+    }
+    if (execution.status === 'apiKeyMissing') {
+      logger.error('未找到 API Key');
+      logger.info('请通过以下方式之一配置:');
+      logger.detail('1. 环境变量: GOOGLE_API_KEY 或 GEMINI_API_KEY');
+      logger.detail('2. 配置文件: v2er config ai.gemini.apiKey <key>');
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'AI_API_KEY_MISSING',
+        message: '缺少 API Key，无法发起 AI 请求',
+        recoverable: true,
+        recoverActions: getRecoveryActions('AI_API_KEY_MISSING', { username }),
+      };
+    }
+    if (execution.status === 'skipped') {
+      logger.info('分析数据未发生有效变化，跳过 AI 调用');
+      return {
+        step: 'ai',
+        status: 'skipped',
+        message: '分析数据未发生有效变化',
+        meta: { model, analysisFingerprint: provenance.analysisFingerprint },
+      };
+    }
+    result = execution.result;
+    warnings = execution.warnings;
+    delivery = execution.delivery;
   }
-  const { data: result, warnings } = parsedResponse;
 
   if (warnings.length > 0) {
     logger.section('AI 响应警告:');
@@ -316,13 +352,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
       updateAnalysisState(username, (state) => {
         assertAnalyzedProvenanceUnchanged(state);
 
-        return recordProviderDelivery(state, {
-          providerKey,
-          analysisFingerprint: provenance.analysisFingerprint,
-          payloadHash: provenance.payloadHash,
-          basedOnPartial: provenance.basedOnPartial,
-          deliveryMode: options.resend ? 'resend' : 'change',
-        });
+        return recordProviderDelivery(state, delivery);
       });
     });
   } catch (error) {
@@ -357,6 +387,24 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     };
   }
 
+  if (completeCodexSession) {
+    try {
+      await completeCodexSession();
+    } catch (error) {
+      const { message, raw } = extractErrorDetails(error);
+      logger.error(`更新 Codex session 状态失败: ${message}`);
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
+        message: `AI 结果已保存，Codex session 状态更新失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('AI_CODEX_SESSION_UPDATE_FAILED', { username }),
+        meta: { rawError: raw },
+      };
+    }
+  }
+
   const cleanup = cleanExpiredData(username);
   const cleaned = cleanup.deleted;
   const cleanupNotice = createDataFilesCleanedNotice(username, cleanup);
@@ -371,9 +419,10 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     message: 'AI 分析完成',
     meta: {
       model,
+      provider: selectedProvider,
       warningCount: warnings.length,
       cleanedFiles: cleaned,
-      deliveryMode: options.resend ? 'resend' : 'change',
+      deliveryMode: delivery.deliveryMode,
     },
     notices: cleanupNotice ? [cleanupNotice] : undefined,
   };

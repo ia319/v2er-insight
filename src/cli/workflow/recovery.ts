@@ -146,6 +146,31 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '修正全局默认 thinkingLevel，避免后续重复报错',
     },
   ],
+  AI_INVALID_PROVIDER_OPTIONS: [],
+  AI_CODEX_BUSY: [
+    {
+      type: 'instruction',
+      content: '在 ChatGPT App 中查看当前任务状态，等待活动回合结束后重试',
+      description: '同一 Codex 任务已有活动回合，分析数据尚未重复发送',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '活动回合结束后恢复已记录状态',
+    },
+  ],
+  AI_CODEX_SESSION_UPDATE_FAILED: [
+    {
+      type: 'instruction',
+      content: '保留 result.json、analysis-state.json 和 codex-sessions.json 用于恢复',
+      description: '结果与 provenance 已保存，Codex session 完成状态仍待更新',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '重新读取已完成回合并补全 session 状态',
+    },
+  ],
   AI_PROVIDER_FAILED: [
     {
       type: 'instruction',
