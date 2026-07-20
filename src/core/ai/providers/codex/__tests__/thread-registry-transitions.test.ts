@@ -3,6 +3,7 @@ import {
   CodexThreadRegistryError,
   activateCodexThreadSession,
   appendPendingCodexThreadState,
+  cancelPreparedCodexAnalysisDelivery,
   completeCodexPromptTurn,
   completeCodexThreadTurn,
   createPendingCodexThreadState,
@@ -173,6 +174,46 @@ describe('Codex thread registry stage transitions', () => {
       '2026-07-19T02:04:00.000Z',
     );
     expect(getSession(registry, 'session-2').pendingAnalysis?.turnId).toBe('new-analysis');
+  });
+
+  it('should cancel only the matching unaccepted analysis delivery', () => {
+    const prepared = prepareCodexAnalysisDelivery(
+      createRegistry(),
+      'session-1',
+      DELIVERY,
+      '2026-07-19T02:01:00.000Z',
+    );
+    const cancelled = cancelPreparedCodexAnalysisDelivery(
+      prepared,
+      'session-1',
+      DELIVERY,
+      '2026-07-19T02:02:00.000Z',
+    );
+
+    expect(getSession(cancelled, 'session-1').pendingAnalysis).toBeUndefined();
+    expect(() =>
+      cancelPreparedCodexAnalysisDelivery(
+        prepared,
+        'session-1',
+        { ...DELIVERY, payloadHash: 'b'.repeat(64) },
+        '2026-07-19T02:02:00.000Z',
+      ),
+    ).toThrow(CodexThreadRegistryError);
+
+    const accepted = recordCodexThreadTurnStart(
+      prepared,
+      'session-1',
+      'update-turn',
+      '2026-07-19T02:02:00.000Z',
+    );
+    expect(() =>
+      cancelPreparedCodexAnalysisDelivery(
+        accepted,
+        'session-1',
+        DELIVERY,
+        '2026-07-19T02:03:00.000Z',
+      ),
+    ).toThrow(CodexThreadRegistryError);
   });
 
   it('should reject missing sessions, out-of-order stages, and mismatched turn IDs', () => {

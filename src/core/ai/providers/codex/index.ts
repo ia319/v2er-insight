@@ -102,6 +102,7 @@ export {
   CodexThreadRegistryError,
   activateCodexThreadSession,
   appendPendingCodexThreadState,
+  cancelPreparedCodexAnalysisDelivery,
   completeCodexPromptTurn,
   completeCodexThreadTurn,
   createPendingCodexThreadState,

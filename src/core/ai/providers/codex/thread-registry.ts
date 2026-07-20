@@ -1,4 +1,5 @@
 import { isCodexThreadRegistryV1 } from './thread-state-validator';
+import { matchesCodexAnalysisDelivery } from './analysis-delivery';
 import {
   CODEX_THREAD_REGISTRY_SCHEMA_VERSION,
   CODEX_THREAD_STATE_SCHEMA_VERSION,
@@ -205,6 +206,34 @@ export function prepareCodexAnalysisDelivery(
       pendingAnalysis: { ...input, turnId: null },
       lastUsedAt: usedAt,
     };
+  });
+}
+
+/**
+ * Cancels a prepared delivery before an App Server turn has been accepted.
+ * @param registry - Latest validated Codex registry.
+ * @param localSessionId - Session containing the pending delivery.
+ * @param delivery - Complete identity of the delivery being cancelled.
+ * @param usedAt - ISO timestamp for the cancellation boundary.
+ * @returns A registry without the matching unaccepted delivery.
+ * @throws {CodexThreadRegistryError} When the delivery is absent, different, or already accepted.
+ */
+export function cancelPreparedCodexAnalysisDelivery(
+  registry: CodexThreadRegistryV1,
+  localSessionId: string,
+  delivery: PrepareCodexAnalysisDeliveryInput,
+  usedAt: string,
+): CodexThreadRegistryV1 {
+  return updateSession(registry, localSessionId, (session) => {
+    assertUsageTime(session, usedAt);
+    const pending = session.pendingAnalysis;
+    if (pending === undefined || !matchesCodexAnalysisDelivery(pending, delivery)) {
+      return invalidTransition('Codex analysis cancellation does not match the pending delivery');
+    }
+    if (pending.turnId !== null) {
+      return invalidTransition('An accepted Codex analysis delivery cannot be cancelled');
+    }
+    return { ...session, pendingAnalysis: undefined, lastUsedAt: usedAt };
   });
 }
 

@@ -18,6 +18,7 @@ import type {
   PrepareCodexAnalysisDeliveryInput,
 } from './thread-state';
 import { assertCodexTurnCompleted, selectCodexFinalMessage } from './turn-result';
+import { matchesCodexAnalysisDelivery } from './analysis-delivery';
 
 export type CodexAnalysisTurnErrorCode =
   | 'invalid_stage'
@@ -115,27 +116,12 @@ function assertDeliveryIdentity(delivery: PrepareCodexAnalysisDeliveryInput): vo
   }
 }
 
-function pendingMatchesDelivery(
-  pending: CodexPendingAnalysisDelivery,
-  delivery: PrepareCodexAnalysisDeliveryInput,
-): boolean {
-  return (
-    pending.deliveryId === delivery.deliveryId &&
-    pending.providerKey === delivery.providerKey &&
-    pending.analysisFingerprint === delivery.analysisFingerprint &&
-    pending.payloadHash === delivery.payloadHash &&
-    pending.basedOnPartial === delivery.basedOnPartial &&
-    pending.deliveryMode === delivery.deliveryMode &&
-    pending.reasoningEffort === delivery.reasoningEffort
-  );
-}
-
 function pendingStatesMatch(
   first: CodexPendingAnalysisDelivery | undefined,
   second: CodexPendingAnalysisDelivery | undefined,
 ): boolean {
   if (first === undefined || second === undefined) return first === second;
-  return first.turnId === second.turnId && pendingMatchesDelivery(first, second);
+  return first.turnId === second.turnId && matchesCodexAnalysisDelivery(first, second);
 }
 
 function assertSessionSnapshot(options: SendCodexAnalysisTurnOptions): CodexThreadState {
@@ -194,7 +180,7 @@ function assertPreparedAnalysisTransition(
     persisted.threadId !== state.threadId ||
     persisted.lastTurnId !== state.lastTurnId ||
     persisted.pendingAnalysis?.turnId !== null ||
-    !pendingMatchesDelivery(persisted.pendingAnalysis, delivery)
+    !matchesCodexAnalysisDelivery(persisted.pendingAnalysis, delivery)
   ) {
     throw new CodexAnalysisTurnError(
       'preparation_not_persisted',
@@ -210,7 +196,7 @@ async function ensureAnalysisDeliveryPrepared(
   if (options.state.pendingAnalysis !== undefined) {
     if (
       options.state.pendingAnalysis.turnId !== null ||
-      !pendingMatchesDelivery(options.state.pendingAnalysis, options.delivery)
+      !matchesCodexAnalysisDelivery(options.state.pendingAnalysis, options.delivery)
     ) {
       throw new CodexAnalysisTurnError(
         'turn_already_started',
@@ -250,7 +236,7 @@ function assertInitialAnalysisTransitionPersisted(
       : state?.pendingAnalysis !== undefined &&
         state.pendingAnalysis.turnId === turnId &&
         delivery !== undefined &&
-        pendingMatchesDelivery(state.pendingAnalysis, delivery);
+        matchesCodexAnalysisDelivery(state.pendingAnalysis, delivery);
   if (
     state?.bootstrapStatus !== status ||
     state.initialAnalysisTurnId !== turnId ||
@@ -282,7 +268,7 @@ function assertReadyAnalysisTransitionPersisted(
       ? state?.pendingAnalysis === undefined
       : state?.pendingAnalysis !== undefined &&
         state.pendingAnalysis.turnId === turnId &&
-        pendingMatchesDelivery(state.pendingAnalysis, delivery);
+        matchesCodexAnalysisDelivery(state.pendingAnalysis, delivery);
   if (
     registry.activeSessionId !== localSessionId ||
     state?.bootstrapStatus !== 'ready' ||
