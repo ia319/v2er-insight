@@ -114,7 +114,7 @@ export class JsonlRpcClient {
   }
 
   /**
-   * Sends a client notification without creating a pending request.
+   * Sends a client notification as a one-way JSON-RPC message.
    * @param method - App Server notification method.
    * @param params - Optional JSON-compatible notification parameters.
    */

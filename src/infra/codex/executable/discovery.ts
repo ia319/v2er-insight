@@ -39,7 +39,7 @@ function getPathExecutableNames(platform: NodeJS.Platform): readonly string[] {
 /**
  * Collects Codex CLI candidates in selection priority order.
  * @param options - Explicit path and injectable host discovery inputs.
- * @returns Deduplicated executable candidates without performing protocol checks.
+ * @returns Deduplicated executable candidates for subsequent protocol checks.
  */
 export function collectCodexExecutables(
   options: CodexExecutableDiscoveryOptions,

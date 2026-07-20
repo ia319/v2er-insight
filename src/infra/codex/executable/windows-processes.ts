@@ -29,7 +29,7 @@ export function parseWindowsProcessPaths(output: string): string[] {
 }
 
 /**
- * Reads executable paths for running ChatGPT and Codex processes without modifying App state.
+ * Reads executable paths through read-only inspection of running ChatGPT and Codex processes.
  * @returns Process paths available to the current Windows account.
  */
 export function getWindowsCodexProcessPaths(): string[] {

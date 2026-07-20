@@ -78,7 +78,7 @@ export class CodexAppServerConnection {
     return this.initialization;
   }
 
-  /** Reads authentication state without retaining account identity fields. */
+  /** Reads the account type and authentication availability state. */
   async readAccount(): Promise<CodexAccountStatus> {
     await this.initialize();
     return this.process.client.request(
@@ -111,7 +111,7 @@ export class CodexAppServerConnection {
     }
   }
 
-  /** Starts one persisted read-only thread without setting instruction fields. */
+  /** Starts one persisted thread with explicit read-only execution settings. */
   async startThread(options: CodexThreadStartOptions): Promise<CodexThreadSessionInfo> {
     await this.initialize();
     return this.process.client.request(
@@ -187,7 +187,7 @@ export class CodexAppServerConnection {
     );
   }
 
-  /** Starts a turn and waits for its terminal notification without a subscription race. */
+  /** Subscribes before starting a turn and waits for its terminal notification. */
   async runTurn(
     options: CodexTurnStartOptions,
     timeoutMs: number,

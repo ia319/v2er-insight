@@ -15,7 +15,7 @@ function validateTimeout(timeoutMs: number): void {
   }
 }
 
-/** Collects terminal turn notifications without losing events that precede the start response. */
+/** Collects terminal turn notifications, including events received before the start response. */
 export class CodexTurnCompletionCollector {
   private readonly threadId: string;
   private readonly completed = new Map<string, CodexTurnInfo>();

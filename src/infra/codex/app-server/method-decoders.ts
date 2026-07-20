@@ -57,7 +57,7 @@ export function decodeInitializeResponse(value: unknown): CodexServerInfo {
   };
 }
 
-/** Decodes account state without retaining account identity fields. */
+/** Decodes the account type and authentication availability state. */
 export function decodeAccountReadResponse(value: unknown): CodexAccountStatus {
   const record = expectRecord(value, 'account/read.result');
   const requiresOpenaiAuth = expectBoolean(
