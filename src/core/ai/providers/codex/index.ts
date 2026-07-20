@@ -6,6 +6,12 @@ export type {
   SendCodexAnalysisUpdateTurnOptions,
   SendCodexInitialAnalysisTurnOptions,
 } from './analysis-turn';
+export type { CodexAnalysisDeliveryPlan, CodexAnalysisDeliveryTarget } from './analysis-delivery';
+export {
+  isCodexAnalysisResultApplicable,
+  matchesCodexAnalysisDelivery,
+  planCodexAnalysisDelivery,
+} from './analysis-delivery';
 export {
   CodexAnalysisTurnError,
   activateCodexInitialAnalysisTurn,
