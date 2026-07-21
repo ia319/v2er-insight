@@ -32,6 +32,7 @@ import { startCodexAppServer } from './process';
 import type { CodexExecutableCandidate } from '../executable';
 
 type AppServerProcessHandle = Pick<CodexAppServerProcess, 'client' | 'close'>;
+const MAX_MODEL_LIST_PAGES = 100;
 
 export interface CodexAppServerConnectionOptions {
   startupTimeoutMs: number;
@@ -92,14 +93,21 @@ export class CodexAppServerConnection {
     );
   }
 
-  /** Reads every visible model page and rejects cyclic pagination cursors. */
+  /** Reads visible models within bounded pagination and rejects cyclic cursors. */
   async listModels(): Promise<CodexModelInfo[]> {
     await this.initialize();
     const models: CodexModelInfo[] = [];
     const seenCursors = new Set<string>();
     let cursor: string | null = null;
+    let pageCount = 0;
 
     while (true) {
+      if (pageCount >= MAX_MODEL_LIST_PAGES) {
+        throw new CodexAppServerProtocolError(
+          `model/list exceeded the maximum of ${MAX_MODEL_LIST_PAGES} pages`,
+        );
+      }
+      pageCount += 1;
       const page: CodexModelPage = await this.process.client.request(
         'model/list',
         cursor === null ? { includeHidden: false } : { cursor, includeHidden: false },

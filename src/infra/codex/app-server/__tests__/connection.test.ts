@@ -7,7 +7,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function createHarness() {
+function createHarness(
+  onRequest?: (request: Record<string, unknown>, output: PassThrough) => void,
+) {
   const input = new PassThrough();
   const output = new PassThrough();
   const client = new JsonlRpcClient(input, output, { defaultTimeoutMs: 1000 });
@@ -24,6 +26,7 @@ function createHarness() {
       const value = JSON.parse(line) as unknown;
       if (!isRecord(value)) throw new Error('Expected request object');
       requests.push(value);
+      onRequest?.(value, output);
       newline = buffer.indexOf('\n');
     }
   });
@@ -109,6 +112,32 @@ describe('CodexAppServerConnection', () => {
       method: 'model/list',
       params: { cursor: 'next', includeHidden: false },
     });
+    await connection.close();
+  });
+
+  it('should reject an unbounded stream of unique model cursors', async () => {
+    let modelPage = 0;
+    const { connection, requests } = createHarness((request, output) => {
+      if (typeof request.id !== 'number') return;
+      if (request.method === 'initialize') {
+        output.write(`${JSON.stringify({ id: request.id, result: initializeResult })}\n`);
+        return;
+      }
+      if (request.method !== 'model/list') return;
+
+      modelPage += 1;
+      output.write(
+        `${JSON.stringify({
+          id: request.id,
+          result: { data: [], nextCursor: `cursor-${modelPage}` },
+        })}\n`,
+      );
+    });
+
+    await expect(connection.listModels()).rejects.toThrow(
+      'model/list exceeded the maximum of 100 pages',
+    );
+    expect(requests.filter((request) => request.method === 'model/list')).toHaveLength(100);
     await connection.close();
   });
 
