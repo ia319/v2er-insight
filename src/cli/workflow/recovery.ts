@@ -146,7 +146,14 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '修正全局默认 thinkingLevel，避免后续重复报错',
     },
   ],
-  AI_INVALID_PROVIDER_OPTIONS: [],
+  AI_INVALID_PROVIDER_OPTIONS: [
+    {
+      type: 'instruction',
+      content: '将 --provider 或 ai.provider 设置为 gemini | codex，并使用对应的专属选项',
+      description:
+        'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort、--new-thread 和 --codex-project',
+    },
+  ],
   AI_CODEX_EXECUTABLE_NOT_FOUND: [
     {
       type: 'instruction',

@@ -30,6 +30,19 @@ describe('getRecoveryActions', () => {
     expect(actions.some((action) => action.content.includes('429'))).toBe(true);
   });
 
+  it('should guide invalid provider and provider-specific options', () => {
+    const actions = getRecoveryActions('AI_INVALID_PROVIDER_OPTIONS', { username: 'alice' });
+
+    expect(actions).toEqual([
+      {
+        type: 'instruction',
+        content: '将 --provider 或 ai.provider 设置为 gemini | codex，并使用对应的专属选项',
+        description:
+          'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort、--new-thread 和 --codex-project',
+      },
+    ]);
+  });
+
   it('should describe partial fetch recovery without assuming page failures', () => {
     const actions = getRecoveryActions('FETCH_PARTIAL_FAILED', { username: 'alice' });
 
