@@ -34,9 +34,10 @@ function createHarness() {
     forced: false,
     stderr: '',
   }));
-  const connection = new CodexAppServerConnection({ client, close }, { startupTimeoutMs: 1000 });
+  const processHandle = { client, close };
+  const connection = new CodexAppServerConnection(processHandle, { startupTimeoutMs: 1000 });
 
-  return { connection, output, requests };
+  return { connection, output, requests, processHandle };
 }
 
 const initializeResult = {
@@ -47,6 +48,17 @@ const initializeResult = {
 };
 
 describe('CodexAppServerConnection', () => {
+  it('should reject an invalid startup timeout', () => {
+    const { processHandle } = createHarness();
+
+    expect(
+      () =>
+        new CodexAppServerConnection(processHandle, {
+          startupTimeoutMs: 0,
+        }),
+    ).toThrow('startupTimeoutMs must be a positive finite number');
+  });
+
   it('should initialize once before reading account state', async () => {
     const { connection, output, requests } = createHarness();
     const first = connection.initialize();

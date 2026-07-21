@@ -58,6 +58,12 @@ export interface CodexTurnStartOptions {
 
 export type CodexTurnStartedHandler = (turn: CodexTurnInfo) => void | Promise<void>;
 
+function validateConnectionOptions(options: CodexAppServerConnectionOptions): void {
+  if (!Number.isFinite(options.startupTimeoutMs) || options.startupTimeoutMs <= 0) {
+    throw new RangeError('startupTimeoutMs must be a positive finite number');
+  }
+}
+
 /** Initialized App Server methods used by provider discovery and sessions. */
 export class CodexAppServerConnection {
   private readonly process: AppServerProcessHandle;
@@ -65,9 +71,7 @@ export class CodexAppServerConnection {
   private initialization?: Promise<CodexServerInfo>;
 
   constructor(processHandle: AppServerProcessHandle, options: CodexAppServerConnectionOptions) {
-    if (!Number.isFinite(options.startupTimeoutMs) || options.startupTimeoutMs <= 0) {
-      throw new RangeError('startupTimeoutMs must be a positive finite number');
-    }
+    validateConnectionOptions(options);
     this.process = processHandle;
     this.startupTimeoutMs = options.startupTimeoutMs;
   }
@@ -268,6 +272,7 @@ export function connectCodexAppServer(
   processOptions: CodexAppServerProcessOptions,
   connectionOptions: CodexAppServerConnectionOptions,
 ): CodexAppServerConnection {
+  validateConnectionOptions(connectionOptions);
   return new CodexAppServerConnection(
     startCodexAppServer(candidate, processOptions),
     connectionOptions,

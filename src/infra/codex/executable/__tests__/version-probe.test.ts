@@ -1,7 +1,26 @@
 import { PassThrough } from 'stream';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodexCliExit, CodexCliProcess } from '../launcher';
-import { CodexVersionProbeError, readCodexCliVersion } from '../version-probe';
+import type { CodexExecutableCandidate } from '../types';
+
+const mockedLaunchCodexCli = vi.hoisted(() => vi.fn());
+
+vi.mock('../launcher', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../launcher')>();
+  return { ...actual, launchCodexCli: mockedLaunchCodexCli };
+});
+
+import {
+  CodexVersionProbeError,
+  probeCodexCliVersion,
+  readCodexCliVersion,
+} from '../version-probe';
+
+const CANDIDATE: CodexExecutableCandidate = {
+  path: 'C:\\App\\codex.exe',
+  source: 'explicit',
+  kind: 'native',
+};
 
 function createProcess() {
   const stdin = new PassThrough();
@@ -17,6 +36,10 @@ function createProcess() {
 }
 
 describe('readCodexCliVersion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('should parse the reported CLI version', async () => {
     const process = createProcess();
     const reading = readCodexCliVersion(process.handle, 1000);
@@ -54,5 +77,19 @@ describe('readCodexCliVersion', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('probeCodexCliVersion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should reject an invalid timeout before launching a process', async () => {
+    await expect(probeCodexCliVersion(CANDIDATE, 0)).rejects.toThrow(
+      'version probe timeout must be a positive finite number',
+    );
+
+    expect(mockedLaunchCodexCli).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,21 @@
 import { PassThrough } from 'stream';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodexCliExit, CodexCliProcess } from '../../executable';
-import { CodexAppServerProcess } from '../process';
+
+const mockedLaunchCodexCli = vi.hoisted(() => vi.fn());
+
+vi.mock('../../executable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../executable')>();
+  return { ...actual, launchCodexCli: mockedLaunchCodexCli };
+});
+
+import { CodexAppServerProcess, startCodexAppServer } from '../process';
+
+const CANDIDATE = {
+  path: 'C:\\App\\codex.exe',
+  source: 'explicit',
+  kind: 'native',
+} as const;
 
 interface ProcessHarness {
   handle: CodexCliProcess;
@@ -29,6 +43,10 @@ function createProcessHarness(): ProcessHarness {
 }
 
 describe('CodexAppServerProcess', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('should close stdin and preserve a graceful exit', async () => {
     const harness = createProcessHarness();
     const process = new CodexAppServerProcess(harness.handle, {
@@ -94,5 +112,35 @@ describe('CodexAppServerProcess', () => {
         }),
     ).toThrow('requestTimeoutMs must be a positive finite number');
     harness.exitWith({ code: 0, signal: null });
+  });
+
+  it('should validate process options before launching the App Server', () => {
+    expect(() =>
+      startCodexAppServer(CANDIDATE, {
+        requestTimeoutMs: 0,
+        shutdownGraceMs: 1000,
+      }),
+    ).toThrow('requestTimeoutMs must be a positive finite number');
+
+    expect(mockedLaunchCodexCli).not.toHaveBeenCalled();
+  });
+
+  it('should terminate a launched process when owner construction fails', () => {
+    const harness = createProcessHarness();
+    const constructionError = new Error('stderr listener unavailable');
+    vi.spyOn(harness.stderr, 'on').mockImplementationOnce(() => {
+      throw constructionError;
+    });
+    mockedLaunchCodexCli.mockReturnValue(harness.handle);
+
+    expect(() =>
+      startCodexAppServer(CANDIDATE, {
+        requestTimeoutMs: 1000,
+        shutdownGraceMs: 1000,
+      }),
+    ).toThrow(constructionError);
+
+    expect(harness.terminate).toHaveBeenCalledOnce();
+    harness.exitWith({ code: null, signal: 'SIGTERM' });
   });
 });

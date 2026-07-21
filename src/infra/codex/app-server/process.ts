@@ -132,5 +132,16 @@ export function startCodexAppServer(
   candidate: CodexExecutableCandidate,
   options: CodexAppServerProcessOptions,
 ): CodexAppServerProcess {
-  return new CodexAppServerProcess(launchCodexCli(candidate, 'app-server'), options);
+  validateOptions(options);
+  const processHandle = launchCodexCli(candidate, 'app-server');
+  try {
+    return new CodexAppServerProcess(processHandle, options);
+  } catch (error) {
+    try {
+      processHandle.terminate();
+    } catch {
+      // Preserve the construction error when best-effort termination also fails.
+    }
+    throw error;
+  }
 }

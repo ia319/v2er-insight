@@ -88,6 +88,7 @@ export async function probeCodexCliVersion(
   candidate: CodexExecutableCandidate,
   timeoutMs: number,
 ): Promise<string> {
+  validateTimeout(timeoutMs);
   let processHandle: CodexCliProcess;
   try {
     processHandle = launchCodexCli(candidate, 'version');
