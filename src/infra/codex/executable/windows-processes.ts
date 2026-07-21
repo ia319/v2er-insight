@@ -1,5 +1,7 @@
 import { spawnSync } from 'child_process';
 
+const PROCESS_QUERY_TIMEOUT_MS = 5000;
+
 const PROCESS_PATH_SCRIPT = [
   '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)',
   "$names = @('ChatGPT', 'codex')",
@@ -39,6 +41,7 @@ export function getWindowsCodexProcessPaths(): string[] {
     {
       encoding: 'utf8',
       shell: false,
+      timeout: PROCESS_QUERY_TIMEOUT_MS,
       windowsHide: true,
     },
   );
