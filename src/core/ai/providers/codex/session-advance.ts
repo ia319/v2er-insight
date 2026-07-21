@@ -104,6 +104,13 @@ function getCompletionKind(state: CodexThreadState): CodexAnalysisCompletionKind
   }
 }
 
+function rejectUnsupportedPreparedAction(action: never): never {
+  throw new CodexAnalysisSessionAdvanceError(
+    'invalid_stage',
+    `Unsupported prepared Codex session action: ${JSON.stringify(action)}`,
+  );
+}
+
 async function settleSupersededResult(
   options: AdvanceCodexAnalysisSessionOptions,
 ): Promise<CodexThreadRegistryV1> {
@@ -237,6 +244,14 @@ export async function advanceCodexAnalysisSession(
       state: getSession(completed.registry, prepared.state.localSessionId),
       thread: prepared.thread,
     };
+  }
+
+  switch (prepared.action) {
+    case 'sendAnalysis':
+    case 'ready':
+      break;
+    default:
+      return rejectUnsupportedPreparedAction(prepared.action);
   }
 
   const resolved = await resolveDelivery(options);
