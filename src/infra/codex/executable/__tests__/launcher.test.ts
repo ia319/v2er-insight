@@ -1,8 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { createCodexLaunchSpec } from '../launcher';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockedSpawn = vi.hoisted(() => vi.fn());
+
+vi.mock('child_process', () => ({ spawn: mockedSpawn }));
+
+import { createCodexLaunchSpec, spawnCodexCli } from '../launcher';
 import type { CodexExecutableCandidate } from '../types';
 
 describe('createCodexLaunchSpec', () => {
+  beforeEach(() => {
+    mockedSpawn.mockReset();
+  });
+
   it('should launch native executables directly', () => {
     const candidate: CodexExecutableCandidate = {
       path: 'C:\\Program Files\\Codex\\codex.exe',
@@ -51,5 +60,34 @@ describe('createCodexLaunchSpec', () => {
     };
 
     expect(() => createCodexLaunchSpec(candidate, 'version', 'win32')).toThrow('must be absolute');
+  });
+
+  it('should pass only the bounded environment to the child process', () => {
+    const candidate: CodexExecutableCandidate = {
+      path: 'C:\\Program Files\\Codex\\codex.exe',
+      source: 'app-bundle',
+      kind: 'native',
+    };
+
+    spawnCodexCli(
+      candidate,
+      'version',
+      {
+        SystemRoot: 'C:\\Windows',
+        CODEX_HOME: 'D:\\CodexHome',
+        GEMINI_API_KEY: 'secret',
+        PATH: 'C:\\untrusted',
+      },
+      'win32',
+    );
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      candidate.path,
+      ['--version'],
+      expect.objectContaining({
+        env: { SystemRoot: 'C:\\Windows', CODEX_HOME: 'D:\\CodexHome' },
+        shell: false,
+      }),
+    );
   });
 });

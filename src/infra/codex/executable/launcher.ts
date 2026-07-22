@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
 import type { Readable, Writable } from 'stream';
+import { createCodexProcessEnvironment } from './process-environment';
 import type { CodexExecutableCandidate } from './types';
 
 export type CodexCliInvocation = 'version' | 'app-server';
@@ -74,14 +75,25 @@ export function createCodexLaunchSpec(
  * Starts a fixed Codex CLI operation with piped stdio.
  * @param candidate - Discovered executable candidate.
  * @param invocation - Allowed fixed CLI operation.
+ * @param sourceEnv - Parent environment used to build bounded child variables.
+ * @param platform - Host platform controlling launch and environment semantics.
  * @returns The child process owned by the caller.
  */
 export function spawnCodexCli(
   candidate: CodexExecutableCandidate,
   invocation: CodexCliInvocation,
+  sourceEnv: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
 ): ChildProcessWithoutNullStreams {
-  const launch = createCodexLaunchSpec(candidate, invocation);
+  const childEnv = createCodexProcessEnvironment(candidate, sourceEnv, platform);
+  const launch = createCodexLaunchSpec(
+    candidate,
+    invocation,
+    platform,
+    childEnv.ComSpec ?? 'cmd.exe',
+  );
   return spawn(launch.command, launch.args, {
+    env: childEnv,
     shell: false,
     windowsHide: true,
     windowsVerbatimArguments: launch.windowsVerbatimArguments,
