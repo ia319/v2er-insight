@@ -198,7 +198,6 @@ describe('CodexAppServerConnection', () => {
         cwd: 'D:\\data',
         approvalPolicy: 'never',
         sandbox: 'read-only',
-        excludeTurns: true,
       },
     });
 

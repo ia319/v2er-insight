@@ -151,7 +151,6 @@ export class CodexAppServerConnection {
         cwd: options.cwd,
         approvalPolicy: 'never',
         sandbox: 'read-only',
-        excludeTurns: true,
       },
       decodeThreadResumeResponse,
     );
