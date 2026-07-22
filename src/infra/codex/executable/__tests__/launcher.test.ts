@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockedSpawn = vi.hoisted(() => vi.fn());
+const mockedResolveWindowsCommandProcessorPath = vi.hoisted(() => vi.fn());
 
 vi.mock('child_process', () => ({ spawn: mockedSpawn }));
+vi.mock('../windows-command-processor', () => ({
+  resolveWindowsCommandProcessorPath: mockedResolveWindowsCommandProcessorPath,
+}));
 
 import { createCodexLaunchSpec, spawnCodexCli } from '../launcher';
 import type { CodexExecutableCandidate } from '../types';
@@ -10,6 +14,8 @@ import type { CodexExecutableCandidate } from '../types';
 describe('createCodexLaunchSpec', () => {
   beforeEach(() => {
     mockedSpawn.mockReset();
+    mockedResolveWindowsCommandProcessorPath.mockReset();
+    mockedResolveWindowsCommandProcessorPath.mockReturnValue('C:\\Windows\\System32\\cmd.exe');
   });
 
   it('should launch native executables directly', () => {
@@ -89,5 +95,44 @@ describe('createCodexLaunchSpec', () => {
         shell: false,
       }),
     );
+  });
+
+  it('should ignore inherited ComSpec when launching a command shim', () => {
+    const candidate: CodexExecutableCandidate = {
+      path: 'C:\\tools\\codex.cmd',
+      source: 'explicit',
+      kind: 'command-shim',
+    };
+    const sourceEnv = {
+      SystemRoot: 'C:\\Windows',
+      ComSpec: 'D:\\attacker.exe',
+      PATH: 'C:\\node',
+    };
+
+    spawnCodexCli(candidate, 'version', sourceEnv, 'win32');
+
+    expect(mockedResolveWindowsCommandProcessorPath).toHaveBeenCalledWith(sourceEnv);
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      'C:\\Windows\\System32\\cmd.exe',
+      ['/d', '/s', '/c', '""C:\\tools\\codex.cmd" --version"'],
+      expect.objectContaining({
+        env: { SystemRoot: 'C:\\Windows', PATH: 'C:\\node' },
+        shell: false,
+      }),
+    );
+  });
+
+  it('should reject a command shim when the system processor is unavailable', () => {
+    mockedResolveWindowsCommandProcessorPath.mockReturnValue(null);
+    const candidate: CodexExecutableCandidate = {
+      path: 'C:\\tools\\codex.cmd',
+      source: 'explicit',
+      kind: 'command-shim',
+    };
+
+    expect(() =>
+      spawnCodexCli(candidate, 'version', { SystemRoot: 'C:\\Windows' }, 'win32'),
+    ).toThrow('Windows system command processor is unavailable');
+    expect(mockedSpawn).not.toHaveBeenCalled();
   });
 });

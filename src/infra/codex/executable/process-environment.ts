@@ -14,7 +14,6 @@ const BASE_ENVIRONMENT_KEYS = [
   'XDG_CACHE_HOME',
   'SystemRoot',
   'WINDIR',
-  'ComSpec',
   'TEMP',
   'TMP',
   'TMPDIR',

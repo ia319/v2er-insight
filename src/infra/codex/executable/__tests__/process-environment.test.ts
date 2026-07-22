@@ -49,6 +49,7 @@ describe('createCodexProcessEnvironment', () => {
         CODEX_ACCESS_TOKEN: 'codex-secret',
         NODE_OPTIONS: '--require malicious.js',
         NODE_EXTRA_CA_CERTS: 'C:\\certs\\node.pem',
+        ComSpec: 'D:\\attacker.exe',
         APPLICATION_SECRET: 'application-secret',
       },
       'win32',

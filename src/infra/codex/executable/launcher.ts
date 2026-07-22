@@ -3,6 +3,7 @@ import path from 'path';
 import type { Readable, Writable } from 'stream';
 import { createCodexProcessEnvironment } from './process-environment';
 import type { CodexExecutableCandidate } from './types';
+import { resolveWindowsCommandProcessorPath } from './windows-command-processor';
 
 export type CodexCliInvocation = 'version' | 'app-server';
 
@@ -37,14 +38,14 @@ const UNSAFE_CMD_PATH_PATTERN = /[&|<>^%!"\r\n]/u;
  * @param candidate - Discovered executable candidate.
  * @param invocation - Allowed fixed CLI operation.
  * @param platform - Target host platform.
- * @param commandProcessor - Windows command processor used for `.cmd` shims.
+ * @param commandProcessor - Validated system command processor used for `.cmd` shims.
  * @returns Executable and argument vector for `spawn` with `shell: false`.
  */
 export function createCodexLaunchSpec(
   candidate: CodexExecutableCandidate,
   invocation: CodexCliInvocation,
   platform = process.platform,
-  commandProcessor = process.env.ComSpec ?? 'cmd.exe',
+  commandProcessor?: string,
 ): CodexLaunchSpec {
   const pathApi = platform === 'win32' ? path.win32 : path.posix;
   if (!pathApi.isAbsolute(candidate.path)) {
@@ -62,6 +63,9 @@ export function createCodexLaunchSpec(
 
   if (UNSAFE_CMD_PATH_PATTERN.test(candidate.path)) {
     throw new Error('Codex command shim path contains unsupported command characters');
+  }
+  if (!commandProcessor || !path.win32.isAbsolute(commandProcessor)) {
+    throw new Error('Windows system command processor is unavailable');
   }
 
   return {
@@ -86,12 +90,11 @@ export function spawnCodexCli(
   platform: NodeJS.Platform = process.platform,
 ): ChildProcessWithoutNullStreams {
   const childEnv = createCodexProcessEnvironment(candidate, sourceEnv, platform);
-  const launch = createCodexLaunchSpec(
-    candidate,
-    invocation,
-    platform,
-    childEnv.ComSpec ?? 'cmd.exe',
-  );
+  const commandProcessor =
+    candidate.kind === 'command-shim' && platform === 'win32'
+      ? (resolveWindowsCommandProcessorPath(sourceEnv) ?? undefined)
+      : undefined;
+  const launch = createCodexLaunchSpec(candidate, invocation, platform, commandProcessor);
   return spawn(launch.command, launch.args, {
     env: childEnv,
     shell: false,
