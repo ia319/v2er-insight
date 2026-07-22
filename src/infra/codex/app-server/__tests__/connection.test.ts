@@ -160,6 +160,7 @@ describe('CodexAppServerConnection', () => {
       params: {
         model: 'gpt-current',
         cwd: 'D:\\data',
+        config: { web_search: 'disabled' },
         approvalPolicy: 'never',
         sandbox: 'read-only',
         serviceName: 'v2er-insight',
@@ -196,6 +197,7 @@ describe('CodexAppServerConnection', () => {
         threadId: 'thread-1',
         model: 'gpt-current',
         cwd: 'D:\\data',
+        config: { web_search: 'disabled' },
         approvalPolicy: 'never',
         sandbox: 'read-only',
       },

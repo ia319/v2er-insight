@@ -33,6 +33,7 @@ import type { CodexExecutableCandidate } from '../executable';
 
 type AppServerProcessHandle = Pick<CodexAppServerProcess, 'client' | 'close'>;
 const MAX_MODEL_LIST_PAGES = 100;
+const THREAD_CONFIG: JsonValue = { web_search: 'disabled' };
 
 export interface CodexAppServerConnectionOptions {
   startupTimeoutMs: number;
@@ -131,6 +132,7 @@ export class CodexAppServerConnection {
       {
         model: options.model,
         cwd: options.cwd,
+        config: THREAD_CONFIG,
         approvalPolicy: 'never',
         sandbox: 'read-only',
         serviceName: 'v2er-insight',
@@ -149,6 +151,7 @@ export class CodexAppServerConnection {
         threadId: options.threadId,
         model: options.model,
         cwd: options.cwd,
+        config: THREAD_CONFIG,
         approvalPolicy: 'never',
         sandbox: 'read-only',
       },
