@@ -23,7 +23,7 @@ const SIGNATURE_QUERY_SCRIPT = [
   '  }',
   '})',
   '[PSCustomObject]@{ items = $items } | ConvertTo-Json -Compress -Depth 3',
-].join('; ');
+].join('\n');
 
 export interface WindowsAuthenticodeSignature {
   status: string;

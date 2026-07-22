@@ -40,7 +40,7 @@ describe('getWindowsAuthenticodeSignatures', () => {
     });
     expect(mockedSpawnSync).toHaveBeenCalledWith(
       'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-      expect.any(Array),
+      expect.arrayContaining(['-Command', expect.stringContaining('[PSCustomObject]@{\n')]),
       expect.objectContaining({
         shell: false,
         timeout: 10_000,
