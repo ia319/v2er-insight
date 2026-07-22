@@ -30,8 +30,9 @@ vi.mock('../session/codex-check', () => ({ checkCodexSession: mockedCheckCodexSe
 vi.mock('@/infra/logger', () => ({ logger: mockedLogger }));
 
 import { runSessionCheck } from '../session';
+import type { CodexSessionCheckReport } from '../session/codex-types';
 
-function createCodexReport() {
+function createCodexReport(): CodexSessionCheckReport {
   return {
     appDetected: true,
     candidates: [
@@ -42,6 +43,11 @@ function createCodexReport() {
           kind: 'native' as const,
         },
         version: { status: 'available' as const, version: '0.2.0' },
+        trust: {
+          status: 'trusted',
+          basis: 'windows-authenticode',
+          publisher: 'OpenAI OpCo, LLC',
+        },
         selection: 'selected' as const,
       },
     ],
