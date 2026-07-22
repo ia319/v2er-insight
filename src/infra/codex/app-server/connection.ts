@@ -33,7 +33,18 @@ import type { CodexExecutableCandidate } from '../executable';
 
 type AppServerProcessHandle = Pick<CodexAppServerProcess, 'client' | 'close'>;
 const MAX_MODEL_LIST_PAGES = 100;
-const THREAD_CONFIG: JsonValue = { web_search: 'disabled' };
+const THREAD_CONFIG = {
+  web_search: 'disabled',
+  features: {
+    apps: false,
+    goals: false,
+    hooks: false,
+    multi_agent: false,
+    remote_plugin: false,
+    shell_snapshot: false,
+    shell_tool: false,
+  },
+} satisfies JsonValue;
 
 export interface CodexAppServerConnectionOptions {
   startupTimeoutMs: number;
