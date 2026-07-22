@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockedSpawnSync = vi.hoisted(() => vi.fn());
 
 vi.mock('child_process', () => ({ spawnSync: mockedSpawnSync }));
+vi.mock('../windows-powershell', () => ({
+  resolveWindowsPowerShellPath: () =>
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+}));
 
 import { getWindowsCodexProcessPaths } from '../windows-processes';
 
@@ -20,7 +24,7 @@ describe('getWindowsCodexProcessPaths', () => {
 
     expect(getWindowsCodexProcessPaths()).toEqual(['C:\\App\\codex.exe', 'C:\\App\\ChatGPT.exe']);
     expect(mockedSpawnSync).toHaveBeenCalledWith(
-      'powershell.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       expect.any(Array),
       expect.objectContaining({ timeout: 5000 }),
     );

@@ -111,10 +111,10 @@ export async function executeCodexAnalysis(
     projectPath: project.path,
     forceNew: options.newThread,
   });
-  const candidates = discoverCodexExecutables(
+  const discovery = discoverCodexExecutables(
     options.config.executable ? { explicitPath: options.config.executable } : {},
   );
-  const runtime = await selectCodexRuntime(candidates, {
+  const runtime = await selectCodexRuntime(discovery.launchCandidates, {
     versionTimeoutMs: options.config.startupTimeout,
     process: {
       requestTimeoutMs: options.config.startupTimeout,

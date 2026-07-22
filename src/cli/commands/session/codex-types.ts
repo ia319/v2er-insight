@@ -4,7 +4,11 @@ import type {
   CodexRuntimeAttempt,
   CodexThreadState,
 } from '@/core/ai/providers/codex';
-import type { CodexExecutableCandidate, CodexThreadInfo } from '@/infra/codex';
+import type {
+  CodexExecutableCandidate,
+  CodexExecutableTrust,
+  CodexThreadInfo,
+} from '@/infra/codex';
 
 export type CodexDiagnosticSeverity = 'warning' | 'error';
 
@@ -16,10 +20,12 @@ export interface CodexDiagnosticIssue {
 
 export type CodexCandidateVersion =
   | { status: 'available'; version: string }
-  | { status: 'unavailable'; message: string };
+  | { status: 'unavailable'; message: string }
+  | { status: 'not_checked' };
 
 export interface CodexCandidateDiagnostic {
   candidate: CodexExecutableCandidate;
+  trust: CodexExecutableTrust;
   version: CodexCandidateVersion;
   selection: 'selected' | 'rejected' | 'not_checked';
   attemptCode?: CodexRuntimeAttempt['code'];

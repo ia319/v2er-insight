@@ -8,7 +8,12 @@ import {
   type CodexThreadState,
   type SelectedCodexRuntime,
 } from '@/core/ai/providers/codex';
-import type { CodexExecutableCandidate, CodexModelInfo, CodexThreadInfo } from '@/infra/codex';
+import type {
+  CodexExecutableCandidate,
+  CodexExecutableDiscovery,
+  CodexModelInfo,
+  CodexThreadInfo,
+} from '@/infra/codex';
 import { checkCodexSession, type CodexSessionCheckDependencies } from '../codex-check';
 
 const CONFIG: ResolvedCodexConfig = {
@@ -29,6 +34,27 @@ const second: CodexExecutableCandidate = {
   source: 'app-bundle',
   kind: 'native',
 };
+const manualOnly: CodexExecutableCandidate = {
+  path: 'C:\\tools\\codex.cmd',
+  source: 'path',
+  kind: 'command-shim',
+};
+
+function createDiscovery(
+  launchCandidates: readonly CodexExecutableCandidate[] = [first, second],
+): CodexExecutableDiscovery {
+  return {
+    observations: launchCandidates.map((candidate) => ({
+      candidate,
+      trust: {
+        status: 'trusted',
+        basis: 'windows-authenticode',
+        publisher: 'OpenAI OpCo, LLC',
+      },
+    })),
+    launchCandidates: [...launchCandidates],
+  };
+}
 
 function createSession(): CodexThreadState {
   return {
@@ -136,7 +162,7 @@ function createDependencies(
   };
 
   return {
-    discover: vi.fn(() => [first, second]),
+    discover: vi.fn(() => createDiscovery()),
     probeVersion: vi.fn(async (candidate) => {
       if (candidate === first) throw new Error('old version unavailable');
       return '0.2.0';
@@ -199,7 +225,7 @@ describe('checkCodexSession', () => {
       version: '0.1.0',
     };
     const dependencies = createDependencies({
-      discover: vi.fn(() => [first]),
+      discover: vi.fn(() => createDiscovery([first])),
       probeVersion: vi.fn(async () => '0.1.0'),
       selectRuntime: vi.fn(async () => {
         throw new CodexRuntimeSelectionError([attempt]);
@@ -226,6 +252,34 @@ describe('checkCodexSession', () => {
     expect(report.candidates).toMatchObject([
       { selection: 'rejected', attemptCode: 'protocol_failed' },
     ]);
+  });
+
+  it('should report manual-only candidates without probing or launching them', async () => {
+    const discovery = createDiscovery([second]);
+    discovery.observations.push({
+      candidate: manualOnly,
+      trust: { status: 'manual_only', reason: 'explicit_path_required' },
+    });
+    const dependencies = createDependencies({
+      discover: vi.fn(() => discovery),
+    });
+
+    const report = await checkCodexSession('alice', CONFIG, dependencies);
+
+    expect(dependencies.selectRuntime).toHaveBeenCalledWith(
+      [second],
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(dependencies.probeVersion).toHaveBeenCalledTimes(1);
+    expect(dependencies.probeVersion).not.toHaveBeenCalledWith(manualOnly, expect.any(Number));
+    expect(report.candidates).toContainEqual(
+      expect.objectContaining({
+        candidate: manualOnly,
+        version: { status: 'not_checked' },
+        selection: 'not_checked',
+      }),
+    );
   });
 
   it('should expose the live model catalog when configured model selection fails', async () => {

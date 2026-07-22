@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import { resolveWindowsPowerShellPath } from './windows-powershell';
 
 const PROCESS_QUERY_TIMEOUT_MS = 5000;
 
@@ -35,8 +36,10 @@ export function parseWindowsProcessPaths(output: string): string[] {
  * @returns Process paths available to the current Windows account.
  */
 export function getWindowsCodexProcessPaths(): string[] {
+  const powershellPath = resolveWindowsPowerShellPath();
+  if (!powershellPath) return [];
   const result = spawnSync(
-    'powershell.exe',
+    powershellPath,
     ['-NoProfile', '-NonInteractive', '-Command', PROCESS_PATH_SCRIPT],
     {
       encoding: 'utf8',

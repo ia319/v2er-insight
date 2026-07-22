@@ -20,6 +20,8 @@ import {
   discoverCodexExecutables,
   probeCodexCliVersion,
   type CodexExecutableCandidate,
+  type CodexExecutableDiscovery,
+  type CodexExecutableObservation,
   type CodexModelInfo,
 } from '@/infra/codex';
 import {
@@ -43,7 +45,7 @@ import type {
 type VersionProbe = (candidate: CodexExecutableCandidate, timeoutMs: number) => Promise<string>;
 
 export interface CodexSessionCheckDependencies {
-  discover(config: ResolvedCodexConfig): CodexExecutableCandidate[];
+  discover(config: ResolvedCodexConfig): CodexExecutableDiscovery;
   probeVersion: VersionProbe;
   selectRuntime(
     candidates: readonly CodexExecutableCandidate[],
@@ -168,19 +170,17 @@ function mapModels(models: readonly CodexModelInfo[]): CodexModelDiagnostic[] {
 }
 
 function mergeCandidateDiagnostics(
-  candidates: readonly CodexExecutableCandidate[],
+  observations: readonly CodexExecutableObservation[],
   versions: ReadonlyMap<CodexExecutableCandidate, CodexCandidateVersion>,
   selected: CodexExecutableCandidate | null,
   attempts: readonly CodexRuntimeAttempt[],
 ): CodexCandidateDiagnostic[] {
-  return candidates.map((candidate) => {
+  return observations.map(({ candidate, trust }) => {
     const attempt = attempts.find((item) => item.candidate === candidate);
     return {
       candidate,
-      version: versions.get(candidate) ?? {
-        status: 'unavailable',
-        message: 'Version probe result is unavailable',
-      },
+      trust,
+      version: versions.get(candidate) ?? { status: 'not_checked' },
       selection:
         candidate === selected ? 'selected' : attempt === undefined ? 'not_checked' : 'rejected',
       ...(attempt ? { attemptCode: attempt.code } : {}),
@@ -241,7 +241,8 @@ export async function checkCodexSession(
     });
   }
 
-  const candidates = dependencies.discover(config);
+  const discovery = dependencies.discover(config);
+  const candidates = discovery.launchCandidates;
   const versions = await inspectCandidateVersions(
     candidates,
     config.startupTimeout,
@@ -249,8 +250,10 @@ export async function checkCodexSession(
   );
   const cachedProbe: VersionProbe = async (candidate) => {
     const report = versions.get(candidate);
-    if (!report || report.status === 'unavailable') {
-      throw new Error(report?.message ?? 'Version probe result is unavailable');
+    if (!report || report.status !== 'available') {
+      throw new Error(
+        report?.status === 'unavailable' ? report.message : 'Version probe result is unavailable',
+      );
     }
     return report.version;
   };
@@ -358,11 +361,12 @@ export async function checkCodexSession(
   });
 
   return {
-    appDetected: candidates.some(
-      (candidate) => candidate.source === 'running-app-server' || candidate.source === 'app-bundle',
+    appDetected: discovery.observations.some(
+      ({ candidate }) =>
+        candidate.source === 'running-app-server' || candidate.source === 'app-bundle',
     ),
     candidates: mergeCandidateDiagnostics(
-      candidates,
+      discovery.observations,
       versions,
       selected?.candidate ?? null,
       attempts,

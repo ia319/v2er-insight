@@ -2,11 +2,20 @@ import fs from 'fs';
 import path from 'path';
 import type {
   CodexExecutableCandidate,
+  CodexExecutableDiscovery,
   CodexExecutableDiscoveryOptions,
   CodexExecutableKind,
+  CodexExecutableObservation,
   CodexExecutableSource,
+  CodexExecutableTrust,
 } from './types';
+import {
+  getWindowsAuthenticodeSignatures,
+  type WindowsAuthenticodeSignature,
+} from './windows-signature';
 import { getWindowsCodexProcessPaths } from './windows-processes';
+
+const OPENAI_WINDOWS_PUBLISHERS = new Set(['OpenAI OpCo, LLC']);
 
 interface CodexExecutableDiscoveryHost {
   platform: NodeJS.Platform;
@@ -69,6 +78,7 @@ export function collectCodexExecutables(
 
   if (options.explicitPath?.trim()) {
     addCandidate(options.explicitPath.trim(), 'explicit', true);
+    return candidates;
   }
 
   if (platform === 'win32') {
@@ -102,6 +112,68 @@ export function collectCodexExecutables(
   return candidates;
 }
 
+function classifyAutomaticTrust(
+  candidate: CodexExecutableCandidate,
+  platform: NodeJS.Platform,
+  signatures: ReadonlyMap<string, WindowsAuthenticodeSignature>,
+): CodexExecutableTrust {
+  if (candidate.source === 'path') {
+    return { status: 'manual_only', reason: 'explicit_path_required' };
+  }
+  if (platform !== 'win32' || candidate.kind !== 'native') {
+    return { status: 'rejected', reason: 'signature_unavailable' };
+  }
+
+  const signature = signatures.get(candidate.path.toLowerCase());
+  if (!signature) return { status: 'rejected', reason: 'signature_unavailable' };
+  if (signature.status !== 'Valid') {
+    return {
+      status: 'rejected',
+      reason: 'signature_invalid',
+      ...(signature.publisher ? { publisher: signature.publisher } : {}),
+    };
+  }
+  if (!signature.publisher || !OPENAI_WINDOWS_PUBLISHERS.has(signature.publisher)) {
+    return {
+      status: 'rejected',
+      reason: 'publisher_mismatch',
+      ...(signature.publisher ? { publisher: signature.publisher } : {}),
+    };
+  }
+  return {
+    status: 'trusted',
+    basis: 'windows-authenticode',
+    publisher: signature.publisher,
+  };
+}
+
+/**
+ * Applies explicit authorization and platform signature policy to discovered paths.
+ * @param candidates - Discovered paths in runtime selection priority order.
+ * @param platform - Host platform controlling automatic trust requirements.
+ * @param signatures - Authenticode evidence keyed by case-insensitive Windows path.
+ * @returns Diagnostic observations and the subset authorized for process launch.
+ */
+export function classifyCodexExecutables(
+  candidates: readonly CodexExecutableCandidate[],
+  platform: NodeJS.Platform,
+  signatures: ReadonlyMap<string, WindowsAuthenticodeSignature> = new Map(),
+): CodexExecutableDiscovery {
+  const observations: CodexExecutableObservation[] = candidates.map((candidate) => ({
+    candidate,
+    trust:
+      candidate.source === 'explicit'
+        ? { status: 'trusted', basis: 'explicit' }
+        : classifyAutomaticTrust(candidate, platform, signatures),
+  }));
+  return {
+    observations,
+    launchCandidates: observations
+      .filter((observation) => observation.trust.status === 'trusted')
+      .map((observation) => observation.candidate),
+  };
+}
+
 /**
  * Discovers Codex CLI candidates from the active host environment.
  * @param options - Optional explicit executable path.
@@ -109,13 +181,24 @@ export function collectCodexExecutables(
  */
 export function discoverCodexExecutables(
   options: CodexExecutableDiscoveryOptions = {},
-): CodexExecutableCandidate[] {
+): CodexExecutableDiscovery {
   const platform = process.platform;
-  return collectCodexExecutables(options, {
+  const candidates = collectCodexExecutables(options, {
     platform,
     env: process.env,
     cwd: process.cwd(),
     processPaths: platform === 'win32' ? getWindowsCodexProcessPaths() : [],
     isFile: isExistingFile,
   });
+  const automaticPaths = candidates
+    .filter(
+      (candidate) =>
+        candidate.source !== 'explicit' &&
+        candidate.source !== 'path' &&
+        candidate.kind === 'native',
+    )
+    .map((candidate) => candidate.path);
+  const signatures =
+    platform === 'win32' ? getWindowsAuthenticodeSignatures(automaticPaths) : new Map();
+  return classifyCodexExecutables(candidates, platform, signatures);
 }

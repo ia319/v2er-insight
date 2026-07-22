@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAIAnalysisResultFixture } from '@/core/ai/__tests__/result-fixture';
 import type { CodexThreadRegistryV1, CodexThreadState } from '@/core/ai/providers/codex';
+import type { CodexExecutableCandidate } from '@/infra/codex';
 
 const mocks = vi.hoisted(() => ({
   activate: vi.fn(),
@@ -47,6 +48,11 @@ vi.mock('@/infra/storage', async (importOriginal) => ({
 import { executeCodexAnalysis, type ExecuteCodexAnalysisOptions } from '../codex';
 
 const HASH = 'a'.repeat(64);
+const CODEX_CANDIDATE: CodexExecutableCandidate = {
+  path: 'C:\\App\\codex.exe',
+  source: 'app-bundle',
+  kind: 'native',
+};
 const STATE: CodexThreadState = {
   kind: 'codex',
   schemaVersion: 1,
@@ -111,11 +117,21 @@ beforeEach(() => {
   mocks.readRegistry.mockReturnValue({ status: 'valid', registry: REGISTRY });
   mocks.resolveProject.mockReturnValue({ path: 'D:\\Data', source: 'storage' });
   mocks.selectModelRequest.mockReturnValue({ model: 'gpt-current', source: 'session' });
-  mocks.discover.mockReturnValue([
-    { path: 'C:\\App\\codex.exe', source: 'app-bundle', kind: 'native' },
-  ]);
+  mocks.discover.mockReturnValue({
+    observations: [
+      {
+        candidate: CODEX_CANDIDATE,
+        trust: {
+          status: 'trusted',
+          basis: 'windows-authenticode',
+          publisher: 'OpenAI OpCo, LLC',
+        },
+      },
+    ],
+    launchCandidates: [CODEX_CANDIDATE],
+  });
   mocks.selectRuntime.mockResolvedValue({
-    candidate: { path: 'C:\\App\\codex.exe', source: 'app-bundle', kind: 'native' },
+    candidate: CODEX_CANDIDATE,
     version: '0.144.5',
     model: { model: 'gpt-current', reasoningEffort: 'high' },
     connection: {
@@ -150,6 +166,7 @@ describe('executeCodexAnalysis', () => {
       model: 'gpt-current',
     });
     expect(mocks.assertProject).toHaveBeenCalledWith('D:\\Data');
+    expect(mocks.selectRuntime).toHaveBeenCalledWith([CODEX_CANDIDATE], expect.any(Object));
     expect(mocks.close).toHaveBeenCalledOnce();
   });
 

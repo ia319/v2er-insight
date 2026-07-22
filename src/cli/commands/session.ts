@@ -32,7 +32,20 @@ function renderCandidates(report: CodexSessionCheckReport): void {
     return;
   }
   for (const entry of report.candidates) {
-    const version = entry.version.status === 'available' ? entry.version.version : '版本探测失败';
+    const version =
+      entry.version.status === 'available'
+        ? entry.version.version
+        : entry.version.status === 'unavailable'
+          ? '版本探测失败'
+          : '未探测版本';
+    const trust =
+      entry.trust.status === 'trusted'
+        ? entry.trust.basis === 'explicit'
+          ? '显式授权'
+          : `签名可信: ${entry.trust.publisher}`
+        : entry.trust.status === 'manual_only'
+          ? '需要显式配置'
+          : `已拒绝: ${entry.trust.reason}`;
     const selection =
       entry.selection === 'selected'
         ? '已选择'
@@ -40,7 +53,7 @@ function renderCandidates(report: CodexSessionCheckReport): void {
           ? `不可用: ${entry.modelErrorCode ?? entry.attemptCode ?? 'unknown'}`
           : '未进入协议检查';
     logger.detail(
-      `${entry.candidate.path} [${entry.candidate.source}, ${entry.candidate.kind}] ${version}; ${selection}`,
+      `${entry.candidate.path} [${entry.candidate.source}, ${entry.candidate.kind}] ${trust}; ${version}; ${selection}`,
     );
   }
 }
