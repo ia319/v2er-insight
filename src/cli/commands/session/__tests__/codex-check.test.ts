@@ -39,6 +39,11 @@ const manualOnly: CodexExecutableCandidate = {
   source: 'path',
   kind: 'command-shim',
 };
+const third: CodexExecutableCandidate = {
+  path: 'C:\\App\\fallback-codex.exe',
+  source: 'app-bundle',
+  kind: 'native',
+};
 
 function createDiscovery(
   launchCandidates: readonly CodexExecutableCandidate[] = [first, second],
@@ -167,10 +172,16 @@ function createDependencies(
       if (candidate === first) throw new Error('old version unavailable');
       return '0.2.0';
     }),
-    selectRuntime: vi.fn(async (_candidates, _options, probeVersion) => {
-      await expect(probeVersion(first, 1000)).rejects.toThrow('old version unavailable');
-      await expect(probeVersion(second, 1000)).resolves.toBe('0.2.0');
-      return runtime;
+    selectRuntime: vi.fn(async (candidates, _options, probeVersion) => {
+      for (const candidate of candidates) {
+        try {
+          await probeVersion(candidate, 1000);
+        } catch {
+          continue;
+        }
+        if (candidate === second) return runtime;
+      }
+      throw new CodexRuntimeSelectionError([attempt]);
     }),
     readRegistry: vi.fn(() => ({ status: 'valid' as const, registry })),
     readLock: vi.fn(() => ({ status: 'missing' as const })),
@@ -182,7 +193,9 @@ function createDependencies(
 
 describe('checkCodexSession', () => {
   it('should collect candidates, models, registry, and thread state without duplicate version probes', async () => {
-    const dependencies = createDependencies();
+    const dependencies = createDependencies({
+      discover: vi.fn(() => createDiscovery([first, second, third])),
+    });
 
     const report = await checkCodexSession('alice', CONFIG, dependencies);
 
@@ -195,8 +208,10 @@ describe('checkCodexSession', () => {
         version: { status: 'available', version: '0.2.0' },
         selection: 'selected',
       },
+      { candidate: third, version: { status: 'not_checked' }, selection: 'not_checked' },
     ]);
     expect(dependencies.probeVersion).toHaveBeenCalledTimes(2);
+    expect(dependencies.probeVersion).not.toHaveBeenCalledWith(third, expect.any(Number));
     expect(report.runtime).toMatchObject({
       executablePath: second.path,
       selectedModel: 'gpt-current',
@@ -283,7 +298,9 @@ describe('checkCodexSession', () => {
   });
 
   it('should expose the live model catalog when configured model selection fails', async () => {
-    const dependencies = createDependencies();
+    const dependencies = createDependencies({
+      discover: vi.fn(() => createDiscovery([second])),
+    });
     const configuredAttempt: CodexRuntimeAttempt = {
       candidate: second,
       code: 'model_invalid',
@@ -295,7 +312,10 @@ describe('checkCodexSession', () => {
     const selectDefault = dependencies.selectRuntime;
     dependencies.selectRuntime = vi
       .fn()
-      .mockRejectedValueOnce(configuredError)
+      .mockImplementationOnce(async (_candidates, _options, probeVersion) => {
+        await expect(probeVersion(second, 1000)).resolves.toBe('0.2.0');
+        throw configuredError;
+      })
       .mockImplementation((...args: Parameters<CodexSessionCheckDependencies['selectRuntime']>) =>
         selectDefault(...args),
       );
@@ -309,7 +329,7 @@ describe('checkCodexSession', () => {
     expect(dependencies.selectRuntime).toHaveBeenCalledTimes(2);
     expect(dependencies.selectRuntime).toHaveBeenNthCalledWith(
       2,
-      [first, second],
+      [second],
       expect.objectContaining({
         model: { model: 'app-default', reasoningEffort: 'model-default' },
       }),
@@ -333,5 +353,6 @@ describe('checkCodexSession', () => {
       requestedReasoningEffort: 'ultra',
       models: [{ model: 'gpt-current' }],
     });
+    expect(dependencies.probeVersion).toHaveBeenCalledOnce();
   });
 });

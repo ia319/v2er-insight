@@ -77,26 +77,30 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function inspectCandidateVersions(
-  candidates: readonly CodexExecutableCandidate[],
-  timeoutMs: number,
-  probeVersion: VersionProbe,
-): Promise<Map<CodexExecutableCandidate, CodexCandidateVersion>> {
-  const reports = await Promise.all(
-    candidates.map(
-      async (candidate): Promise<readonly [CodexExecutableCandidate, CodexCandidateVersion]> => {
-        try {
-          return [
-            candidate,
-            { status: 'available', version: await probeVersion(candidate, timeoutMs) },
-          ];
-        } catch (error) {
-          return [candidate, { status: 'unavailable', message: errorMessage(error) }];
-        }
+function createRecordedVersionProbe(probeVersion: VersionProbe): {
+  versions: Map<CodexExecutableCandidate, CodexCandidateVersion>;
+  probe: VersionProbe;
+} {
+  const versions = new Map<CodexExecutableCandidate, CodexCandidateVersion>();
+  const pending = new Map<CodexExecutableCandidate, Promise<string>>();
+  const probe: VersionProbe = (candidate, timeoutMs) => {
+    const cached = pending.get(candidate);
+    if (cached) return cached;
+
+    const result = probeVersion(candidate, timeoutMs).then(
+      (version) => {
+        versions.set(candidate, { status: 'available', version });
+        return version;
       },
-    ),
-  );
-  return new Map(reports);
+      (error: unknown) => {
+        versions.set(candidate, { status: 'unavailable', message: errorMessage(error) });
+        throw error;
+      },
+    );
+    pending.set(candidate, result);
+    return result;
+  };
+  return { versions, probe };
 }
 
 function resolveProjectDiagnostic(
@@ -243,20 +247,7 @@ export async function checkCodexSession(
 
   const discovery = dependencies.discover(config);
   const candidates = discovery.launchCandidates;
-  const versions = await inspectCandidateVersions(
-    candidates,
-    config.startupTimeout,
-    dependencies.probeVersion,
-  );
-  const cachedProbe: VersionProbe = async (candidate) => {
-    const report = versions.get(candidate);
-    if (!report || report.status !== 'available') {
-      throw new Error(
-        report?.status === 'unavailable' ? report.message : 'Version probe result is unavailable',
-      );
-    }
-    return report.version;
-  };
+  const versionProbe = createRecordedVersionProbe(dependencies.probeVersion);
   const selectionOptions: CodexRuntimeSelectionOptions = {
     versionTimeoutMs: config.startupTimeout,
     process: {
@@ -272,7 +263,7 @@ export async function checkCodexSession(
   let modelSelection: 'configured' | 'fallback' = 'configured';
   let thread: CodexThreadDiagnostic | null = null;
   try {
-    selected = await dependencies.selectRuntime(candidates, selectionOptions, cachedProbe);
+    selected = await dependencies.selectRuntime(candidates, selectionOptions, versionProbe.probe);
     attempts = selected.attempts;
   } catch (error) {
     if (error instanceof CodexRuntimeSelectionError) attempts = error.attempts;
@@ -293,7 +284,7 @@ export async function checkCodexSession(
               reasoningEffort: CODEX_DEFAULT_REASONING_EFFORT,
             },
           },
-          cachedProbe,
+          versionProbe.probe,
         );
         modelSelection = 'fallback';
       } catch (fallbackError) {
@@ -367,7 +358,7 @@ export async function checkCodexSession(
     ),
     candidates: mergeCandidateDiagnostics(
       discovery.observations,
-      versions,
+      versionProbe.versions,
       selected?.candidate ?? null,
       attempts,
     ),
