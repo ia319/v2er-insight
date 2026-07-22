@@ -19,6 +19,7 @@ const BASE_ENVIRONMENT_KEYS = [
   'TMP',
   'TMPDIR',
   'CODEX_HOME',
+  'CODEX_SQLITE_HOME',
   'LANG',
   'LC_ALL',
   'LC_CTYPE',
@@ -27,10 +28,8 @@ const BASE_ENVIRONMENT_KEYS = [
   'HTTPS_PROXY',
   'ALL_PROXY',
   'NO_PROXY',
+  'CODEX_CA_CERTIFICATE',
   'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'NODE_EXTRA_CA_CERTS',
-  'CURL_CA_BUNDLE',
 ] as const;
 
 const POSIX_PROXY_KEYS = ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'] as const;
