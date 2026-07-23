@@ -21,19 +21,38 @@ npm install -g v2er-insight
 pnpm add -g v2er-insight
 ```
 
-2. 配置 Gemini API Key
+2. AI provider
+
+Gemini API Key：
 
 ```bash
-v2er config set ai.apiKey <your_gemini_api_key>
+v2er config set ai.gemini.apiKey <your_gemini_api_key>
 ```
 
-3. 设置代理（可选，建议在受限网络下启用）
+Codex 使用本机 ChatGPT/Codex App 的登录会话：
+
+```bash
+v2er config set ai.provider codex
+v2er session check --provider codex
+```
+
+独立 Codex App Server 使用真实 `CODEX_HOME` 中的凭据存储。账户检查使用 `account/read(refreshToken: false)`；实际模型请求期间的 Token 自动刷新可能更新登录缓存。v2er 的账户响应投影限于账户类型和鉴权可用状态，用于 runtime 选择与诊断输出。
+
+自动发现仅启动带有效 OpenAI Authenticode 签名和匹配发布者的 Windows 原生 CLI。PATH 中的 Codex CLI 只进入诊断；普通独立 CLI 通过 `ai.codex.executable` 显式配置。独立 CLI 与 App 使用同一 `CODEX_HOME` 时共享登录状态和 thread 历史，不同 Codex home 对应独立的账户与历史边界。候选选择校验版本、App Server 初始化、账户、模型和 reasoning effort；thread 方法在实际创建、恢复和发送阶段校验。
+
+Codex 版本探测和 App Server 使用受限子进程环境。环境继承范围限于 Codex runtime、用户与系统目录、临时目录、区域设置、代理和证书路径；API Key、access token、`NODE_OPTIONS`、`ComSpec` 和其他业务变量位于继承范围之外。显式 `.cmd` shim 使用经过文件检查的系统命令处理器。代理值可能包含代理凭据。
+
+Codex thread 固定使用只读 sandbox、`approvalPolicy: never` 和 `networkAccess: false`，关闭 Web 搜索、shell、apps/connectors、hooks、子代理和远程 plugin 目录。v2er 不发送 MCP 或 plugin 配置；Direct MCP 与已安装 plugin 的有效工具范围由 App Server 根据所选 Codex home 解析。详细边界见 [Codex App Server 接入规范](docs/codex-app-server-integration.md#9-权限与工具边界)。
+
+Codex 默认 Project 为 `~/.v2er-insight/data`。该目录注册为 App 本地 Project 后，创建的任务显示在项目树中；thread 创建独立于该注册状态。
+
+3. 代理（可选）
 
 ```bash
 v2er config proxy http://127.0.0.1:7890
 ```
 
-4. 执行一键分析
+4. 一键分析
 
 ```bash
 v2er <username>
@@ -49,13 +68,17 @@ v2er <username>
 v2er <username>
 ```
 
-| 选项                       | 说明                                                               |
-| -------------------------- | ------------------------------------------------------------------ |
-| `--force`                  | 强制重新抓取（忽略本地缓存）                                       |
-| `--model [name]`           | 指定 AI 模型（默认: `gemini-3.1-pro-preview`）                     |
-| `--thinking-level [level]` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
-| `--resend`                 | 强制重新发送完整分析数据                                           |
-| `-v, --verbose`            | 显示调试输出                                                       |
+| 选项                          | 说明                                     |
+| ----------------------------- | ---------------------------------------- |
+| `--force`                     | 强制重新抓取（忽略本地缓存）             |
+| `--provider <provider>`       | 本次使用 `gemini` 或 `codex`             |
+| `--model [name]`              | 指定当前 provider 的模型                 |
+| `--thinking-level [level]`    | Gemini 思考等级                          |
+| `--reasoning-effort <effort>` | Codex 思考深度；可用值由当前模型目录决定 |
+| `--new-thread`                | 为 Codex 创建新的 thread generation      |
+| `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径      |
+| `--resend`                    | 强制重新发送完整分析数据                 |
+| `-v, --verbose`               | 显示调试输出                             |
 
 一键命令根据本地 `raw.json`、`analyzed.json` 和 `result.json` 选择执行起点。`analysis-state.json` 提供 analyze 与 AI 步骤的 provenance 校验状态。`--force` 从抓取步骤重新执行。
 
@@ -89,8 +112,7 @@ v2er analyze <username>
 
 ### 3. AI 画像建模 (AI)
 
-目前仅支持 **Google Gemini** 服务。
-调用 AI 模型，基于统计结果进行多维度心理、行为及社交建模，生成分析报告。
+支持 **Google Gemini** 和本机 **ChatGPT/Codex App**。AI provider 基于统计结果进行多维度心理、行为及社交建模，生成分析报告。
 
 - 核心提示词所在位置：[docs/prompt.md](docs/prompt.md)
 - 分析维度详细说明：[docs/ai-result/result-schema.md](docs/ai-result/result-schema.md)
@@ -99,13 +121,43 @@ v2er analyze <username>
 v2er ai <username> [选项]
 ```
 
-| 选项                       | 说明                                                               |
-| -------------------------- | ------------------------------------------------------------------ |
-| `--model [name]`           | 指定 Gemini 模型（默认: `gemini-3.1-pro-preview`）                 |
-| `--thinking-level [level]` | 指定思考等级（默认: `high`，可选 `minimal`/`low`/`medium`/`high`） |
-| `--resend`                 | 强制重新发送完整分析数据                                           |
+| 选项                          | 说明                                |
+| ----------------------------- | ----------------------------------- |
+| `--provider <provider>`       | 本次使用 `gemini` 或 `codex`        |
+| `--model [name]`              | 指定当前 provider 的模型            |
+| `--thinking-level [level]`    | 指定 Gemini 思考等级                |
+| `--reasoning-effort <effort>` | 指定 Codex 思考深度                 |
+| `--new-thread`                | 创建新的 Codex thread generation    |
+| `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径 |
+| `--resend`                    | 强制重新发送完整分析数据            |
 
 AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。
+
+默认 provider 为 `gemini`。
+
+Gemini 默认值：
+
+| 配置项                    | 默认值                   | 含义                                       |
+| ------------------------- | ------------------------ | ------------------------------------------ |
+| `ai.gemini.apiKey`        | 未设置                   | 配置、兼容字段与环境变量解析顺序见详细说明 |
+| `ai.gemini.model`         | `gemini-3.1-pro-preview` | Gemini 模型名称                            |
+| `ai.gemini.thinkingLevel` | `high`                   | Gemini 思考等级                            |
+| `ai.gemini.timeout`       | `60_000` 毫秒            | 单次请求期限                               |
+| `ai.maxRetries`           | `3`                      | 请求重试次数                               |
+| `ai.baseDelay`            | `1_000` 毫秒             | 重试基础延迟                               |
+| `ai.maxDelay`             | `10_000` 毫秒            | 重试延迟上限                               |
+
+Codex 默认值：
+
+| 配置项                     | 默认值                 | 含义                                     |
+| -------------------------- | ---------------------- | ---------------------------------------- |
+| `ai.codex.executable`      | 自动发现可信 App CLI   | 普通 CLI 的显式路径；空值启用签名发现    |
+| `ai.codex.projectPath`     | `~/.v2er-insight/data` | 新 thread 的 Project 目录                |
+| `ai.codex.model`           | `app-default`          | App Server 实时目录中的唯一默认模型      |
+| `ai.codex.reasoningEffort` | `model-default`        | 所选模型声明的默认 reasoning effort      |
+| `ai.codex.startupTimeout`  | `10_000` 毫秒          | CLI 探测、App Server 启动和普通 RPC 期限 |
+| `ai.codex.turnTimeout`     | `600_000` 毫秒         | 单个 turn 的完成期限                     |
+| `ai.codex.shutdownGrace`   | `2_000` 毫秒           | 独立 App Server 子进程的关闭宽限         |
 
 ### 4. 报告展示 (Show)
 
@@ -154,7 +206,30 @@ v2er config proxy                           # 查看代理
 v2er config proxy --clear                   # 清除代理
 ```
 
+Provider 配置示例：
+
+```bash
+v2er config set ai.provider gemini
+v2er config set ai.gemini.apiKey <key>
+v2er config set ai.gemini.model gemini-3.1-pro-preview
+v2er config set ai.gemini.thinkingLevel high
+
+v2er config set ai.provider codex
+v2er config set ai.codex.model app-default
+v2er config set ai.codex.reasoningEffort model-default
+v2er config set ai.codex.projectPath <path>
+```
+
 默认配置 `data.keepRaw=true`：永久保留 `raw.json` 和 `analyzed.json`。`data.keepRaw=false`：按 `data.rawRetention` 自动清理。`v2er config reset data` 恢复默认保留。清理对重发和外部会话的影响见 [数据生命周期](docs/data-lifecycle.md)。
+
+### 6. Provider Session 检查
+
+```bash
+v2er session check [username] --provider gemini
+v2er session check [username] --provider codex
+```
+
+Gemini 检查展示模型、思考等级和 API Key 可用状态。Codex 检查的 RPC 范围为 initialize、`account/read(refreshToken: false)`、model/list 和可选 thread/read；输出包含 CLI 候选的来源、信任依据与版本，账户状态、实时模型目录、Project 路径、执行锁、本地 session，以及指定用户的 thread 状态。凭据存储访问仍由独立 App Server 承担。
 
 ---
 
@@ -162,23 +237,26 @@ v2er config proxy --clear                   # 清除代理
 
 配置文件位于 `~/.v2er-insight/config.json`，可通过 `v2er config set` 或手动编辑。
 
-### 1. API Key 解析顺序
+### 1. Gemini API Key 解析顺序
 
 AI 模块通过以下优先级依次尝试读取 Gemini API Key：
 
-- `~/.v2er-insight/config.json` 中的 `ai.apiKey` 字段
+- `~/.v2er-insight/config.json` 中的 `ai.gemini.apiKey` 字段
+- 兼容字段 `ai.apiKey`
 - 环境变量 `GOOGLE_API_KEY`
 - 环境变量 `GEMINI_API_KEY`
 
 ### 2. 代理读取逻辑 (Proxy)
 
-程序按以下优先级确定请求使用的代理（Fetcher 和 AI 模块共用同一优先级）：
+Fetcher 与 Gemini 按以下优先级解析代理：
 
 1. 配置文件 (`~/.v2er-insight/config.json`) 中的 `proxy` 字段
 2. 系统环境变量 `HTTPS_PROXY`
 3. 系统环境变量 `HTTP_PROXY`
 
-若以上均未配置，则尝试直接连接。
+Codex App Server 继承 v2er-insight 进程白名单中的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 和 `NO_PROXY`。配置文件中的 `proxy` 同时覆盖子进程的 HTTP 与 HTTPS 代理；未配置时保留继承值。版本探测仅使用继承环境。
+
+缺少有效代理配置和环境变量时使用直接连接。
 
 ### 3. 参数优先级与默认值来源
 
@@ -187,9 +265,11 @@ AI 模块通过以下优先级依次尝试读取 Gemini API Key：
 ### 4. 技术实现细节
 
 - 日志系统：采用级别过滤（Error/Warn/Info/Debug），支持带进度的章节式输出。
-- 代理驱动（双通道）：
+- 网络代理：
   - **Fetcher**（V2EX 数据抓取）：`https-proxy-agent` + Axios `httpsAgent`
-  - **AI**（Gemini API 调用）：`undici` `ProxyAgent` + `setGlobalDispatcher`（原生 `fetch()` 代理）
+  - **AI / Gemini**：`undici` `ProxyAgent` + `setGlobalDispatcher`（原生 `fetch()` 代理）
+  - **AI / Codex**：App Server 子进程的受限代理环境
+- **AI / Codex**：发现兼容 Codex CLI，自动候选优先来自本机 App，独立短生命周期 App Server 使用已登录的 Codex home 创建或恢复 thread。
 - 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下。
 - 环境要求：Node.js >= 20.18.1（undici 7.x 要求）。
 
@@ -227,3 +307,5 @@ pnpm run ci             # 完整 CI（类型 + lint + 格式 + 测试）
 - 文件权限：在 Linux/Mac 系统上，程序创建的配置文件权限为 `0600`（仅当前用户读写）。
 - 隐私保护：建议避免在配置文件中直接存储包含明文凭据的代理 URL。
 - Windows 用户建议：手动检查 `~/.v2er-insight/config.json` 的访问控制列表 (ACL)，确保其安全性。
+- Codex 本地工具：只读 sandbox 允许读取 Project 内容；默认 Project 包含各用户的 raw、analyzed、result 和 session 数据。
+- Codex 集成工具：Direct MCP 与已安装 plugin 工具遵循有效 `CODEX_HOME` 配置；工具范围由用户维护的有效 `CODEX_HOME` 配置决定。
