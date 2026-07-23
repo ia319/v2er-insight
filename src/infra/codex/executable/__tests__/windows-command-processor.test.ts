@@ -15,6 +15,13 @@ describe('resolveWindowsCommandProcessorPath', () => {
   });
 
   it.each([
+    [{ SYSTEMROOT: 'C:\\Windows' }, 'C:\\Windows\\System32\\cmd.exe'],
+    [{ windir: 'D:\\Windows' }, 'D:\\Windows\\System32\\cmd.exe'],
+  ])('should resolve Windows environment variables case-insensitively', (env, expected) => {
+    expect(resolveWindowsCommandProcessorPath(env, () => true)).toBe(expected);
+  });
+
+  it.each([
     ['a missing system root', {}],
     ['a relative system root', { SystemRoot: 'Windows' }],
   ])('should reject %s', (_case, env) => {

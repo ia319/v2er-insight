@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { readEnvironmentValue } from './process-environment';
 
 const COMMAND_PROCESSOR_RELATIVE_PATH = 'System32\\cmd.exe';
 
@@ -19,7 +20,9 @@ export function resolveWindowsCommandProcessorPath(
     }
   },
 ): string | null {
-  const systemRoot = env.SystemRoot ?? env.WINDIR;
+  const systemRoot =
+    readEnvironmentValue(env, 'SystemRoot', 'win32') ??
+    readEnvironmentValue(env, 'WINDIR', 'win32');
   if (!systemRoot || !path.win32.isAbsolute(systemRoot)) return null;
 
   const executablePath = path.win32.join(systemRoot, COMMAND_PROCESSOR_RELATIVE_PATH);

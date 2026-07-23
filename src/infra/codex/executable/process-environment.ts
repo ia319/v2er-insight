@@ -34,7 +34,14 @@ const BASE_ENVIRONMENT_KEYS = [
 const POSIX_PROXY_KEYS = ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'] as const;
 const COMMAND_SHIM_KEYS = ['PATH', 'PATHEXT'] as const;
 
-function readEnvironmentValue(
+/**
+ * Reads an environment variable using the host platform's casing semantics.
+ * @param source - Environment values to inspect.
+ * @param key - Canonical variable name.
+ * @param platform - Host platform controlling case-sensitive lookup.
+ * @returns The matching value, or undefined when the variable is absent.
+ */
+export function readEnvironmentValue(
   source: NodeJS.ProcessEnv,
   key: string,
   platform: NodeJS.Platform,
