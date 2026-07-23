@@ -58,6 +58,11 @@ export interface CodexSessionCheckDependencies {
   assertProject: typeof assertCodexProjectDirectory;
 }
 
+export interface CodexSessionCheckOptions {
+  proxyUrl?: string;
+  dependencies?: CodexSessionCheckDependencies;
+}
+
 const DEFAULT_DEPENDENCIES: CodexSessionCheckDependencies = {
   discover: (config) =>
     discoverCodexExecutables(config.executable ? { explicitPath: config.executable } : {}),
@@ -197,14 +202,15 @@ function mergeCandidateDiagnostics(
  * Collects a read-only Codex runtime, Project, registry, lock, and thread diagnostic report.
  * @param username - Optional V2EX user whose local session and thread state are inspected.
  * @param config - Resolved Codex provider configuration.
- * @param dependencies - Injectable local runtime and storage boundaries.
+ * @param options - Optional proxy and injectable local runtime boundaries.
  * @returns A structured report with explicit issues and no message payloads or credentials.
  */
 export async function checkCodexSession(
   username: string | undefined,
   config: ResolvedCodexConfig,
-  dependencies: CodexSessionCheckDependencies = DEFAULT_DEPENDENCIES,
+  options: CodexSessionCheckOptions = {},
 ): Promise<CodexSessionCheckReport> {
+  const dependencies = options.dependencies ?? DEFAULT_DEPENDENCIES;
   const issues: CodexDiagnosticIssue[] = [];
   const projectResult = resolveProjectDiagnostic(config, dependencies);
   if (projectResult.issue) issues.push(projectResult.issue);
@@ -253,6 +259,7 @@ export async function checkCodexSession(
     process: {
       requestTimeoutMs: config.startupTimeout,
       shutdownGraceMs: config.shutdownGrace,
+      ...(options.proxyUrl ? { proxyUrl: options.proxyUrl } : {}),
     },
     connection: { startupTimeoutMs: config.startupTimeout },
     model: { model: config.model, reasoningEffort: config.reasoningEffort },

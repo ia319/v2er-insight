@@ -756,7 +756,10 @@ describe('runAi', () => {
     complete.mockImplementation(async () => {
       expect(lockHeld).toBe(true);
     });
-    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedGetConfig.mockReturnValue({
+      proxy: 'http://config-proxy.example',
+      ai: { provider: 'codex', codex: {} },
+    });
     mockedExecuteCodexAnalysis.mockResolvedValue({
       status: 'result',
       model: 'gpt-current',
@@ -782,6 +785,9 @@ describe('runAi', () => {
       meta: { provider: 'codex', model: 'gpt-current' },
     });
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
+    expect(mockedExecuteCodexAnalysis).toHaveBeenCalledWith(
+      expect.objectContaining({ proxyUrl: 'http://config-proxy.example' }),
+    );
     expect(mockedWriteDataFileWithRollback).toHaveBeenCalledOnce();
     expect(complete).toHaveBeenCalledOnce();
     expect(lockHeld).toBe(false);

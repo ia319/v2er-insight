@@ -10,6 +10,7 @@ const DEFAULT_STDERR_LIMIT = 16_384;
 export interface CodexAppServerProcessOptions {
   requestTimeoutMs: number;
   shutdownGraceMs: number;
+  proxyUrl?: string;
   stderrLimit?: number;
   onNotification?: (notification: JsonRpcNotification) => void;
   onProtocolWarning?: (message: string) => void;
@@ -125,7 +126,7 @@ export class CodexAppServerProcess {
 /**
  * Starts an owned stdio App Server process for a selected CLI candidate.
  * @param candidate - Capability-selected Codex CLI executable.
- * @param options - Request, shutdown, notification, and diagnostic settings.
+ * @param options - Request, shutdown, environment, notification, and diagnostic settings.
  * @returns The process owner and JSONL client.
  */
 export function startCodexAppServer(
@@ -133,7 +134,11 @@ export function startCodexAppServer(
   options: CodexAppServerProcessOptions,
 ): CodexAppServerProcess {
   validateOptions(options);
-  const processHandle = launchCodexCli(candidate, 'app-server');
+  const processHandle = launchCodexCli(
+    candidate,
+    'app-server',
+    options.proxyUrl ? { proxyUrl: options.proxyUrl } : {},
+  );
   try {
     return new CodexAppServerProcess(processHandle, options);
   } catch (error) {

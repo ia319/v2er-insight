@@ -160,13 +160,19 @@ describe('executeCodexAnalysis', () => {
       };
     });
 
-    await expect(executeCodexAnalysis(createOptions())).resolves.toMatchObject({
+    const options = { ...createOptions(), proxyUrl: 'http://config-proxy.example' };
+    await expect(executeCodexAnalysis(options)).resolves.toMatchObject({
       status: 'skipped',
       threadId: 'thread-1',
       model: 'gpt-current',
     });
     expect(mocks.assertProject).toHaveBeenCalledWith('D:\\Data');
-    expect(mocks.selectRuntime).toHaveBeenCalledWith([CODEX_CANDIDATE], expect.any(Object));
+    expect(mocks.selectRuntime).toHaveBeenCalledWith(
+      [CODEX_CANDIDATE],
+      expect.objectContaining({
+        process: expect.objectContaining({ proxyUrl: 'http://config-proxy.example' }),
+      }),
+    );
     expect(mocks.close).toHaveBeenCalledOnce();
   });
 

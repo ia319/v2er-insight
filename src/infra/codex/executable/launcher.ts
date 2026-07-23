@@ -26,6 +26,10 @@ export interface CodexCliProcess {
   terminate(): boolean;
 }
 
+export interface CodexCliLaunchOptions {
+  proxyUrl?: string;
+}
+
 const INVOCATION_ARGS = {
   version: ['--version'],
   'app-server': ['app-server', '--listen', 'stdio://'],
@@ -79,6 +83,7 @@ export function createCodexLaunchSpec(
  * Starts a fixed Codex CLI operation with piped stdio.
  * @param candidate - Discovered executable candidate.
  * @param invocation - Allowed fixed CLI operation.
+ * @param options - Explicit child process environment values.
  * @param sourceEnv - Parent environment used to build bounded child variables.
  * @param platform - Host platform controlling launch and environment semantics.
  * @returns The child process owned by the caller.
@@ -86,10 +91,11 @@ export function createCodexLaunchSpec(
 export function spawnCodexCli(
   candidate: CodexExecutableCandidate,
   invocation: CodexCliInvocation,
+  options: CodexCliLaunchOptions = {},
   sourceEnv: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): ChildProcessWithoutNullStreams {
-  const childEnv = createCodexProcessEnvironment(candidate, sourceEnv, platform);
+  const childEnv = createCodexProcessEnvironment(candidate, options, sourceEnv, platform);
   const commandProcessor =
     candidate.kind === 'command-shim' && platform === 'win32'
       ? (resolveWindowsCommandProcessorPath(sourceEnv) ?? undefined)
@@ -108,13 +114,15 @@ export function spawnCodexCli(
  * Starts a Codex CLI operation and exposes an owned lifecycle handle.
  * @param candidate - Discovered executable candidate.
  * @param invocation - Allowed fixed CLI operation.
+ * @param options - Explicit child process environment values.
  * @returns Piped streams, exit status, and termination for this child only.
  */
 export function launchCodexCli(
   candidate: CodexExecutableCandidate,
   invocation: CodexCliInvocation,
+  options: CodexCliLaunchOptions = {},
 ): CodexCliProcess {
-  const child = spawnCodexCli(candidate, invocation);
+  const child = spawnCodexCli(candidate, invocation, options);
   const exit = new Promise<CodexCliExit>((resolve, reject) => {
     child.once('error', reject);
     child.once('close', (code, signal) => resolve({ code, signal }));

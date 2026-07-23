@@ -169,7 +169,9 @@ export async function runSessionCheck(
   }
 
   try {
-    const report = await checkCodexSession(username, resolveCodexConfig(config.ai));
+    const report = await checkCodexSession(username, resolveCodexConfig(config.ai), {
+      ...(config.proxy ? { proxyUrl: config.proxy } : {}),
+    });
     renderCandidates(report);
     renderProject(report);
     renderRuntime(report);

@@ -78,6 +78,7 @@ describe('createCodexLaunchSpec', () => {
     spawnCodexCli(
       candidate,
       'version',
+      {},
       {
         SystemRoot: 'C:\\Windows',
         CODEX_HOME: 'D:\\CodexHome',
@@ -109,7 +110,7 @@ describe('createCodexLaunchSpec', () => {
       PATH: 'C:\\node',
     };
 
-    spawnCodexCli(candidate, 'version', sourceEnv, 'win32');
+    spawnCodexCli(candidate, 'version', {}, sourceEnv, 'win32');
 
     expect(mockedResolveWindowsCommandProcessorPath).toHaveBeenCalledWith(sourceEnv);
     expect(mockedSpawn).toHaveBeenCalledWith(
@@ -131,8 +132,42 @@ describe('createCodexLaunchSpec', () => {
     };
 
     expect(() =>
-      spawnCodexCli(candidate, 'version', { SystemRoot: 'C:\\Windows' }, 'win32'),
+      spawnCodexCli(candidate, 'version', {}, { SystemRoot: 'C:\\Windows' }, 'win32'),
     ).toThrow('Windows system command processor is unavailable');
     expect(mockedSpawn).not.toHaveBeenCalled();
+  });
+
+  it('should apply an explicit proxy to the bounded child environment', () => {
+    const candidate: CodexExecutableCandidate = {
+      path: 'C:\\Program Files\\Codex\\codex.exe',
+      source: 'app-bundle',
+      kind: 'native',
+    };
+
+    spawnCodexCli(
+      candidate,
+      'app-server',
+      { proxyUrl: 'http://config-proxy.example' },
+      {
+        SystemRoot: 'C:\\Windows',
+        HTTPS_PROXY: 'http://inherited-proxy.example',
+        NO_PROXY: 'localhost',
+      },
+      'win32',
+    );
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      candidate.path,
+      ['app-server', '--listen', 'stdio://'],
+      expect.objectContaining({
+        env: {
+          SystemRoot: 'C:\\Windows',
+          HTTP_PROXY: 'http://config-proxy.example',
+          HTTPS_PROXY: 'http://config-proxy.example',
+          NO_PROXY: 'localhost',
+        },
+        shell: false,
+      }),
+    );
   });
 });

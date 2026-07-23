@@ -197,7 +197,7 @@ describe('checkCodexSession', () => {
       discover: vi.fn(() => createDiscovery([first, second, third])),
     });
 
-    const report = await checkCodexSession('alice', CONFIG, dependencies);
+    const report = await checkCodexSession('alice', CONFIG, { dependencies });
 
     expect(report.issues).toEqual([]);
     expect(report.appDetected).toBe(true);
@@ -252,7 +252,7 @@ describe('checkCodexSession', () => {
       }),
     });
 
-    const report = await checkCodexSession('alice', CONFIG, dependencies);
+    const report = await checkCodexSession('alice', CONFIG, { dependencies });
 
     expect(report.runtime).toBeNull();
     expect(report.registry).toEqual({ status: 'invalid' });
@@ -279,11 +279,16 @@ describe('checkCodexSession', () => {
       discover: vi.fn(() => discovery),
     });
 
-    const report = await checkCodexSession('alice', CONFIG, dependencies);
+    const report = await checkCodexSession('alice', CONFIG, {
+      proxyUrl: 'http://config-proxy.example',
+      dependencies,
+    });
 
     expect(dependencies.selectRuntime).toHaveBeenCalledWith(
       [second],
-      expect.any(Object),
+      expect.objectContaining({
+        process: expect.objectContaining({ proxyUrl: 'http://config-proxy.example' }),
+      }),
       expect.any(Function),
     );
     expect(dependencies.probeVersion).toHaveBeenCalledTimes(1);
@@ -323,7 +328,7 @@ describe('checkCodexSession', () => {
     const report = await checkCodexSession(
       'alice',
       { ...CONFIG, model: 'removed-model', reasoningEffort: 'ultra' },
-      dependencies,
+      { dependencies },
     );
 
     expect(dependencies.selectRuntime).toHaveBeenCalledTimes(2);

@@ -85,6 +85,18 @@ describe('probeCodexCliVersion', () => {
     vi.clearAllMocks();
   });
 
+  it('should launch the version probe without App Server environment overrides', async () => {
+    const process = createProcess();
+    mockedLaunchCodexCli.mockReturnValue(process.handle);
+
+    const probing = probeCodexCliVersion(CANDIDATE, 1000);
+    process.stdout.end('codex-cli 0.144.5\n');
+    process.exitWith({ code: 0, signal: null });
+
+    await expect(probing).resolves.toBe('0.144.5');
+    expect(mockedLaunchCodexCli).toHaveBeenCalledWith(CANDIDATE, 'version');
+  });
+
   it('should reject an invalid timeout before launching a process', async () => {
     await expect(probeCodexCliVersion(CANDIDATE, 0)).rejects.toThrow(
       'version probe timeout must be a positive finite number',

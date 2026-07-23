@@ -125,6 +125,22 @@ describe('CodexAppServerProcess', () => {
     expect(mockedLaunchCodexCli).not.toHaveBeenCalled();
   });
 
+  it('should pass the configured proxy only to the App Server launch', () => {
+    const harness = createProcessHarness();
+    mockedLaunchCodexCli.mockReturnValue(harness.handle);
+
+    startCodexAppServer(CANDIDATE, {
+      requestTimeoutMs: 1000,
+      shutdownGraceMs: 1000,
+      proxyUrl: 'http://config-proxy.example',
+    });
+
+    expect(mockedLaunchCodexCli).toHaveBeenCalledWith(CANDIDATE, 'app-server', {
+      proxyUrl: 'http://config-proxy.example',
+    });
+    harness.exitWith({ code: 0, signal: null });
+  });
+
   it('should terminate a launched process when owner construction fails', () => {
     const harness = createProcessHarness();
     const constructionError = new Error('stderr listener unavailable');

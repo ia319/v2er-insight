@@ -8,7 +8,12 @@ export type {
   CodexExecutableTrust,
 } from './types';
 export { classifyCodexExecutables, discoverCodexExecutables } from './discovery';
-export type { CodexCliExit, CodexCliInvocation, CodexCliProcess } from './launcher';
+export type {
+  CodexCliExit,
+  CodexCliInvocation,
+  CodexCliLaunchOptions,
+  CodexCliProcess,
+} from './launcher';
 export { launchCodexCli, spawnCodexCli } from './launcher';
 export type { CodexVersionProbeErrorCode } from './version-probe';
 export { CodexVersionProbeError, probeCodexCliVersion } from './version-probe';

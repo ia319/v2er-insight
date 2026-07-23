@@ -7,7 +7,12 @@ export type {
   CodexExecutableSource,
   CodexExecutableTrust,
 } from './executable';
-export type { CodexCliExit, CodexCliInvocation, CodexCliProcess } from './executable';
+export type {
+  CodexCliExit,
+  CodexCliInvocation,
+  CodexCliLaunchOptions,
+  CodexCliProcess,
+} from './executable';
 export type { CodexVersionProbeErrorCode } from './executable';
 export {
   CodexVersionProbeError,

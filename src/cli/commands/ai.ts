@@ -239,6 +239,7 @@ async function runAiForProvider(
         ...(typeof options.model === 'string' ? { model: options.model } : {}),
         ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         ...(options.codexProject ? { codexProject: options.codexProject } : {}),
+        ...(config.proxy ? { proxyUrl: config.proxy } : {}),
         newThread: options.newThread,
         resend: options.resend,
       });

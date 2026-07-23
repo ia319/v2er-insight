@@ -34,6 +34,10 @@ const BASE_ENVIRONMENT_KEYS = [
 const POSIX_PROXY_KEYS = ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'] as const;
 const COMMAND_SHIM_KEYS = ['PATH', 'PATHEXT'] as const;
 
+export interface CodexProcessEnvironmentOptions {
+  proxyUrl?: string;
+}
+
 /**
  * Reads an environment variable using the host platform's casing semantics.
  * @param source - Environment values to inspect.
@@ -71,12 +75,14 @@ function copyEnvironmentKeys(
 /**
  * Builds the bounded environment inherited by Codex version and App Server processes.
  * @param candidate - Authorized executable whose launch form controls shim-only variables.
+ * @param options - Explicit values applied after the allowlisted parent environment.
  * @param source - Parent environment used as the allowlisted value source.
  * @param platform - Host platform controlling case lookup and POSIX proxy aliases.
  * @returns An environment limited to runtime, home, proxy, certificate, and shim dependencies.
  */
 export function createCodexProcessEnvironment(
   candidate: CodexExecutableCandidate,
+  options: CodexProcessEnvironmentOptions = {},
   source: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
@@ -87,6 +93,14 @@ export function createCodexProcessEnvironment(
   }
   if (candidate.kind === 'command-shim') {
     copyEnvironmentKeys(result, source, COMMAND_SHIM_KEYS, platform);
+  }
+  if (options.proxyUrl) {
+    result.HTTP_PROXY = options.proxyUrl;
+    result.HTTPS_PROXY = options.proxyUrl;
+    if (platform !== 'win32') {
+      result.http_proxy = options.proxyUrl;
+      result.https_proxy = options.proxyUrl;
+    }
   }
   return result;
 }

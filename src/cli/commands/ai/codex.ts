@@ -36,6 +36,7 @@ export interface ExecuteCodexAnalysisOptions {
   model?: string;
   reasoningEffort?: string;
   codexProject?: string;
+  proxyUrl?: string;
   newThread?: boolean;
   resend?: boolean;
 }
@@ -119,6 +120,7 @@ export async function executeCodexAnalysis(
     process: {
       requestTimeoutMs: options.config.startupTimeout,
       shutdownGraceMs: options.config.shutdownGrace,
+      ...(options.proxyUrl ? { proxyUrl: options.proxyUrl } : {}),
     },
     connection: { startupTimeoutMs: options.config.startupTimeout },
     model: {

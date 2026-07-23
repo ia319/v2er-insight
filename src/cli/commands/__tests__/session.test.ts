@@ -108,7 +108,10 @@ describe('runSessionCheck', () => {
   });
 
   it('should render the selected Codex runtime and visible models', async () => {
-    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedGetConfig.mockReturnValue({
+      proxy: 'http://config-proxy.example',
+      ai: { provider: 'codex', codex: {} },
+    });
     mockedCheckCodexSession.mockResolvedValue(createCodexReport());
 
     const result = await runSessionCheck('alice', { provider: 'codex' });
@@ -117,6 +120,7 @@ describe('runSessionCheck', () => {
     expect(mockedCheckCodexSession).toHaveBeenCalledWith(
       'alice',
       expect.objectContaining({ model: 'app-default', reasoningEffort: 'model-default' }),
+      { proxyUrl: 'http://config-proxy.example' },
     );
     expect(mockedLogger.detail).toHaveBeenCalledWith('当前选择: gpt-current / high');
     expect(mockedLogger.detail).toHaveBeenCalledWith(
