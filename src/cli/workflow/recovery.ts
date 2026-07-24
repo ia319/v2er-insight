@@ -146,6 +146,206 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '修正全局默认 thinkingLevel，避免后续重复报错',
     },
   ],
+  AI_INVALID_PROVIDER_OPTIONS: [
+    {
+      type: 'instruction',
+      content: '将 --provider 或 ai.provider 设置为 gemini | codex，并使用对应的专属选项',
+      description:
+        'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort、--new-thread 和 --codex-project',
+    },
+  ],
+  AI_CODEX_EXECUTABLE_NOT_FOUND: [
+    {
+      type: 'instruction',
+      content: '启动 ChatGPT/Codex App，或配置 ai.codex.executable 指向可用 CLI',
+      description: '当前环境没有可探测的 Codex CLI',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '重新检查 CLI 发现结果',
+    },
+  ],
+  AI_CODEX_EXECUTABLE_INCOMPATIBLE: [
+    {
+      type: 'instruction',
+      content: '更新 ChatGPT/Codex App，或配置兼容的 Codex CLI',
+      description: '已发现的 CLI 无法完成版本探测',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '查看全部候选的版本和拒绝原因',
+    },
+  ],
+  AI_CODEX_AUTH_REQUIRED: [
+    {
+      type: 'instruction',
+      content: '在 ChatGPT/Codex App 中完成登录后重试',
+      description: '独立 App Server 当前没有可用账户会话',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '确认账户状态和实时模型目录',
+    },
+  ],
+  AI_CODEX_PROTOCOL_ERROR: [
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '检查 App Server 初始化、候选 CLI 和协议能力',
+    },
+    {
+      type: 'instruction',
+      content: '根据诊断结果更新 App 或选择兼容 CLI',
+      description: '当前 App Server 响应或连接不符合所需协议',
+    },
+  ],
+  AI_CODEX_MODEL_NOT_FOUND: [
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '查看账户当前可见的实时模型目录',
+    },
+    {
+      type: 'command',
+      content: 'v2er config set ai.codex.model <model>',
+      description: '选择诊断输出中的可用模型',
+    },
+  ],
+  AI_CODEX_REASONING_UNSUPPORTED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '查看所选模型支持的 reasoning effort',
+    },
+    {
+      type: 'command',
+      content: 'v2er config set ai.codex.reasoningEffort <effort>',
+      description: '选择诊断输出中的可用思考深度',
+    },
+  ],
+  AI_CODEX_PROJECT_UNAVAILABLE: [
+    {
+      type: 'instruction',
+      content: '创建或修正 Codex Project 目录，并确认当前用户具有读取权限',
+      description: '解析后的 Project 路径缺失、不是目录或不可访问',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '查看 Project 绝对路径、来源和目录状态',
+    },
+  ],
+  AI_CODEX_THREAD_NOT_FOUND: [
+    {
+      type: 'instruction',
+      content: '确认 App 中原任务仍存在；任务已删除时创建新 generation',
+      description: '本地 registry 中的 thread 无法按原 ID恢复',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex --new-thread',
+      description: '保留旧记录并创建新的 Codex 任务',
+    },
+  ],
+  AI_CODEX_TURN_FAILED: [
+    {
+      type: 'instruction',
+      content: '在 App 中查看失败或中断回合的状态和错误',
+      description: '记录的 Codex 回合以失败、终止或系统错误结束',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex --new-thread',
+      description: '需要重新分析时创建独立的新 generation',
+    },
+  ],
+  AI_CODEX_TURN_STATUS_UNKNOWN: [
+    {
+      type: 'instruction',
+      content: '在 App 中核对 thread 和最近回合，确认原分析是否已被接受',
+      description: '本地 turn ID与持久 thread 历史无法可靠关联',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '读取 registry、thread 和最后回合状态',
+    },
+  ],
+  AI_CODEX_OUTPUT_INVALID: [
+    {
+      type: 'instruction',
+      content: '在 App 中查看分析回合的最终回复和完成状态',
+      description: '最终回复缺失或不符合完整画像结果契约',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex --new-thread',
+      description: '创建新 generation 重新执行提示轮和分析轮',
+    },
+  ],
+  AI_CODEX_TIMEOUT: [
+    {
+      type: 'instruction',
+      content: '先在 App 中检查原回合状态，再决定恢复或创建新 generation',
+      description: '请求或回合等待超过配置期限，原回合可能仍已被接受',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '核对 thread 和最近 turn 的持久状态',
+    },
+  ],
+  AI_CODEX_STATE_INVALID: [
+    {
+      type: 'instruction',
+      content: '保留 codex-sessions.json，并检查 registry 与外部 thread 的身份差异',
+      description: '本地 session 转移或恢复身份校验失败',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '读取锁、registry、Project 和 thread 诊断',
+    },
+  ],
+  AI_CODEX_BUSY: [
+    {
+      type: 'instruction',
+      content: '检查当前 v2er 进程和 ChatGPT App 任务状态，等待活动分析结束后重试',
+      description: '同一用户已有本地分析进程或 Codex 任务占用执行位置',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '活动回合结束后恢复已记录状态',
+    },
+  ],
+  AI_CODEX_LOCK_FAILED: [
+    {
+      type: 'instruction',
+      content: '检查用户数据目录权限和当前 v2er 进程状态',
+      description: 'Codex 执行锁未能安全取得或释放',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '确认目录可写且没有活动分析进程后重试',
+    },
+  ],
+  AI_CODEX_SESSION_UPDATE_FAILED: [
+    {
+      type: 'instruction',
+      content: '保留 result.json、analysis-state.json 和 codex-sessions.json 用于恢复',
+      description: '结果与 provenance 已保存，Codex session 完成状态仍待更新',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '重新读取已完成回合并补全 session 状态',
+    },
+  ],
   AI_PROVIDER_FAILED: [
     {
       type: 'instruction',

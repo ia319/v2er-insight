@@ -23,6 +23,9 @@ export { GeminiProvider } from './providers';
 export { parseResponse, type ValidationResult } from './parser';
 
 export { isAIAnalysisResult } from './result-validator';
+export type { AIResultParseErrorCode } from './result-parser';
+export { AIResultParseError, parseAIAnalysisResult } from './result-parser';
+export { AI_ANALYSIS_RESULT_JSON_SCHEMA, type AIResultJsonSchema } from './result-schema';
 
 export { resolveApiKey, withRetry, type RetryOptions } from './utils';
 

@@ -1,6 +1,6 @@
 export type { DataFileType, WriteOptions } from './types';
 export { DATA_FILE_NAMES } from './types';
-export { getUserDataDir, getDataFilePath } from './paths';
+export { getDataRootDir, getUserDataDir, getDataFilePath } from './paths';
 export type { DataFileReadResult } from './reader';
 export { readDataFile, readDataFileResult } from './reader';
 export { DataFilePostWriteError, writeDataFile, writeDataFileWithRollback } from './writer';
@@ -17,3 +17,17 @@ export {
   readAnalysisState,
   updateAnalysisState,
 } from './analysis-state';
+export type { CodexThreadRegistryReadResult } from './codex-thread-registry';
+export {
+  CodexThreadRegistryCorruptError,
+  readCodexThreadRegistry,
+  updateCodexThreadRegistry,
+} from './codex-thread-registry';
+export type { CodexExecutionLockOwner, CodexExecutionLockState } from './codex-execution-lock';
+export {
+  CodexExecutionLockBusyError,
+  CodexExecutionLockOwnershipError,
+  CodexExecutionLockReleaseError,
+  readCodexExecutionLock,
+  withCodexExecutionLock,
+} from './codex-execution-lock';

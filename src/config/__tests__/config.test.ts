@@ -108,6 +108,13 @@ describe('config/storage', () => {
       expect(config.ai?.provider).toBe('gemini');
       expect(config.ai?.model).toBe('gemini-3.1-pro-preview');
       expect(config.ai?.thinkingLevel).toBe('high');
+      expect(config.ai?.codex).toMatchObject({
+        model: 'app-default',
+        reasoningEffort: 'model-default',
+        startupTimeout: 10_000,
+        turnTimeout: 600_000,
+        shutdownGrace: 2000,
+      });
       expect(config.fetch?.timeout).toBe(30_000);
       expect(config.analyzer?.inactivityThreshold).toBe(60);
       expect(config.data?.keepRaw).toBe(true);
@@ -130,6 +137,54 @@ describe('config/storage', () => {
       expect(config.ai?.provider).toBe('gemini');
       expect(config.ai?.timeout).toBe(60_000);
       expect(config.fetch?.timeout).toBe(30_000);
+    });
+  });
+});
+
+describe('config/ai', () => {
+  it('should prefer provider-specific Gemini settings', async () => {
+    const { resolveGeminiConfig } = await import('../ai');
+
+    const result = resolveGeminiConfig({
+      model: 'legacy-model',
+      thinkingLevel: 'low',
+      gemini: {
+        model: 'provider-model',
+        thinkingLevel: 'medium',
+      },
+    });
+
+    expect(result.model).toBe('provider-model');
+    expect(result.thinkingLevel).toBe('medium');
+  });
+
+  it('should preserve legacy Gemini settings and current defaults', async () => {
+    const { resolveGeminiConfig } = await import('../ai');
+
+    expect(resolveGeminiConfig({ model: 'legacy-model' }).model).toBe('legacy-model');
+    expect(resolveGeminiConfig()).toMatchObject({
+      model: 'gemini-3.1-pro-preview',
+      thinkingLevel: 'high',
+      timeout: 60_000,
+    });
+  });
+
+  it('should resolve Codex settings without inheriting legacy Gemini fields', async () => {
+    const { resolveCodexConfig } = await import('../ai');
+
+    expect(
+      resolveCodexConfig({
+        model: 'legacy-gemini-model',
+        thinkingLevel: 'high',
+        codex: { projectPath: 'C:\\data', turnTimeout: 900_000 },
+      }),
+    ).toEqual({
+      projectPath: 'C:\\data',
+      model: 'app-default',
+      reasoningEffort: 'model-default',
+      startupTimeout: 10_000,
+      turnTimeout: 900_000,
+      shutdownGrace: 2000,
     });
   });
 });

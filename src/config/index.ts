@@ -3,8 +3,19 @@
  */
 
 export type { V2erConfig } from './types';
-export type { AIConfig, ThinkingLevel } from './types/ai';
-export { THINKING_LEVELS } from './types/ai';
+export type {
+  AIConfig,
+  AIProviderId,
+  CodexProviderConfig,
+  GeminiProviderConfig,
+  ThinkingLevel,
+} from './types/ai';
+export {
+  AI_PROVIDERS,
+  CODEX_DEFAULT_MODEL,
+  CODEX_DEFAULT_REASONING_EFFORT,
+  THINKING_LEVELS,
+} from './types/ai';
 export type { FetchConfig } from './types/fetch';
 export type { AnalyzerConfig } from './types/analyzer';
 export type { DataConfig } from './types/data';
@@ -13,4 +24,6 @@ export type { LogLevel } from '@/infra/logger';
 export { getConfigDir, getConfigPath } from './path';
 export { readConfig, writeConfig, getConfig } from './storage';
 export { DEFAULT_CONFIG } from './defaults';
+export type { ResolvedCodexConfig, ResolvedGeminiConfig } from './ai';
+export { resolveCodexConfig, resolveGeminiConfig } from './ai';
 export { getProxyUrl, initFetchProxy } from './proxy';

@@ -42,6 +42,7 @@ root
 ├── docs/                     # Documentation & Specifications
 │   ├── prompt.md             # AI system prompt template (copy)
 │   ├── data-lifecycle.md     # Source-data retention, cleanup, and recovery
+│   ├── codex-app-server-integration.md # Codex local-provider architecture
 │   ├── analyzer-output/      # [Analyzer -> AI] Input data schema
 │   │   ├── output-schema.md      # Field-level specification
 │   │   └── output-types.ts      # Reference type definitions
@@ -76,11 +77,12 @@ root
 │   │   ├── index.ts          # Public exports
 │   │   ├── types/            # Modular config type definitions
 │   │   │   ├── index.ts          # Re-exports all types + V2erConfig
-│   │   │   ├── ai.ts             # AIConfig, ThinkingLevel
+│   │   │   ├── ai.ts             # Provider IDs and provider-specific settings
 │   │   │   ├── fetch.ts          # FetchConfig
 │   │   │   ├── analyzer.ts       # AnalyzerConfig
 │   │   │   ├── data.ts           # DataConfig
 │   │   │   └── log.ts            # LogConfig
+│   │   ├── ai.ts             # Gemini config resolution and legacy fallback
 │   │   ├── defaults.ts       # DEFAULT_CONFIG + ResolvedConfig type
 │   │   ├── path.ts           # Config dir/file path (~/.v2er-insight/)
 │   │   ├── storage.ts        # Read/write/merge config (deepMerge)
@@ -154,7 +156,8 @@ root
 │   │       │   └── system-prompt.md # AI system prompt template
 │   │       ├── providers/       # AI provider adapters
 │   │       │   ├── index.ts         # Re-exports providers
-│   │       │   └── gemini.ts        # Google Gemini provider
+│   │       │   ├── gemini.ts        # Google Gemini provider
+│   │       │   └── codex/           # Codex model resolution and provider components
 │   │       ├── parser/          # Response parsing & validation
 │   │       │   ├── index.ts         # parseResponse()
 │   │       │   └── validator.ts     # Lenient response validator
@@ -164,6 +167,10 @@ root
 │   │           └── retry.ts         # Retry with exponential backoff
 │   │
 │   └── infra/                # [Infrastructure Layer] External adapters
+│       ├── codex/            # Local Codex integration infrastructure
+│       │   ├── index.ts      # Public API exports
+│       │   ├── app-server/   # JSONL protocol, request client, and owned process lifecycle
+│       │   └── executable/   # CLI discovery, signature trust, probing, and launch
 │       ├── fetcher/          # [Complete] Generic HTTP fetcher
 │       │   ├── index.ts      # Public API exports
 │       │   ├── fetcher.ts    # SequentialStrategy & Fetcher class (transport retry)
@@ -177,7 +184,7 @@ root
 │       ├── storage/          # [Complete] User data persistence
 │       │   ├── index.ts      # Public API exports
 │       │   ├── types.ts      # DataFileType, WriteOptions
-│       │   ├── paths.ts      # User data dir/file path resolution
+│       │   ├── paths.ts      # Shared data root and user file path resolution
 │       │   ├── reader.ts     # JSON file reading
 │       │   ├── writer.ts     # Atomic JSON replacement and compensating rollback
 │       │   ├── analysis-state.ts # Validated sidecar reads and protected updates
@@ -322,8 +329,9 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `v2er <username>` → One-click pipeline (fetch → analyze → ai → show)
 - `v2er fetch <username>` → Fetch and save Raw Snapshot V2 with collection diagnostics (raw.json)
 - `v2er analyze <username>` → Validate Raw Snapshot V2 and generate statistics (analyzed.json)
-- `v2er ai <username>` → Generate user profile via Gemini (result.json)
+- `v2er ai <username>` → Generate user profile through the selected AI provider (result.json)
 - `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
+- `v2er session check [username] [--provider gemini|codex]` → Run read-only provider diagnostics
 - `v2er config show [group]` → View config (with apiKey masking)
 - `v2er config set <path> <value>` → Set config via dot-path (e.g. `ai.model`)
 - `v2er config reset [group]` → Reset to defaults
@@ -332,12 +340,17 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 **Main Command Options** (`v2er <username>`):
 
 - `--force` → Force re-fetch from scratch
-- `--model [name]` → Specify AI model (optional value)
-- `--thinking-level [level]` → Specify thinking level (optional value)
+- `--provider <provider>` → Select `gemini` or `codex`
+- `--model [name]` → Specify the selected provider model (optional value)
+- `--thinking-level [level]` → Specify Gemini thinking level (optional value)
+- `--reasoning-effort <effort>` → Specify Codex reasoning effort
+- `--new-thread` → Create a new Codex thread generation
+- `--codex-project <path>` → Specify the Project path for a new Codex thread
 - `--resend` → Force resend complete analyzed data
 - `-v, --verbose` → Show debug output
 
-The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
+The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
+`--reasoning-effort`, `--new-thread`, `--codex-project`, `--resend`, and `--verbose`.
 
 **Shared Logic** (`utils.ts` and `utils/error.ts`):
 
@@ -391,6 +404,11 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 **Structure**:
 
 - `types/` → Modular config types (AIConfig, FetchConfig, AnalyzerConfig, DataConfig, LogConfig)
+- `AIConfig` → `gemini` and `codex` provider namespaces selected by the `gemini | codex` provider ID; legacy flat Gemini fields remain readable
+- Codex default selectors use `app-default` for the App Server default model and `model-default` for that model's declared default reasoning effort
+- `resolveGeminiConfig()` → Provider-specific Gemini values, legacy flat values, then current Gemini defaults; `runAi()` and API Key resolution share this order
+- `resolveCodexConfig()` → Codex-only process, project, model, effort, and timeout settings; legacy Gemini fields are excluded
+- Codex lifecycle defaults: 10-second startup/request timeout, 10-minute turn timeout, and 2-second shutdown grace
 - `defaults.ts` → `DEFAULT_CONFIG` with all module defaults; `ResolvedConfig` utility type
 - `path.ts` → Config dir/file path resolution (`~/.v2er-insight/`)
 - `storage.ts` → Read/write config, `getConfig()` merges defaults with user settings via `deepMerge`
@@ -398,28 +416,53 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 
 **CLI Config Paths** (`CONFIG_PATHS` in `config.ts`):
 
-| Path                            | Type    | Notes                                 |
-| ------------------------------- | ------- | ------------------------------------- |
-| `proxy`                         | string  |                                       |
-| `ai.provider`                   | enum    | `gemini`                              |
-| `ai.apiKey`                     | string  |                                       |
-| `ai.model`                      | string  |                                       |
-| `ai.thinkingLevel`              | enum    | `minimal` / `low` / `medium` / `high` |
-| `ai.timeout`                    | number  |                                       |
-| `ai.maxRetries`                 | number  |                                       |
-| `ai.baseDelay`                  | number  |                                       |
-| `ai.maxDelay`                   | number  |                                       |
-| `fetch.timeout`                 | number  |                                       |
-| `fetch.maxRetries`              | number  |                                       |
-| `fetch.baseDelay`               | number  |                                       |
-| `fetch.maxDelay`                | number  |                                       |
-| `analyzer.inactivityThreshold`  | number  |                                       |
-| `analyzer.chunkMaxTopics`       | number  |                                       |
-| `analyzer.chunkMaxReplies`      | number  |                                       |
-| `analyzer.nodeDistributionTopN` | number  |                                       |
-| `data.keepRaw`                  | boolean |                                       |
-| `data.rawRetention`             | number  |                                       |
-| `log.level`                     | enum    | `error` / `warn` / `info` / `debug`   |
+| Path                            | Type    | Meaning                                                                   |
+| ------------------------------- | ------- | ------------------------------------------------------------------------- |
+| `proxy`                         | string  | Fetcher, Gemini, and Codex App Server proxy URL                           |
+| `ai.provider`                   | enum    | Active provider: `gemini` / `codex`; default `gemini`                     |
+| `ai.gemini.apiKey`              | string  | Gemini API credential; masked in config output                            |
+| `ai.gemini.model`               | string  | Gemini model name; default `gemini-3.1-pro-preview`                       |
+| `ai.gemini.thinkingLevel`       | enum    | `minimal` / `low` / `medium` / `high`; default `high`                     |
+| `ai.gemini.timeout`             | number  | Gemini request timeout in milliseconds; default `60_000`                  |
+| `ai.codex.executable`           | string  | Explicit ordinary CLI path; trusted native CLI discovery when absent      |
+| `ai.codex.projectPath`          | string  | Project directory for new threads; shared data root when absent           |
+| `ai.codex.model`                | string  | App Server `model` field; default `app-default`                           |
+| `ai.codex.reasoningEffort`      | string  | Codex model reasoning effort; default `model-default`                     |
+| `ai.codex.startupTimeout`       | number  | CLI probe, App Server startup, and ordinary RPC timeout; default `10_000` |
+| `ai.codex.turnTimeout`          | number  | Turn completion timeout in milliseconds; default `600_000`                |
+| `ai.codex.shutdownGrace`        | number  | Owned App Server shutdown grace in milliseconds; default `2_000`          |
+| `ai.apiKey`                     | string  | Legacy fallback for `ai.gemini.apiKey`; masked in config output           |
+| `ai.model`                      | string  | Legacy fallback for `ai.gemini.model`                                     |
+| `ai.thinkingLevel`              | enum    | Legacy fallback for `ai.gemini.thinkingLevel`                             |
+| `ai.timeout`                    | number  | Legacy fallback for `ai.gemini.timeout`                                   |
+| `ai.maxRetries`                 | number  | Gemini request retry count; default `3`                                   |
+| `ai.baseDelay`                  | number  | Gemini retry base delay in milliseconds; default `1_000`                  |
+| `ai.maxDelay`                   | number  | Gemini retry delay cap in milliseconds; default `10_000`                  |
+| `fetch.timeout`                 | number  | HTTP request timeout in milliseconds; default `30_000`                    |
+| `fetch.maxRetries`              | number  | HTTP transport retry count; default `3`                                   |
+| `fetch.baseDelay`               | number  | HTTP retry base delay in milliseconds; default `1_000`                    |
+| `fetch.maxDelay`                | number  | HTTP retry delay cap in milliseconds; default `8_000`                     |
+| `analyzer.inactivityThreshold`  | number  | Active-period split threshold in days; default `60`                       |
+| `analyzer.chunkMaxTopics`       | number  | Topic limit per content chunk; default `20`                               |
+| `analyzer.chunkMaxReplies`      | number  | Reply limit per content chunk; default `100`                              |
+| `analyzer.nodeDistributionTopN` | number  | Node-distribution entry limit; default `3`                                |
+| `data.keepRaw`                  | boolean | Permanent raw/analyzed retention; default `true`                          |
+| `data.rawRetention`             | number  | Cleanup age in days when `data.keepRaw=false`; default `1`                |
+| `log.level`                     | enum    | `error` / `warn` / `info` / `debug`; default `info`                       |
+
+Provider and Gemini thinking enums use the exported runtime allowlists. Legacy and provider-specific Gemini API keys are masked by `config show` and config-set confirmation output.
+
+Main and `ai` commands forward provider, model, Gemini thinking level, Codex reasoning effort, new-thread request, Codex Project override, and resend intent through the workflow boundary.
+
+Provider option resolution validates the configured or CLI provider against `AI_PROVIDERS` before provider access. Gemini rejects Codex Project, reasoning-effort, and new-thread options; Codex rejects Gemini thinking-level options.
+
+`v2er session check [username] [--provider gemini|codex]` uses the provider diagnostic RPC surface. Gemini output contains resolved model, thinking level, and API-key availability. Codex follows runtime priority for sequential candidate probing and retains candidate source, executable trust, version state, selected runtime/account metadata, the live visible model catalog, Project resolution, execution lock, registry summary, and one target thread summary when a user is supplied. Unvisited candidates retain a `not_checked` version state; model-configuration fallback reuses recorded version probes. Credential-store access remains inside the owned App Server.
+
+Codex automatic launch is limited to signed Windows native candidates discovered from running Codex processes or the ChatGPT App bundle. The Authenticode signature must be valid and the publisher must match the OpenAI allowlist. PATH candidates remain diagnostic observations until configured through `ai.codex.executable`; an explicit path is user-authorized and still passes version, protocol, account, and model checks. Thread methods validate their responses during creation, resume, and delivery. An ordinary Codex CLI shares App login state and thread history only when both processes resolve the same `CODEX_HOME`.
+
+Codex version and App Server processes inherit an allowlisted runtime environment from the v2er-insight parent process, covering Codex home, user/system/temp paths, locale, proxy, and certificate settings. The root `proxy` setting overrides HTTP and HTTPS proxy variables for App Server launches; version probes retain the inherited values. Native candidates exclude PATH; explicitly authorized command shims retain PATH and PATHEXT. `.cmd` launchers use a validated system command processor. API keys, access tokens, `NODE_OPTIONS`, `ComSpec`, and unrelated application variables remain outside the child environment. Proxy values may contain proxy credentials.
+
+Codex thread config disables web search and stable execution, browser, app, plugin, hook, collaboration, skill-installation, and tool-discovery features on start and resume. An ephemeral thread discovers effective MCP server names with zero model turns. Persisted thread config disables each discovered server that exposes tools, and its MCP inventory contains zero tools before delivery. `runTurn()` subscribes to App Server item events before `turn/start`. Analysis-only item types enter result collection. Tool calls, other non-analysis actions, and unknown actions trigger `turn/interrupt` and `CodexUnexpectedTurnActionError` before analysis parsing and result persistence; `result.json` and delivery provenance remain unchanged. App Server reverse requests remain on the method-not-found boundary.
 
 ### 7. Analyzer Module (Complete)
 
@@ -472,7 +515,7 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 
 ### 8. AI Module (Complete)
 
-- **Role**: Integrate with Google Gemini to generate deep user insights from analyzer output.
+- **Role**: Define the shared analysis request/result contract and the Gemini API adapter. CLI provider execution also supports Codex through the local App Server.
 
 **Public API** (`index.ts`):
 
@@ -481,8 +524,9 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 **Sub-modules**:
 
 - **Prompt** (`prompt/`):
-  - `buildAnalysisRequest(input)` → Constructs one compact AnalyzerOutput JSON payload with the system prompt.
+  - `buildAnalysisRequest(input)` → Constructs the LF-normalized system prompt, its SHA-256 hash, and one compact AnalyzerOutput JSON payload.
   - `system-prompt.md` → Markdown-based system prompt template.
+- **Result Schema** (`result-schema.ts`) → Closed structured-output schema for every `AIAnalysisResult` field; every object requires its declared properties and rejects additional properties.
 - **Providers** (`providers/`):
   - `GeminiProvider` → Google Gemini API adapter with multi-turn chat support.
   - `GeminiProvider.createSession(systemPrompt, options?)` supports
@@ -497,14 +541,18 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 
 **Analysis Data Contract**:
 
-- `AnalysisRequest` contains the system prompt and the normalized AnalyzerOutput payload.
+- `AnalysisRequest` contains the exact normalized system prompt used for delivery, its lowercase SHA-256 hash, and the AnalyzerOutput payload.
 - `AnalysisRequest.payload` is the compact JSON serialization of `schemaVersion`, `dataQuality`, `userOverview`, `summary`, and all `contents` entries.
+- `AI_ANALYSIS_RESULT_JSON_SCHEMA` preserves the persisted field names, OCEAN score range, and risk-level enum for structured provider output.
+- `parseAIAnalysisResult()` accepts raw JSON only and requires the complete closed result contract; syntax, missing fields, invalid values, and additional fields fail without fallback data.
+- `isAIAnalysisResult()` enforces exact keys at every object level as well as field value constraints.
 - `result.json` stores the validated `AIAnalysisResult`.
 
 **Defaults** (from `config/defaults.ts`):
 
-- Model: `gemini-3.1-pro-preview` (via `getConfig().ai.model`)
-- ThinkingLevel: `high` (via `getConfig().ai.thinkingLevel`)
+- Provider: `gemini`
+- Gemini model: `gemini-3.1-pro-preview` (via resolved `ai.gemini.model`)
+- Gemini ThinkingLevel: `high` (via resolved `ai.gemini.thinkingLevel`)
 - Source data retention: `data.keepRaw = true`; explicit `false` enables `data.rawRetention`
 - `maxRetries: 3`, `baseDelay: 1000`, `maxDelay: 10_000`
 - `runAi` resolves thinking level by priority:
@@ -513,6 +561,17 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
   - `undefined` (only if the config field is explicitly removed by the user)
 - Invalid thinking level fails fast with reason code
   `AI_INVALID_THINKING_LEVEL` and skips provider calls.
+
+**CLI Provider Execution**:
+
+- `runAi()` validates provider-specific options before credential and runtime access.
+- Gemini execution resolves reuse, API credentials, retry policy, response parsing, and delivery provenance in `cli/commands/ai/gemini.ts`.
+- Codex execution returns skipped, busy, or parsed-result states from `cli/commands/ai/codex.ts`; the Codex branch has no Gemini API key dependency.
+- Both provider branches commit `result.json` and delivery provenance through the same rollback-protected storage boundary.
+- Codex session completion follows the durable result/provenance commit. Completion failures preserve the committed result and pending session state for recovery.
+- Codex analysis holds one per-user cross-process lock across runtime execution, result/provenance persistence, session completion, and cleanup.
+- Concurrent Codex commands return `AI_CODEX_BUSY` with validated owner PID and acquisition time when available. Filesystem or ownership failures return `AI_CODEX_LOCK_FAILED`.
+- Typed Codex runtime, Project, protocol, timeout, thread, turn, output, and registry failures map to provider-specific reason codes and recovery actions at the CLI boundary. Unclassified errors retain the shared provider failure fallback.
 
 ### 9. Retry Module (Complete)
 
@@ -584,6 +643,7 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
   - `buildExecutionPlan(entryStep)` → Returns ordered step array via slice
 - **Recovery** (`recovery.ts`): Maps `ReasonCode` → `RecoveryAction[]` with template rendering
   - Includes `AI_INVALID_THINKING_LEVEL` recovery guidance.
+  - `AI_INVALID_PROVIDER_OPTIONS` identifies valid providers and each provider's CLI-only options.
 - **Orchestrator** (`orchestrator.ts`):
   - Sequential step dispatch with `pipeline: true` flag
   - `failed` → immediate halt, `partial` → continue with exitCode=1
@@ -600,43 +660,88 @@ The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
 ├── raw.json       # Raw data captured
 ├── analyzed.json   # Analyzer output
 ├── result.json     # AI analysis results
-└── analysis-state.json # Durable provenance and provider delivery state
+├── analysis-state.json # Durable provenance and provider delivery state
+├── codex-sessions.json # Validated Codex thread registry
+└── .codex-execution.lock # Per-user Codex transaction owner
 ```
 
 **Public API** (valid username pattern: `/^[a-zA-Z0-9_-]+$/`; other values throw Error):
 
+- `getDataRootDir()` → Shared data root path
 - `getUserDataDir(username)` → User data directory path
 - `getDataFilePath(username, type)` → Specific data file path
-- `readDataFile<T>(username, type)` → Read `raw`, `analyzed`, `result`, or `analysisState` JSON (returns `null` on missing/invalid)
-- `readDataFileResult(username, type)` → Typed `missing`, `invalid`, and parsed-success states for every `DataFileType`
+- `readDataFile<T>(username, type)` → Read a registered data-file type (returns `null` on missing/invalid)
+- `readDataFileResult(username, type)` → Single-read states where `ENOENT` is `missing` and parse or other read failures are `invalid`
 - `writeDataFile(username, type, data, options?)` → Same-directory `0600` temporary write and atomic target replacement
 - `readAnalysisState(username)` → Validated `analysis-state.json` with missing/invalid/valid distinctions
 - `updateAnalysisState(username, updater)` → Validated existing and updated state with atomic persistence
+- `readCodexThreadRegistry(username)` → Validated `codex-sessions.json` with missing/invalid/valid distinctions
+- `updateCodexThreadRegistry(username, updater)` → Corruption-protected registry update with validation and atomic persistence
+- `readCodexExecutionLock(username)` → Missing, invalid, or validated owner state for the per-user Codex lock
+- `withCodexExecutionLock(username, operation)` → `wx`-acquired `0600` cross-process lock with token-checked release
 - `cleanExpiredData(username)` → Cleanup enablement, retention, deleted files, and typed skip diagnostics
 
 **Cleanup Strategy**:
 
 - `data.keepRaw = true` → Permanent raw/analyzed retention (default)
 - `data.keepRaw = false` → Age-based cleanup after `data.rawRetention` days (default retention: 1)
-- `result.json` and `analysis-state.json` → Permanent retention
+- `result.json`, `analysis-state.json`, and `codex-sessions.json` → Permanent retention
+- `.codex-execution.lock` → Transaction-scoped lock; abnormal termination retains owner metadata for diagnosis
 - Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
 - `docs/data-lifecycle.md` documents user-facing retention effects and recovery commands.
 
+### 13. Codex Local Provider
+
+Detailed protocol and recovery reference: `docs/codex-app-server-integration.md`.
+
+**Executable and Process Boundary**:
+
+- **Location and discovery**: `src/infra/codex/executable` and `src/infra/codex/app-server`; explicit executable, running `codex.exe`, ChatGPT App bundle, PATH.
+- **Windows boundary**: Read-only process query, case-insensitive path identity, native `shell: false`, fixed `.cmd` launcher arguments, validated system `cmd.exe` path.
+- **Owned process lifecycle**: Pre-launch option validation, bounded stderr, constructor-failure cleanup, idempotent close, configured shutdown grace.
+- **Account boundary**: Real `CODEX_HOME` credential-store access and automatic token refresh inside the owned App Server; `account/read(refreshToken: false)` for availability checks; account type and authentication availability in the v2er runtime projection.
+
+**Protocol and Runtime Selection**:
+
+- **JSONL boundary**: UTF-8 framing, monotonic request IDs, typed `unknown` decoding, deadlines, removable notification subscriptions; stable App Server methods only.
+- **Model and MCP catalogs**: Maximum 100 pages, repeated-cursor rejection, exact model-field matching, server-declared reasoning efforts, and per-thread MCP server/tool names.
+- **Dynamic defaults**: `app-default` from the unique live default model; `model-default` from that model's declared default effort.
+- **Runtime acceptance**: Valid CLI version response, stable initialization, available account, valid model and effort.
+- **Diagnostics**: Candidate attempts, live model catalog, Project state, registry consistency, thread and turn identifiers; the structured report excludes agent message text and credentials.
+
+**Project and Thread Identity**:
+
+- **Project identity**: CLI override, `ai.codex.projectPath`, shared data root; case-insensitive Windows comparison and case-sensitive non-Windows comparison.
+- **Thread policy**: Persisted session, `serviceName: v2er-insight`, approval `never`, read-only sandbox, sandbox network access disabled, web search disabled, and stable execution features disabled; ordinary user prompt turn before the first complete AnalyzerOutput turn.
+- **Tool boundary**: Ephemeral MCP discovery, thread-local server disables, persisted zero-MCP-tool verification, pre-turn event subscription, unexpected-action interruption, `runTurn()` rejection before result parsing and persistence, and method-not-found responses for server-to-client requests.
+- **Identity and registry**: Thread ID recovery key, `<username>-insight` generation names, per-user session generations, accepted turn IDs, executable metadata, App Server instruction sources, pending delivery identity.
+
+**Delivery and Recovery**:
+
+- **Session choice and compatibility**: Explicit new generation, highest compatible pending generation, compatible active ready session; compatibility covers prompt hash, actual model, and Project path.
+- **Delivery identity**: Provider key, analysis fingerprint, payload hash, capture-quality state, delivery mode, and reasoning effort.
+- **Turn progression**: At most one external turn per advance; exhaustive prepared-action control flow; accepted turn ID persistence before completion wait.
+- **Result boundary**: Completed terminal turn, final agent message selection, closed `AIAnalysisResult` parsing, durable result/provenance commit before session completion.
+- **Recovery boundary**: Exact thread and turn IDs, persisted pending identity, busy state for active turns, explicit error for untracked acceptance.
+
 ## Proxy Configuration
 
-**Priority Order**:
+**Fetcher and Gemini Priority Order**:
 
 1. Config file (`~/.v2er-insight/config.json`)
 2. Environment variable `HTTPS_PROXY`
 3. Environment variable `HTTP_PROXY`
 
-If none are set, no proxy is used.
+Codex App Server inherits the allowlisted `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` values from the v2er-insight process. A configured `proxy` replaces the child HTTP and HTTPS values while retaining bypass, fallback, and certificate settings. POSIX children receive the corresponding lowercase HTTP and HTTPS aliases. Codex version probes use inherited values without the configured override.
+
+If no proxy source is present, network clients use a direct connection.
 
 **Technical Details**:
 
 - **Fetcher (Axios)**: Uses `https-proxy-agent` to create `httpsAgent`; Axios built-in proxy disabled (`proxy: false`)
 - **AI (native fetch)**: Uses `undici` `ProxyAgent` + `setGlobalDispatcher` to proxy `@google/genai` requests
-- Both mechanisms share the same `getProxyUrl()` resolution logic
+- **Codex App Server**: Uses the bounded child environment with an optional configured proxy override
+- Fetcher and Gemini share the same `getProxyUrl()` resolution logic
 - `initFetchProxy()` is called once at CLI entry (`src/cli/index.ts`)
 - Proxy URL format: `http://host:port` (e.g., `http://127.0.0.1:10808`)
 

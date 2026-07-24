@@ -4,8 +4,19 @@
  * 每个模块的配置拆分为独立文件，方便阅读和按需引用。
  */
 
-export type { AIConfig, ThinkingLevel } from './ai';
-export { THINKING_LEVELS } from './ai';
+export type {
+  AIConfig,
+  AIProviderId,
+  CodexProviderConfig,
+  GeminiProviderConfig,
+  ThinkingLevel,
+} from './ai';
+export {
+  AI_PROVIDERS,
+  CODEX_DEFAULT_MODEL,
+  CODEX_DEFAULT_REASONING_EFFORT,
+  THINKING_LEVELS,
+} from './ai';
 export type { FetchConfig } from './fetch';
 export type { AnalyzerConfig } from './analyzer';
 export type { DataConfig } from './data';

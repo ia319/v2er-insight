@@ -32,8 +32,12 @@ export function resolveWorkflowOptions(
   return {
     username,
     force: options.force,
+    provider: options.provider,
     model,
     thinkingLevel,
+    reasoningEffort: options.reasoningEffort,
+    newThread: options.newThread,
+    codexProject: options.codexProject,
     resend: options.resend,
     verbose: options.verbose,
   };

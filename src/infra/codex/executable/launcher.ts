@@ -1,0 +1,138 @@
+import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import path from 'path';
+import type { Readable, Writable } from 'stream';
+import { createCodexProcessEnvironment } from './process-environment';
+import type { CodexExecutableCandidate } from './types';
+import { resolveWindowsCommandProcessorPath } from './windows-command-processor';
+
+export type CodexCliInvocation = 'version' | 'app-server';
+
+interface CodexLaunchSpec {
+  command: string;
+  args: string[];
+  windowsVerbatimArguments: boolean;
+}
+
+export interface CodexCliExit {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
+
+export interface CodexCliProcess {
+  stdin: Writable;
+  stdout: Readable;
+  stderr: Readable;
+  exit: Promise<CodexCliExit>;
+  terminate(): boolean;
+}
+
+export interface CodexCliLaunchOptions {
+  proxyUrl?: string;
+}
+
+const INVOCATION_ARGS = {
+  version: ['--version'],
+  'app-server': ['app-server', '--listen', 'stdio://'],
+} as const satisfies Record<CodexCliInvocation, readonly string[]>;
+
+const UNSAFE_CMD_PATH_PATTERN = /[&|<>^%!"\r\n]/u;
+
+/**
+ * Builds a fixed Codex process invocation for native binaries or Windows command shims.
+ * @param candidate - Discovered executable candidate.
+ * @param invocation - Allowed fixed CLI operation.
+ * @param platform - Target host platform.
+ * @param commandProcessor - Validated system command processor used for `.cmd` shims.
+ * @returns Executable and argument vector for `spawn` with `shell: false`.
+ */
+export function createCodexLaunchSpec(
+  candidate: CodexExecutableCandidate,
+  invocation: CodexCliInvocation,
+  platform = process.platform,
+  commandProcessor?: string,
+): CodexLaunchSpec {
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  if (!pathApi.isAbsolute(candidate.path)) {
+    throw new Error('Codex executable path must be absolute');
+  }
+
+  const args = [...INVOCATION_ARGS[invocation]];
+  if (candidate.kind === 'native') {
+    return { command: candidate.path, args, windowsVerbatimArguments: false };
+  }
+
+  if (platform !== 'win32') {
+    throw new Error('Codex command shims are supported only on Windows');
+  }
+
+  if (UNSAFE_CMD_PATH_PATTERN.test(candidate.path)) {
+    throw new Error('Codex command shim path contains unsupported command characters');
+  }
+  if (!commandProcessor || !path.win32.isAbsolute(commandProcessor)) {
+    throw new Error('Windows system command processor is unavailable');
+  }
+
+  return {
+    command: commandProcessor,
+    args: ['/d', '/s', '/c', `""${candidate.path}" ${args.join(' ')}"`],
+    windowsVerbatimArguments: true,
+  };
+}
+
+/**
+ * Starts a fixed Codex CLI operation with piped stdio.
+ * @param candidate - Discovered executable candidate.
+ * @param invocation - Allowed fixed CLI operation.
+ * @param options - Explicit child process environment values.
+ * @param sourceEnv - Parent environment used to build bounded child variables.
+ * @param platform - Host platform controlling launch and environment semantics.
+ * @returns The child process owned by the caller.
+ */
+export function spawnCodexCli(
+  candidate: CodexExecutableCandidate,
+  invocation: CodexCliInvocation,
+  options: CodexCliLaunchOptions = {},
+  sourceEnv: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): ChildProcessWithoutNullStreams {
+  const childEnv = createCodexProcessEnvironment(candidate, options, sourceEnv, platform);
+  const commandProcessor =
+    candidate.kind === 'command-shim' && platform === 'win32'
+      ? (resolveWindowsCommandProcessorPath(sourceEnv) ?? undefined)
+      : undefined;
+  const launch = createCodexLaunchSpec(candidate, invocation, platform, commandProcessor);
+  return spawn(launch.command, launch.args, {
+    env: childEnv,
+    shell: false,
+    windowsHide: true,
+    windowsVerbatimArguments: launch.windowsVerbatimArguments,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+}
+
+/**
+ * Starts a Codex CLI operation and exposes an owned lifecycle handle.
+ * @param candidate - Discovered executable candidate.
+ * @param invocation - Allowed fixed CLI operation.
+ * @param options - Explicit child process environment values.
+ * @returns Piped streams, exit status, and termination for this child only.
+ */
+export function launchCodexCli(
+  candidate: CodexExecutableCandidate,
+  invocation: CodexCliInvocation,
+  options: CodexCliLaunchOptions = {},
+): CodexCliProcess {
+  const child = spawnCodexCli(candidate, invocation, options);
+  const exit = new Promise<CodexCliExit>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+
+  return {
+    stdin: child.stdin,
+    stdout: child.stdout,
+    stderr: child.stderr,
+    exit,
+    terminate: () => child.kill(),
+  };
+}

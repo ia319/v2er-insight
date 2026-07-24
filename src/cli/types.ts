@@ -22,10 +22,18 @@ export interface FetchCommandOptions {
  * ai 命令选项
  */
 export interface AiCommandOptions {
+  /** Temporarily selects an AI provider. */
+  provider?: string;
   /** 临时指定模型，或 true 表示触发交互选择 */
   model?: string | true;
   /** 临时覆盖思考等级，或 true 表示触发交互选择 */
   thinkingLevel?: ThinkingLevel | true;
+  /** Temporarily selects Codex reasoning effort. */
+  reasoningEffort?: string;
+  /** Creates a new Codex thread generation. */
+  newThread?: boolean;
+  /** Temporarily overrides the Codex Project path. */
+  codexProject?: string;
   /** Forces a resend of the complete analyzed payload. */
   resend?: boolean;
   /** 由一键流程触发时开启，供命令控制日志粒度 */
@@ -55,10 +63,18 @@ export interface ShowCommandOptions {
 export interface RunCommandOptions {
   /** 强制重新抓取，忽略缓存 */
   force?: boolean;
+  /** Temporarily selects an AI provider. */
+  provider?: string;
   /** 临时指定模型，或 true 表示触发交互选择 */
   model?: string | true;
   /** 临时覆盖思考等级，或 true 表示触发交互选择 */
   thinkingLevel?: ThinkingLevel | true;
+  /** Temporarily selects Codex reasoning effort. */
+  reasoningEffort?: string;
+  /** Creates a new Codex thread generation. */
+  newThread?: boolean;
+  /** Temporarily overrides the Codex Project path. */
+  codexProject?: string;
   /** Forces a resend of the complete analyzed payload. */
   resend?: boolean;
   /** 显示 debug 级别日志 */

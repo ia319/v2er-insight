@@ -3,11 +3,12 @@
  *
  * 优先级：
  * 1. 显式传入的参数
- * 2. 配置文件 (~/.v2er-insight/config.json) 中的 ai.apiKey
+ * 2. 配置文件中的 Gemini provider API Key
  * 3. 环境变量 GOOGLE_API_KEY / GEMINI_API_KEY
  */
 
 import { getConfig } from '@/config';
+import { resolveGeminiConfig } from '@/config/ai';
 
 const ENV_KEYS = ['GOOGLE_API_KEY', 'GEMINI_API_KEY'] as const;
 
@@ -22,7 +23,7 @@ export function resolveApiKey(explicit?: string): string | null {
   }
 
   const config = getConfig();
-  const configKey = config.ai?.apiKey;
+  const configKey = resolveGeminiConfig(config.ai).apiKey;
   if (configKey && configKey.trim() !== '') {
     return configKey.trim();
   }

@@ -6,7 +6,15 @@
  */
 
 import type { V2erConfig } from '@/config';
-import { DEFAULT_CONFIG, readConfig, writeConfig, getConfig, getConfigPath } from '@/config';
+import {
+  AI_PROVIDERS,
+  DEFAULT_CONFIG,
+  THINKING_LEVELS,
+  readConfig,
+  writeConfig,
+  getConfig,
+  getConfigPath,
+} from '@/config';
 import { logger } from '@/infra/logger';
 import { createDataRetentionEnabledNotice } from '../workflow/data-retention-notices';
 import { renderNotice } from '../workflow/notices';
@@ -30,16 +38,25 @@ interface ConfigPathMeta {
  * 2. 自动推断值类型并做类型转换
  * 3. 枚举路径做候选值校验
  */
-// NOTE: 枚举 values 与类型定义（ThinkingLevel、LogLevel 等）存在耦合，新增枚举值时需同步更新。
-// 未来可考虑从类型定义中统一导出枚举值以减少维护负担。
 const CONFIG_PATHS: Record<string, ConfigPathMeta> = {
   // 顶层
   proxy: { type: 'string' },
   // AI
-  'ai.provider': { type: 'enum', values: ['gemini'] },
+  'ai.provider': { type: 'enum', values: AI_PROVIDERS },
+  'ai.gemini.apiKey': { type: 'string' },
+  'ai.gemini.model': { type: 'string' },
+  'ai.gemini.thinkingLevel': { type: 'enum', values: THINKING_LEVELS },
+  'ai.gemini.timeout': { type: 'number' },
+  'ai.codex.executable': { type: 'string' },
+  'ai.codex.projectPath': { type: 'string' },
+  'ai.codex.model': { type: 'string' },
+  'ai.codex.reasoningEffort': { type: 'string' },
+  'ai.codex.startupTimeout': { type: 'number' },
+  'ai.codex.turnTimeout': { type: 'number' },
+  'ai.codex.shutdownGrace': { type: 'number' },
   'ai.apiKey': { type: 'string' },
   'ai.model': { type: 'string' },
-  'ai.thinkingLevel': { type: 'enum', values: ['minimal', 'low', 'medium', 'high'] },
+  'ai.thinkingLevel': { type: 'enum', values: THINKING_LEVELS },
   'ai.timeout': { type: 'number' },
   'ai.maxRetries': { type: 'number' },
   'ai.baseDelay': { type: 'number' },
@@ -88,13 +105,15 @@ function maskSensitive(value: string): string {
 /**
  * 格式化配置值用于显示
  *
- * 对 apiKey 字段做掩码处理，其余原样输出。
+ * 对 Gemini API key 字段做掩码处理，其余原样输出。
  */
-// NOTE: 目前仅 ai.apiKey 需要掩码。若新增其他敏感字段，考虑用元数据驱动替代硬编码。
 function formatConfigForDisplay(config: V2erConfig): V2erConfig {
   const display = JSON.parse(JSON.stringify(config)) as V2erConfig;
   if (display.ai?.apiKey) {
     display.ai.apiKey = maskSensitive(display.ai.apiKey);
+  }
+  if (display.ai?.gemini?.apiKey) {
+    display.ai.gemini.apiKey = maskSensitive(display.ai.gemini.apiKey);
   }
   return display;
 }

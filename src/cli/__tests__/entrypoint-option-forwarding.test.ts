@@ -9,6 +9,7 @@ const mockedConfigProxy = vi.hoisted(() => vi.fn());
 const mockedConfigShow = vi.hoisted(() => vi.fn());
 const mockedConfigSet = vi.hoisted(() => vi.fn());
 const mockedConfigReset = vi.hoisted(() => vi.fn());
+const mockedRunSessionCheck = vi.hoisted(() => vi.fn());
 const mockedInitFetchProxy = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedLoggerSetLevel = vi.hoisted(() => vi.fn());
@@ -25,6 +26,7 @@ vi.mock('../commands', () => ({
   configShow: mockedConfigShow,
   configSet: mockedConfigSet,
   configReset: mockedConfigReset,
+  runSessionCheck: mockedRunSessionCheck,
 }));
 
 vi.mock('@/config', () => ({
@@ -58,6 +60,7 @@ describe('cli option forwarding', () => {
         },
       ],
     });
+    mockedRunSessionCheck.mockResolvedValue({ status: 'success', provider: 'codex' });
   });
 
   afterEach(() => {
@@ -65,7 +68,20 @@ describe('cli option forwarding', () => {
   });
 
   it('should forward AI options to the ai subcommand', async () => {
-    process.argv = ['node', 'v2er', 'ai', 'alice', '--thinking-level', 'low', '--resend'];
+    process.argv = [
+      'node',
+      'v2er',
+      'ai',
+      'alice',
+      '--provider',
+      'codex',
+      '--reasoning-effort',
+      'high',
+      '--new-thread',
+      '--codex-project',
+      'D:\\Data',
+      '--resend',
+    ];
 
     await import('../index');
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -74,7 +90,10 @@ describe('cli option forwarding', () => {
     expect(mockedRunAi).toHaveBeenCalledWith(
       'alice',
       expect.objectContaining({
-        thinkingLevel: 'low',
+        provider: 'codex',
+        reasoningEffort: 'high',
+        newThread: true,
+        codexProject: 'D:\\Data',
         resend: true,
       }),
     );

@@ -1,9 +1,11 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/config', () => ({
+  AI_PROVIDERS: ['gemini', 'codex'],
   DEFAULT_CONFIG: {
     data: { keepRaw: true, rawRetention: 1 },
   },
+  THINKING_LEVELS: ['minimal', 'low', 'medium', 'high'],
   readConfig: vi.fn(),
   writeConfig: vi.fn(),
   getConfig: vi.fn(),
@@ -157,6 +159,19 @@ describe('configShow command', () => {
 
     const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
     expect(output.ai.apiKey).toBe('****');
+  });
+
+  it('should mask provider-specific Gemini apiKey', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    mockedGetConfig.mockReturnValue({
+      ai: { gemini: { apiKey: 'sk-1234567890abcdef' } },
+    });
+
+    const { configShow } = await import('../config');
+    configShow('ai');
+
+    const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+    expect(output.gemini.apiKey).toBe('sk-1****cdef');
   });
 
   it('should display specific group when provided', async () => {
@@ -326,6 +341,23 @@ describe('configSet command', () => {
 
     expect(mockedWriteConfig).toHaveBeenCalledWith({
       ai: { thinkingLevel: 'medium' },
+    });
+  });
+
+  it('should accept codex provider settings', async () => {
+    mockedReadConfig.mockReturnValue({});
+
+    const { configSet } = await import('../config');
+    configSet('ai.provider', 'codex');
+
+    expect(mockedWriteConfig).toHaveBeenCalledWith({ ai: { provider: 'codex' } });
+
+    vi.clearAllMocks();
+    mockedReadConfig.mockReturnValue({ ai: { provider: 'codex' } });
+    configSet('ai.codex.reasoningEffort', 'high');
+
+    expect(mockedWriteConfig).toHaveBeenCalledWith({
+      ai: { provider: 'codex', codex: { reasoningEffort: 'high' } },
     });
   });
 

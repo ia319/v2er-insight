@@ -6,7 +6,8 @@
  *     ├── raw.json       # 抓取的原始数据
  *     ├── analyzed.json   # Analyzer 输出
  *     ├── result.json     # AI 分析结果
- *     └── analysis-state.json # 持久化 provenance 状态
+ *     ├── analysis-state.json # 持久化 provenance 状态
+ *     └── codex-sessions.json # Codex thread 注册表
  */
 
 import path from 'path';
@@ -19,6 +20,14 @@ const DATA_DIR = 'data';
 
 /** 合法用户名格式：仅允许字母、数字、下划线、连字符 */
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Resolves the shared root directory for persisted user data.
+ * @returns The data directory under the configured application directory.
+ */
+export function getDataRootDir(): string {
+  return path.join(getConfigDir(), DATA_DIR);
+}
 
 /**
  * 校验用户名是否合法
@@ -38,7 +47,7 @@ function validateUsername(username: string): void {
  */
 export function getUserDataDir(username: string): string {
   validateUsername(username);
-  return path.join(getConfigDir(), DATA_DIR, username);
+  return path.join(getDataRootDir(), username);
 }
 
 /**

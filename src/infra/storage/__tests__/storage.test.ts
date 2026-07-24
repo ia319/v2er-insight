@@ -27,6 +27,13 @@ describe('storage/paths', () => {
     vi.restoreAllMocks();
   });
 
+  describe('getDataRootDir', () => {
+    it('should return the shared data directory path', async () => {
+      const { getDataRootDir } = await import('../paths');
+      expect(getDataRootDir()).toBe(mockDataBase);
+    });
+  });
+
   describe('getUserDataDir', () => {
     it('should return user data directory path', async () => {
       const { getUserDataDir } = await import('../paths');
@@ -59,6 +66,13 @@ describe('storage/paths', () => {
       const { getDataFilePath } = await import('../paths');
       expect(getDataFilePath('livid', 'analysisState')).toBe(
         path.join(mockDataBase, 'livid', 'analysis-state.json'),
+      );
+    });
+
+    it('should return codex-sessions.json path', async () => {
+      const { getDataFilePath } = await import('../paths');
+      expect(getDataFilePath('livid', 'codexSessions')).toBe(
+        path.join(mockDataBase, 'livid', 'codex-sessions.json'),
       );
     });
   });
@@ -101,14 +115,15 @@ describe('storage/reader', () => {
 
   describe('readDataFile', () => {
     it('should return null when file does not exist', async () => {
-      mockedFs.existsSync.mockReturnValue(false);
+      mockedFs.readFileSync.mockImplementation(() => {
+        throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      });
       const { readDataFile } = await import('../reader');
 
       expect(readDataFile('livid', 'raw')).toBeNull();
     });
 
     it('should return parsed object when file exists', async () => {
-      mockedFs.existsSync.mockReturnValue(true);
       mockedFs.readFileSync.mockReturnValue('{"topics":[],"replies":[]}');
       const { readDataFile } = await import('../reader');
 
@@ -117,7 +132,6 @@ describe('storage/reader', () => {
     });
 
     it('should return null on JSON parse error', async () => {
-      mockedFs.existsSync.mockReturnValue(true);
       mockedFs.readFileSync.mockReturnValue('invalid json');
       const { readDataFile } = await import('../reader');
 
@@ -125,7 +139,6 @@ describe('storage/reader', () => {
     });
 
     it('should preserve invalid JSON as a distinct detailed read result', async () => {
-      mockedFs.existsSync.mockReturnValue(true);
       mockedFs.readFileSync.mockReturnValue('invalid json');
       const { readDataFileResult } = await import('../reader');
 

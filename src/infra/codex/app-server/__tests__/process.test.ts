@@ -1,0 +1,162 @@
+import { PassThrough } from 'stream';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CodexCliExit, CodexCliProcess } from '../../executable';
+
+const mockedLaunchCodexCli = vi.hoisted(() => vi.fn());
+
+vi.mock('../../executable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../executable')>();
+  return { ...actual, launchCodexCli: mockedLaunchCodexCli };
+});
+
+import { CodexAppServerProcess, startCodexAppServer } from '../process';
+
+const CANDIDATE = {
+  path: 'C:\\App\\codex.exe',
+  source: 'explicit',
+  kind: 'native',
+} as const;
+
+interface ProcessHarness {
+  handle: CodexCliProcess;
+  stderr: PassThrough;
+  exitWith(exit: CodexCliExit): void;
+  terminate: ReturnType<typeof vi.fn>;
+}
+
+function createProcessHarness(): ProcessHarness {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const terminate = vi.fn(() => true);
+  let resolveExit: ((exit: CodexCliExit) => void) | undefined;
+  const exit = new Promise<CodexCliExit>((resolve) => {
+    resolveExit = resolve;
+  });
+
+  return {
+    handle: { stdin, stdout, stderr, exit, terminate },
+    stderr,
+    exitWith: (result) => resolveExit?.(result),
+    terminate,
+  };
+}
+
+describe('CodexAppServerProcess', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should close stdin and preserve a graceful exit', async () => {
+    const harness = createProcessHarness();
+    const process = new CodexAppServerProcess(harness.handle, {
+      requestTimeoutMs: 1000,
+      shutdownGraceMs: 1000,
+    });
+    const stdinEnded = new Promise<void>((resolve) => harness.handle.stdin.once('finish', resolve));
+
+    const closing = process.close();
+    await stdinEnded;
+    harness.exitWith({ code: 0, signal: null });
+
+    await expect(closing).resolves.toMatchObject({ code: 0, forced: false });
+    expect(harness.terminate).not.toHaveBeenCalled();
+  });
+
+  it('should terminate only the owned child after the shutdown grace period', async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createProcessHarness();
+      harness.terminate.mockImplementation(() => {
+        harness.exitWith({ code: null, signal: 'SIGTERM' });
+        return true;
+      });
+      const process = new CodexAppServerProcess(harness.handle, {
+        requestTimeoutMs: 1000,
+        shutdownGraceMs: 25,
+      });
+
+      const closing = process.close();
+      const result = expect(closing).resolves.toMatchObject({ forced: true, signal: 'SIGTERM' });
+      await vi.advanceTimersByTimeAsync(25);
+
+      await result;
+      expect(harness.terminate).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should bound stderr diagnostics to the configured limit', () => {
+    const harness = createProcessHarness();
+    const process = new CodexAppServerProcess(harness.handle, {
+      requestTimeoutMs: 1000,
+      shutdownGraceMs: 1000,
+      stderrLimit: 5,
+    });
+
+    harness.stderr.write('123456789');
+
+    expect(process.getStderr()).toBe('56789');
+    harness.exitWith({ code: 0, signal: null });
+  });
+
+  it('should reject invalid timeout configuration', () => {
+    const harness = createProcessHarness();
+
+    expect(
+      () =>
+        new CodexAppServerProcess(harness.handle, {
+          requestTimeoutMs: Number.NaN,
+          shutdownGraceMs: 1000,
+        }),
+    ).toThrow('requestTimeoutMs must be a positive finite number');
+    harness.exitWith({ code: 0, signal: null });
+  });
+
+  it('should validate process options before launching the App Server', () => {
+    expect(() =>
+      startCodexAppServer(CANDIDATE, {
+        requestTimeoutMs: 0,
+        shutdownGraceMs: 1000,
+      }),
+    ).toThrow('requestTimeoutMs must be a positive finite number');
+
+    expect(mockedLaunchCodexCli).not.toHaveBeenCalled();
+  });
+
+  it('should pass the configured proxy only to the App Server launch', () => {
+    const harness = createProcessHarness();
+    mockedLaunchCodexCli.mockReturnValue(harness.handle);
+
+    startCodexAppServer(CANDIDATE, {
+      requestTimeoutMs: 1000,
+      shutdownGraceMs: 1000,
+      proxyUrl: 'http://config-proxy.example',
+    });
+
+    expect(mockedLaunchCodexCli).toHaveBeenCalledWith(CANDIDATE, 'app-server', {
+      proxyUrl: 'http://config-proxy.example',
+    });
+    harness.exitWith({ code: 0, signal: null });
+  });
+
+  it('should terminate a launched process when owner construction fails', () => {
+    const harness = createProcessHarness();
+    const constructionError = new Error('stderr listener unavailable');
+    vi.spyOn(harness.stderr, 'on').mockImplementationOnce(() => {
+      throw constructionError;
+    });
+    mockedLaunchCodexCli.mockReturnValue(harness.handle);
+
+    expect(() =>
+      startCodexAppServer(CANDIDATE, {
+        requestTimeoutMs: 1000,
+        shutdownGraceMs: 1000,
+      }),
+    ).toThrow(constructionError);
+
+    expect(harness.terminate).toHaveBeenCalledOnce();
+    harness.exitWith({ code: null, signal: 'SIGTERM' });
+  });
+});

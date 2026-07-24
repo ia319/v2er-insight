@@ -26,6 +26,23 @@ export type ReasonCode =
   | 'AI_SOURCE_MISMATCH'
   | 'AI_API_KEY_MISSING'
   | 'AI_INVALID_THINKING_LEVEL'
+  | 'AI_INVALID_PROVIDER_OPTIONS'
+  | 'AI_CODEX_BUSY'
+  | 'AI_CODEX_LOCK_FAILED'
+  | 'AI_CODEX_SESSION_UPDATE_FAILED'
+  | 'AI_CODEX_EXECUTABLE_NOT_FOUND'
+  | 'AI_CODEX_EXECUTABLE_INCOMPATIBLE'
+  | 'AI_CODEX_AUTH_REQUIRED'
+  | 'AI_CODEX_PROTOCOL_ERROR'
+  | 'AI_CODEX_MODEL_NOT_FOUND'
+  | 'AI_CODEX_REASONING_UNSUPPORTED'
+  | 'AI_CODEX_PROJECT_UNAVAILABLE'
+  | 'AI_CODEX_THREAD_NOT_FOUND'
+  | 'AI_CODEX_TURN_FAILED'
+  | 'AI_CODEX_TURN_STATUS_UNKNOWN'
+  | 'AI_CODEX_OUTPUT_INVALID'
+  | 'AI_CODEX_TIMEOUT'
+  | 'AI_CODEX_STATE_INVALID'
   | 'AI_PROVIDER_FAILED'
   | 'AI_RESULT_WRITE_FAILED'
   | 'SHOW_RESULT_MISSING'
@@ -93,8 +110,12 @@ export type WorkflowOverallStatus = 'success' | 'partial' | 'failed';
 export interface RunWorkflowOptions {
   username: string;
   force?: boolean;
+  provider?: string;
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  reasoningEffort?: string;
+  newThread?: boolean;
+  codexProject?: string;
   resend?: boolean;
   verbose?: boolean;
 }

@@ -48,6 +48,16 @@ describe('resolveApiKey', () => {
     expect(result).toBe('config-key');
   });
 
+  it('provider-specific config should have priority over the legacy field', async () => {
+    mockedGetConfig.mockReturnValue({
+      ai: { apiKey: 'legacy-key', gemini: { apiKey: 'provider-key' } },
+    });
+
+    const { resolveApiKey } = await import('../api-key');
+
+    expect(resolveApiKey()).toBe('provider-key');
+  });
+
   it('environment variable GOOGLE_API_KEY should be recognized', async () => {
     mockedGetConfig.mockReturnValue({});
     process.env.GOOGLE_API_KEY = 'google-env-key';

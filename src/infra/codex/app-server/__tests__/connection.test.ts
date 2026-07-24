@@ -1,0 +1,563 @@
+import { PassThrough } from 'stream';
+import { describe, expect, it, vi } from 'vitest';
+import { JsonlRpcClient } from '../jsonl-client';
+import { CodexAppServerConnection } from '../connection';
+import { BASE_THREAD_CONFIG } from '../tool-isolation';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function createHarness(
+  onRequest?: (request: Record<string, unknown>, output: PassThrough) => void,
+) {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const client = new JsonlRpcClient(input, output, { defaultTimeoutMs: 1000 });
+  const requests: Array<Record<string, unknown>> = [];
+  let buffer = '';
+
+  input.setEncoding('utf8');
+  input.on('data', (chunk: string) => {
+    buffer += chunk;
+    let newline = buffer.indexOf('\n');
+    while (newline >= 0) {
+      const line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
+      const value = JSON.parse(line) as unknown;
+      if (!isRecord(value)) throw new Error('Expected request object');
+      requests.push(value);
+      onRequest?.(value, output);
+      newline = buffer.indexOf('\n');
+    }
+  });
+
+  const close = vi.fn(async () => ({
+    code: 0,
+    signal: null,
+    forced: false,
+    stderr: '',
+  }));
+  const processHandle = { client, close };
+  const connection = new CodexAppServerConnection(processHandle, { startupTimeoutMs: 1000 });
+
+  return { connection, output, requests, processHandle };
+}
+
+const initializeResult = {
+  userAgent: 'codex_cli_rs/0.144.5',
+  codexHome: 'C:\\Users\\test\\.codex',
+  platformFamily: 'windows',
+  platformOs: 'windows',
+};
+
+describe('CodexAppServerConnection', () => {
+  it('should reject an invalid startup timeout', () => {
+    const { processHandle } = createHarness();
+
+    expect(
+      () =>
+        new CodexAppServerConnection(processHandle, {
+          startupTimeoutMs: 0,
+        }),
+    ).toThrow('startupTimeoutMs must be a positive finite number');
+  });
+
+  it('should initialize once before reading account state', async () => {
+    const { connection, output, requests } = createHarness();
+    const first = connection.initialize();
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+
+    await expect(first).resolves.toEqual(initializeResult);
+    await expect(connection.initialize()).resolves.toEqual(initializeResult);
+    expect(requests.filter((request) => request.method === 'initialize')).toHaveLength(1);
+    expect(requests).toContainEqual({ method: 'initialized' });
+
+    const account = connection.readAccount();
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'account/read')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({
+        id: 2,
+        result: {
+          account: { type: 'chatgpt', email: 'private@example.com' },
+          requiresOpenaiAuth: true,
+        },
+      })}\n`,
+    );
+    await expect(account).resolves.toEqual({ accountType: 'chatgpt', requiresOpenaiAuth: true });
+    await connection.close();
+  });
+
+  it('should collect paginated visible models', async () => {
+    const { connection, output, requests } = createHarness();
+    const listing = connection.listModels();
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.filter((request) => request.method === 'model/list')).toHaveLength(1);
+    });
+    output.write(
+      `${JSON.stringify({ id: 2, result: { data: [createModel('model-a')], nextCursor: 'next' } })}\n`,
+    );
+    await vi.waitFor(() => {
+      expect(requests.filter((request) => request.method === 'model/list')).toHaveLength(2);
+    });
+    output.write(
+      `${JSON.stringify({ id: 3, result: { data: [createModel('model-b')], nextCursor: null } })}\n`,
+    );
+
+    await expect(listing).resolves.toMatchObject([{ model: 'model-a' }, { model: 'model-b' }]);
+    expect(requests).toContainEqual({
+      id: 3,
+      method: 'model/list',
+      params: { cursor: 'next', includeHidden: false },
+    });
+    await connection.close();
+  });
+
+  it('should reject an unbounded stream of unique model cursors', async () => {
+    let modelPage = 0;
+    const { connection, requests } = createHarness((request, output) => {
+      if (typeof request.id !== 'number') return;
+      if (request.method === 'initialize') {
+        output.write(`${JSON.stringify({ id: request.id, result: initializeResult })}\n`);
+        return;
+      }
+      if (request.method !== 'model/list') return;
+
+      modelPage += 1;
+      output.write(
+        `${JSON.stringify({
+          id: request.id,
+          result: { data: [], nextCursor: `cursor-${modelPage}` },
+        })}\n`,
+      );
+    });
+
+    await expect(connection.listModels()).rejects.toThrow(
+      'model/list exceeded the maximum of 100 pages',
+    );
+    expect(requests.filter((request) => request.method === 'model/list')).toHaveLength(100);
+    await connection.close();
+  });
+
+  it('should collect paginated MCP tool inventories for one thread', async () => {
+    const { connection, output, requests } = createHarness();
+    const listing = connection.listMcpServers('thread-1');
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.filter((request) => request.method === 'mcpServerStatus/list')).toHaveLength(
+        1,
+      );
+    });
+    output.write(
+      `${JSON.stringify({
+        id: 2,
+        result: {
+          data: [{ name: 'server-a', tools: { first: { name: 'first', inputSchema: {} } } }],
+          nextCursor: 'next',
+        },
+      })}\n`,
+    );
+    await vi.waitFor(() => {
+      expect(requests.filter((request) => request.method === 'mcpServerStatus/list')).toHaveLength(
+        2,
+      );
+    });
+    output.write(
+      `${JSON.stringify({
+        id: 3,
+        result: { data: [{ name: 'server-b', tools: {} }], nextCursor: null },
+      })}\n`,
+    );
+
+    await expect(listing).resolves.toEqual([
+      { name: 'server-a', toolNames: ['first'] },
+      { name: 'server-b', toolNames: [] },
+    ]);
+    expect(requests).toContainEqual({
+      id: 3,
+      method: 'mcpServerStatus/list',
+      params: { threadId: 'thread-1', detail: 'toolsAndAuthOnly', cursor: 'next' },
+    });
+    await connection.close();
+  });
+
+  it('should reject repeated MCP pagination cursors', async () => {
+    const { connection } = createHarness((request, output) => {
+      if (typeof request.id !== 'number') return;
+      if (request.method === 'initialize') {
+        output.write(`${JSON.stringify({ id: request.id, result: initializeResult })}\n`);
+        return;
+      }
+      if (request.method !== 'mcpServerStatus/list') return;
+
+      output.write(
+        `${JSON.stringify({
+          id: request.id,
+          result: { data: [], nextCursor: 'next' },
+        })}\n`,
+      );
+    });
+
+    await expect(connection.listMcpServers('thread-1')).rejects.toThrow(
+      'mcpServerStatus/list returned a repeated pagination cursor',
+    );
+    await connection.close();
+  });
+
+  it('should start and name persisted read-only threads', async () => {
+    const { connection, requests } = createHarness(createIsolatedThreadResponder());
+
+    await expect(
+      connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' }),
+    ).resolves.toMatchObject({
+      thread: { id: 'thread-1' },
+      model: 'gpt-current',
+    });
+    expect(requests).toContainEqual({
+      id: expect.any(Number),
+      method: 'thread/start',
+      params: {
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+        config: BASE_THREAD_CONFIG,
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        serviceName: 'v2er-insight-tool-probe',
+        ephemeral: true,
+      },
+    });
+    expect(requests).toContainEqual({
+      id: expect.any(Number),
+      method: 'thread/start',
+      params: {
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+        config: {
+          ...BASE_THREAD_CONFIG,
+          mcp_servers: { 'direct-server': { enabled: false } },
+        },
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        serviceName: 'v2er-insight',
+        ephemeral: false,
+      },
+    });
+
+    await expect(connection.setThreadName('thread-1', 'alice-insight')).resolves.toBeUndefined();
+    await connection.close();
+  });
+
+  it('should resume and read threads with persisted turns', async () => {
+    const { connection, requests } = createHarness(createIsolatedThreadResponder());
+
+    await expect(
+      connection.resumeThread({
+        threadId: 'thread-1',
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+      }),
+    ).resolves.toMatchObject({ thread: { id: 'thread-1' } });
+    expect(requests).toContainEqual({
+      id: expect.any(Number),
+      method: 'thread/resume',
+      params: {
+        threadId: 'thread-1',
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+        config: {
+          ...BASE_THREAD_CONFIG,
+          mcp_servers: { 'direct-server': { enabled: false } },
+        },
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+      },
+    });
+
+    await expect(connection.readThread('thread-1')).resolves.toMatchObject({
+      id: 'thread-1',
+      turns: [],
+    });
+    expect(requests).toContainEqual({
+      id: expect.any(Number),
+      method: 'thread/read',
+      params: { threadId: 'thread-1', includeTurns: true },
+    });
+    await connection.close();
+  });
+
+  it('should reject a persisted thread that still exposes MCP tools', async () => {
+    const { connection } = createHarness(
+      createIsolatedThreadResponder({
+        persistedTools: { remaining: { name: 'remaining', inputSchema: {} } },
+      }),
+    );
+
+    await expect(
+      connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' }),
+    ).rejects.toMatchObject({
+      name: 'CodexToolIsolationError',
+      threadId: 'thread-1',
+      tools: ['direct-server/remaining'],
+    });
+    await connection.close();
+  });
+
+  it('should start read-only text turns with explicit runtime settings', async () => {
+    const { connection, output, requests } = createHarness();
+    const starting = connection.startTurn({
+      threadId: 'thread-1',
+      text: '{"schemaVersion":2}',
+      cwd: 'D:\\data',
+      model: 'gpt-current',
+      effort: 'high',
+      clientUserMessageId: 'delivery-1',
+      outputSchema: { type: 'object' },
+    });
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({
+        id: 2,
+        result: { turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] } },
+      })}\n`,
+    );
+
+    await expect(starting).resolves.toEqual({
+      id: 'turn-1',
+      status: 'inProgress',
+      error: null,
+      agentMessages: [],
+    });
+    expect(requests).toContainEqual({
+      id: 2,
+      method: 'turn/start',
+      params: {
+        threadId: 'thread-1',
+        clientUserMessageId: 'delivery-1',
+        input: [{ type: 'text', text: '{"schemaVersion":2}', text_elements: [] }],
+        cwd: 'D:\\data',
+        approvalPolicy: 'never',
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+        model: 'gpt-current',
+        effort: 'high',
+        outputSchema: { type: 'object' },
+      },
+    });
+    await connection.close();
+  });
+
+  it('should wait for a completion that arrives before the start response', async () => {
+    const { connection, output, requests } = createHarness();
+    const acceptedTurnIds: string[] = [];
+    const running = connection.runTurn(
+      {
+        threadId: 'thread-1',
+        text: 'hello',
+        cwd: 'D:\\data',
+        model: 'gpt-current',
+        effort: 'high',
+      },
+      1000,
+      async (turn) => {
+        await Promise.resolve();
+        acceptedTurnIds.push(turn.id);
+      },
+    );
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thread-1',
+          turn: {
+            id: 'turn-1',
+            status: 'completed',
+            error: null,
+            items: [{ type: 'agentMessage', id: 'message-1', text: 'done', phase: 'final_answer' }],
+          },
+        },
+      })}\n${JSON.stringify({
+        id: 2,
+        result: { turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] } },
+      })}\n`,
+    );
+
+    await expect(running).resolves.toMatchObject({
+      id: 'turn-1',
+      status: 'completed',
+      agentMessages: [{ id: 'message-1', text: 'done', phase: 'final_answer' }],
+    });
+    expect(acceptedTurnIds).toEqual(['turn-1']);
+    await connection.close();
+  });
+
+  it('should interrupt and reject an unexpected action received before the start response', async () => {
+    const { connection, output, requests } = createHarness();
+    const acceptedTurnIds: string[] = [];
+    const running = connection.runTurn(
+      {
+        threadId: 'thread-1',
+        text: 'analyze',
+        cwd: 'D:\\data',
+        model: 'gpt-current',
+        effort: 'high',
+      },
+      1000,
+      (turn) => {
+        acceptedTurnIds.push(turn.id);
+      },
+    );
+    const rejection = expect(running).rejects.toMatchObject({
+      name: 'CodexUnexpectedTurnActionError',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemId: 'command-1',
+      itemType: 'commandExecution',
+    });
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({
+        method: 'item/started',
+        params: {
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          startedAtMs: 1,
+          item: {
+            type: 'commandExecution',
+            id: 'command-1',
+            command: 'whoami',
+            cwd: 'D:\\data',
+            status: 'inProgress',
+          },
+        },
+      })}\n${JSON.stringify({
+        id: 2,
+        result: { turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] } },
+      })}\n`,
+    );
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/interrupt')).toBe(true);
+    });
+    const interruptRequest = requests.find((request) => request.method === 'turn/interrupt');
+    if (typeof interruptRequest?.id !== 'number') throw new Error('Missing interrupt request');
+    expect(interruptRequest).toMatchObject({
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+    output.write(`${JSON.stringify({ id: interruptRequest.id, result: {} })}\n`);
+
+    await rejection;
+    expect(acceptedTurnIds).toEqual(['turn-1']);
+    await connection.close();
+  });
+
+  it('should decode subscribed session notifications and isolate decoder failures', () => {
+    const { connection, output } = createHarness();
+    const notifications = vi.fn();
+    const errors = vi.fn();
+    const unsubscribe = connection.subscribeSessionNotifications(notifications, errors);
+
+    output.write(
+      `${JSON.stringify({
+        method: 'turn/started',
+        params: {
+          threadId: 'thread-1',
+          turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] },
+        },
+      })}\n`,
+    );
+    output.write('{"method":"turn/completed","params":{}}\n');
+
+    expect(notifications).toHaveBeenCalledWith({
+      kind: 'turnStarted',
+      threadId: 'thread-1',
+      turn: { id: 'turn-1', status: 'inProgress', error: null, agentMessages: [] },
+    });
+    expect(errors).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+});
+
+function createThreadSessionResult(threadId = 'thread-1') {
+  return {
+    thread: {
+      id: threadId,
+      name: null,
+      cwd: 'D:\\data',
+      status: { type: 'idle' },
+      turns: [],
+    },
+    model: 'gpt-current',
+    cwd: 'D:\\data',
+    instructionSources: [],
+    reasoningEffort: 'low',
+  };
+}
+
+function createIsolatedThreadResponder(
+  options: { persistedTools?: Record<string, unknown> } = {},
+): (request: Record<string, unknown>, output: PassThrough) => void {
+  return (request, output) => {
+    if (typeof request.id !== 'number') return;
+    const params = isRecord(request.params) ? request.params : {};
+
+    switch (request.method) {
+      case 'initialize':
+        writeResult(output, request.id, initializeResult);
+        return;
+      case 'thread/start':
+        writeResult(
+          output,
+          request.id,
+          createThreadSessionResult(params.ephemeral === true ? 'probe-thread' : 'thread-1'),
+        );
+        return;
+      case 'thread/resume':
+        writeResult(output, request.id, createThreadSessionResult());
+        return;
+      case 'mcpServerStatus/list': {
+        const tools =
+          params.threadId === 'probe-thread'
+            ? { direct: { name: 'direct', inputSchema: {} } }
+            : (options.persistedTools ?? {});
+        writeResult(output, request.id, {
+          data: [{ name: 'direct-server', tools }],
+          nextCursor: null,
+        });
+        return;
+      }
+      case 'thread/name/set':
+        writeResult(output, request.id, {});
+        return;
+      case 'thread/read':
+        writeResult(output, request.id, { thread: createThreadSessionResult().thread });
+    }
+  };
+}
+
+function writeResult(output: PassThrough, id: number, result: unknown): void {
+  output.write(`${JSON.stringify({ id, result })}\n`);
+}
+
+function createModel(model: string) {
+  return {
+    id: model,
+    model,
+    displayName: model,
+    description: '',
+    hidden: false,
+    isDefault: model === 'model-a',
+    defaultReasoningEffort: 'low',
+    supportedReasoningEfforts: [{ reasoningEffort: 'low', description: '' }],
+  };
+}
