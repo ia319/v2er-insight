@@ -1,5 +1,7 @@
 import type {
   CodexAccountStatus,
+  CodexMcpServerStatus,
+  CodexMcpServerStatusPage,
   CodexModelInfo,
   CodexModelPage,
   CodexReasoningEffortOption,
@@ -46,6 +48,19 @@ function decodeModel(value: unknown, path: string): CodexModelInfo {
   };
 }
 
+function decodeMcpServerStatus(value: unknown, path: string): CodexMcpServerStatus {
+  const record = expectRecord(value, path);
+  const tools = expectRecord(record.tools, `${path}.tools`);
+
+  return {
+    name: expectString(record.name, `${path}.name`, false),
+    toolNames: Object.values(tools).map((tool, index) => {
+      const toolRecord = expectRecord(tool, `${path}.tools[${index}]`);
+      return expectString(toolRecord.name, `${path}.tools[${index}].name`, false);
+    }),
+  };
+}
+
 /** Decodes the result of the App Server `initialize` request. */
 export function decodeInitializeResponse(value: unknown): CodexServerInfo {
   const record = expectRecord(value, 'initialize.result');
@@ -81,6 +96,23 @@ export function decodeModelListResponse(value: unknown): CodexModelPage {
 
   return {
     data: data.map((model, index) => decodeModel(model, `model/list.result.data[${index}]`)),
+    nextCursor,
+  };
+}
+
+/** Decodes one page returned by `mcpServerStatus/list`. */
+export function decodeMcpServerStatusListResponse(value: unknown): CodexMcpServerStatusPage {
+  const record = expectRecord(value, 'mcpServerStatus/list.result');
+  const data = expectArray(record.data, 'mcpServerStatus/list.result.data');
+  const nextCursor = expectNullableString(
+    record.nextCursor,
+    'mcpServerStatus/list.result.nextCursor',
+  );
+
+  return {
+    data: data.map((server, index) =>
+      decodeMcpServerStatus(server, `mcpServerStatus/list.result.data[${index}]`),
+    ),
     nextCursor,
   };
 }

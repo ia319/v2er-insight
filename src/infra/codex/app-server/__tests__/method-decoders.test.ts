@@ -3,6 +3,7 @@ import { CodexAppServerProtocolError } from '../errors';
 import {
   decodeAccountReadResponse,
   decodeInitializeResponse,
+  decodeMcpServerStatusListResponse,
   decodeModelListResponse,
 } from '../method-decoders';
 
@@ -68,6 +69,35 @@ describe('App Server method decoders', () => {
   it('should reject missing model capability fields', () => {
     expect(() =>
       decodeModelListResponse({ data: [{ id: 'incomplete' }], nextCursor: null }),
+    ).toThrow(CodexAppServerProtocolError);
+  });
+
+  it('should decode MCP server and tool names', () => {
+    expect(
+      decodeMcpServerStatusListResponse({
+        data: [
+          {
+            name: 'developer-docs',
+            tools: {
+              search: { name: 'search', inputSchema: {} },
+              open: { name: 'open', inputSchema: {} },
+            },
+          },
+        ],
+        nextCursor: 'next',
+      }),
+    ).toEqual({
+      data: [{ name: 'developer-docs', toolNames: ['search', 'open'] }],
+      nextCursor: 'next',
+    });
+  });
+
+  it('should reject malformed MCP tool definitions', () => {
+    expect(() =>
+      decodeMcpServerStatusListResponse({
+        data: [{ name: 'developer-docs', tools: { search: {} } }],
+        nextCursor: null,
+      }),
     ).toThrow(CodexAppServerProtocolError);
   });
 });

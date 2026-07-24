@@ -3,6 +3,7 @@ import { CodexAppServerProtocolError } from './errors';
 import {
   decodeAccountReadResponse,
   decodeInitializeResponse,
+  decodeMcpServerStatusListResponse,
   decodeModelListResponse,
 } from './method-decoders';
 import {
@@ -14,6 +15,8 @@ import {
 } from './thread-decoders';
 import type {
   CodexAccountStatus,
+  CodexMcpServerStatus,
+  CodexMcpServerStatusPage,
   CodexModelInfo,
   CodexModelPage,
   CodexServerInfo,
@@ -33,6 +36,7 @@ import type { CodexExecutableCandidate } from '../executable';
 
 type AppServerProcessHandle = Pick<CodexAppServerProcess, 'client' | 'close'>;
 const MAX_MODEL_LIST_PAGES = 100;
+const MAX_MCP_SERVER_LIST_PAGES = 100;
 const THREAD_CONFIG = {
   web_search: 'disabled',
   features: {
@@ -129,6 +133,42 @@ export class CodexAppServerConnection {
       if (page.nextCursor === null) return models;
       if (seenCursors.has(page.nextCursor)) {
         throw new CodexAppServerProtocolError('model/list returned a repeated pagination cursor');
+      }
+      seenCursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
+  }
+
+  /** Reads the effective MCP tool inventory for one thread within bounded pagination. */
+  async listMcpServers(threadId: string): Promise<CodexMcpServerStatus[]> {
+    await this.initialize();
+    const servers: CodexMcpServerStatus[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | null = null;
+    let pageCount = 0;
+
+    while (true) {
+      if (pageCount >= MAX_MCP_SERVER_LIST_PAGES) {
+        throw new CodexAppServerProtocolError(
+          `mcpServerStatus/list exceeded the maximum of ${MAX_MCP_SERVER_LIST_PAGES} pages`,
+        );
+      }
+      pageCount += 1;
+      const page: CodexMcpServerStatusPage = await this.process.client.request(
+        'mcpServerStatus/list',
+        {
+          threadId,
+          detail: 'toolsAndAuthOnly',
+          ...(cursor === null ? {} : { cursor }),
+        },
+        decodeMcpServerStatusListResponse,
+      );
+      servers.push(...page.data);
+      if (page.nextCursor === null) return servers;
+      if (seenCursors.has(page.nextCursor)) {
+        throw new CodexAppServerProtocolError(
+          'mcpServerStatus/list returned a repeated pagination cursor',
+        );
       }
       seenCursors.add(page.nextCursor);
       cursor = page.nextCursor;

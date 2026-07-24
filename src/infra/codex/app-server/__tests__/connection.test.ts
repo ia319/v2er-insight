@@ -141,6 +141,71 @@ describe('CodexAppServerConnection', () => {
     await connection.close();
   });
 
+  it('should collect paginated MCP tool inventories for one thread', async () => {
+    const { connection, output, requests } = createHarness();
+    const listing = connection.listMcpServers('thread-1');
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.filter((request) => request.method === 'mcpServerStatus/list')).toHaveLength(
+        1,
+      );
+    });
+    output.write(
+      `${JSON.stringify({
+        id: 2,
+        result: {
+          data: [{ name: 'server-a', tools: { first: { name: 'first', inputSchema: {} } } }],
+          nextCursor: 'next',
+        },
+      })}\n`,
+    );
+    await vi.waitFor(() => {
+      expect(requests.filter((request) => request.method === 'mcpServerStatus/list')).toHaveLength(
+        2,
+      );
+    });
+    output.write(
+      `${JSON.stringify({
+        id: 3,
+        result: { data: [{ name: 'server-b', tools: {} }], nextCursor: null },
+      })}\n`,
+    );
+
+    await expect(listing).resolves.toEqual([
+      { name: 'server-a', toolNames: ['first'] },
+      { name: 'server-b', toolNames: [] },
+    ]);
+    expect(requests).toContainEqual({
+      id: 3,
+      method: 'mcpServerStatus/list',
+      params: { threadId: 'thread-1', detail: 'toolsAndAuthOnly', cursor: 'next' },
+    });
+    await connection.close();
+  });
+
+  it('should reject repeated MCP pagination cursors', async () => {
+    const { connection } = createHarness((request, output) => {
+      if (typeof request.id !== 'number') return;
+      if (request.method === 'initialize') {
+        output.write(`${JSON.stringify({ id: request.id, result: initializeResult })}\n`);
+        return;
+      }
+      if (request.method !== 'mcpServerStatus/list') return;
+
+      output.write(
+        `${JSON.stringify({
+          id: request.id,
+          result: { data: [], nextCursor: 'next' },
+        })}\n`,
+      );
+    });
+
+    await expect(connection.listMcpServers('thread-1')).rejects.toThrow(
+      'mcpServerStatus/list returned a repeated pagination cursor',
+    );
+    await connection.close();
+  });
+
   it('should start and name persisted read-only threads', async () => {
     const { connection, output, requests } = createHarness();
     const starting = connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' });

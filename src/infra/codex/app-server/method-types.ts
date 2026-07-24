@@ -30,3 +30,13 @@ export interface CodexModelPage {
   data: CodexModelInfo[];
   nextCursor: string | null;
 }
+
+export interface CodexMcpServerStatus {
+  name: string;
+  toolNames: string[];
+}
+
+export interface CodexMcpServerStatusPage {
+  data: CodexMcpServerStatus[];
+  nextCursor: string | null;
+}
