@@ -456,7 +456,7 @@ Codex automatic launch is limited to signed Windows native candidates discovered
 
 Codex version and App Server processes inherit an allowlisted runtime environment from the v2er-insight parent process, covering Codex home, user/system/temp paths, locale, proxy, and certificate settings. The root `proxy` setting overrides HTTP and HTTPS proxy variables for App Server launches; version probes retain the inherited values. Native candidates exclude PATH; explicitly authorized command shims retain PATH and PATHEXT. `.cmd` launchers use a validated system command processor. API keys, access tokens, `NODE_OPTIONS`, `ComSpec`, and unrelated application variables remain outside the child environment. Proxy values may contain proxy credentials.
 
-Codex thread config disables web search and the stable `apps`, `goals`, `hooks`, `multi_agent`, `remote_plugin`, `shell_snapshot`, and `shell_tool` features on start and resume. It does not send MCP or plugin configuration. Direct MCP and installed plugin tool definitions are resolved by App Server from the selected Codex home. App Server reverse requests remain on the method-not-found boundary; model tools execute inside App Server.
+Codex thread config disables web search and stable execution, browser, app, plugin, hook, collaboration, skill-installation, and tool-discovery features on start and resume. An ephemeral thread discovers effective MCP server names with zero model turns. Persisted thread config disables each discovered server that exposes tools, and its MCP inventory contains zero tools before delivery. `runTurn()` subscribes to App Server item events before `turn/start`. Analysis-only item types enter result collection. Tool calls, other non-analysis actions, and unknown actions trigger `turn/interrupt` and `CodexUnexpectedTurnActionError` before analysis parsing and result persistence; `result.json` and delivery provenance remain unchanged. App Server reverse requests remain on the method-not-found boundary.
 
 ### 7. Analyzer Module (Complete)
 
@@ -698,7 +698,7 @@ Detailed protocol and recovery reference: `docs/codex-app-server-integration.md`
 **Protocol and Runtime Selection**:
 
 - **JSONL boundary**: UTF-8 framing, monotonic request IDs, typed `unknown` decoding, deadlines, removable notification subscriptions; stable App Server methods only.
-- **Model catalog**: Maximum 100 pages, repeated-cursor rejection, exact `model` field matching, server-declared reasoning efforts.
+- **Model and MCP catalogs**: Maximum 100 pages, repeated-cursor rejection, exact model-field matching, server-declared reasoning efforts, and per-thread MCP server/tool names.
 - **Dynamic defaults**: `app-default` from the unique live default model; `model-default` from that model's declared default effort.
 - **Runtime acceptance**: Valid CLI version response, stable initialization, available account, valid model and effort.
 - **Diagnostics**: Candidate attempts, live model catalog, Project state, registry consistency, thread and turn identifiers; the structured report excludes agent message text and credentials.
@@ -706,8 +706,8 @@ Detailed protocol and recovery reference: `docs/codex-app-server-integration.md`
 **Project and Thread Identity**:
 
 - **Project identity**: CLI override, `ai.codex.projectPath`, shared data root; case-insensitive Windows comparison and case-sensitive non-Windows comparison.
-- **Thread policy**: Persisted session, `serviceName: v2er-insight`, approval `never`, read-only sandbox, sandbox network access disabled, web search disabled, and stable agent features disabled; ordinary user prompt turn before the first complete AnalyzerOutput turn.
-- **Tool boundary**: Effective `CODEX_HOME` retains direct MCP and installed plugin definitions; server-to-client requests receive method-not-found, while App Server-owned model tools remain inside the runtime.
+- **Thread policy**: Persisted session, `serviceName: v2er-insight`, approval `never`, read-only sandbox, sandbox network access disabled, web search disabled, and stable execution features disabled; ordinary user prompt turn before the first complete AnalyzerOutput turn.
+- **Tool boundary**: Ephemeral MCP discovery, thread-local server disables, persisted zero-MCP-tool verification, pre-turn event subscription, unexpected-action interruption, `runTurn()` rejection before result parsing and persistence, and method-not-found responses for server-to-client requests.
 - **Identity and registry**: Thread ID recovery key, `<username>-insight` generation names, per-user session generations, accepted turn IDs, executable metadata, App Server instruction sources, pending delivery identity.
 
 **Delivery and Recovery**:
