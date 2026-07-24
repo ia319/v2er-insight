@@ -5,6 +5,18 @@ export class CodexAppServerProtocolError extends Error {
   }
 }
 
+export class CodexToolIsolationError extends CodexAppServerProtocolError {
+  readonly threadId: string;
+  readonly tools: readonly string[];
+
+  constructor(threadId: string, tools: readonly string[]) {
+    super(`Codex thread "${threadId}" still exposes tools: ${tools.join(', ')}`);
+    this.name = 'CodexToolIsolationError';
+    this.threadId = threadId;
+    this.tools = tools;
+  }
+}
+
 export class CodexAppServerTransportError extends Error {
   readonly cause?: Error;
 

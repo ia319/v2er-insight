@@ -3,6 +3,7 @@ export {
   CodexAppServerRequestTimeoutError,
   CodexAppServerRpcError,
   CodexAppServerTransportError,
+  CodexToolIsolationError,
   CodexTurnWaitTimeoutError,
 } from './errors';
 export type {

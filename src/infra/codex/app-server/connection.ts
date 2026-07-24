@@ -1,5 +1,5 @@
 import packageJson from '../../../../package.json';
-import { CodexAppServerProtocolError } from './errors';
+import { CodexAppServerProtocolError, CodexToolIsolationError } from './errors';
 import {
   decodeAccountReadResponse,
   decodeInitializeResponse,
@@ -24,6 +24,12 @@ import type {
 import { decodeSessionNotification } from './notification-decoder';
 import type { CodexSessionNotification } from './notification-types';
 import type { JsonValue } from './protocol';
+import {
+  BASE_THREAD_CONFIG,
+  buildToolIsolatedThreadConfig,
+  CODEX_TOOL_PROBE_SERVICE_NAME,
+  listAvailableMcpTools,
+} from './tool-isolation';
 import type { CodexThreadInfo, CodexThreadSessionInfo, CodexTurnInfo } from './thread-types';
 import { CodexTurnCompletionCollector } from './turn-completion';
 import type {
@@ -37,18 +43,6 @@ import type { CodexExecutableCandidate } from '../executable';
 type AppServerProcessHandle = Pick<CodexAppServerProcess, 'client' | 'close'>;
 const MAX_MODEL_LIST_PAGES = 100;
 const MAX_MCP_SERVER_LIST_PAGES = 100;
-const THREAD_CONFIG = {
-  web_search: 'disabled',
-  features: {
-    apps: false,
-    goals: false,
-    hooks: false,
-    multi_agent: false,
-    remote_plugin: false,
-    shell_snapshot: false,
-    shell_tool: false,
-  },
-} satisfies JsonValue;
 
 export interface CodexAppServerConnectionOptions {
   startupTimeoutMs: number;
@@ -139,7 +133,11 @@ export class CodexAppServerConnection {
     }
   }
 
-  /** Reads the effective MCP tool inventory for one thread within bounded pagination. */
+  /**
+   * Reads the effective MCP tool inventory for one thread within bounded pagination.
+   * @param threadId - Thread whose resolved MCP servers and tools are inspected.
+   * @returns Validated MCP server and tool identities.
+   */
   async listMcpServers(threadId: string): Promise<CodexMcpServerStatus[]> {
     await this.initialize();
     const servers: CodexMcpServerStatus[] = [];
@@ -178,12 +176,13 @@ export class CodexAppServerConnection {
   /** Starts one persisted thread with explicit read-only execution settings. */
   async startThread(options: CodexThreadStartOptions): Promise<CodexThreadSessionInfo> {
     await this.initialize();
-    return this.process.client.request(
+    const config = await this.createToolIsolatedThreadConfig(options);
+    const session = await this.process.client.request(
       'thread/start',
       {
         model: options.model,
         cwd: options.cwd,
-        config: THREAD_CONFIG,
+        config,
         approvalPolicy: 'never',
         sandbox: 'read-only',
         serviceName: 'v2er-insight',
@@ -191,23 +190,28 @@ export class CodexAppServerConnection {
       },
       decodeThreadStartResponse,
     );
+    await this.assertNoMcpTools(session.thread.id);
+    return session;
   }
 
   /** Resumes one persisted thread with the provider's read-only runtime settings. */
   async resumeThread(options: CodexThreadResumeOptions): Promise<CodexThreadSessionInfo> {
     await this.initialize();
-    return this.process.client.request(
+    const config = await this.createToolIsolatedThreadConfig(options);
+    const session = await this.process.client.request(
       'thread/resume',
       {
         threadId: options.threadId,
         model: options.model,
         cwd: options.cwd,
-        config: THREAD_CONFIG,
+        config,
         approvalPolicy: 'never',
         sandbox: 'read-only',
       },
       decodeThreadResumeResponse,
     );
+    await this.assertNoMcpTools(session.thread.id);
+    return session;
   }
 
   /** Reads persisted thread state together with loaded turns. */
@@ -324,6 +328,30 @@ export class CodexAppServerConnection {
     );
     this.process.client.notify('initialized');
     return result;
+  }
+
+  private async createToolIsolatedThreadConfig(
+    options: CodexThreadStartOptions,
+  ): Promise<JsonValue> {
+    const probe = await this.process.client.request(
+      'thread/start',
+      {
+        model: options.model,
+        cwd: options.cwd,
+        config: BASE_THREAD_CONFIG,
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        serviceName: CODEX_TOOL_PROBE_SERVICE_NAME,
+        ephemeral: true,
+      },
+      decodeThreadStartResponse,
+    );
+    return buildToolIsolatedThreadConfig(await this.listMcpServers(probe.thread.id));
+  }
+
+  private async assertNoMcpTools(threadId: string): Promise<void> {
+    const tools = listAvailableMcpTools(await this.listMcpServers(threadId));
+    if (tools.length > 0) throw new CodexToolIsolationError(threadId, tools);
   }
 }
 

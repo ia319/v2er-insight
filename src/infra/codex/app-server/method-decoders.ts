@@ -100,7 +100,11 @@ export function decodeModelListResponse(value: unknown): CodexModelPage {
   };
 }
 
-/** Decodes one page returned by `mcpServerStatus/list`. */
+/**
+ * Decodes one page returned by `mcpServerStatus/list`.
+ * @param value - Untrusted App Server response payload.
+ * @returns Validated MCP server and tool identities with the next cursor.
+ */
 export function decodeMcpServerStatusListResponse(value: unknown): CodexMcpServerStatusPage {
   const record = expectRecord(value, 'mcpServerStatus/list.result');
   const data = expectArray(record.data, 'mcpServerStatus/list.result.data');

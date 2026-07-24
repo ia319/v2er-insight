@@ -2,6 +2,7 @@ import { PassThrough } from 'stream';
 import { describe, expect, it, vi } from 'vitest';
 import { JsonlRpcClient } from '../jsonl-client';
 import { CodexAppServerConnection } from '../connection';
+import { BASE_THREAD_CONFIG } from '../tool-isolation';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -207,35 +208,36 @@ describe('CodexAppServerConnection', () => {
   });
 
   it('should start and name persisted read-only threads', async () => {
-    const { connection, output, requests } = createHarness();
-    const starting = connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' });
-    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
-    await vi.waitFor(() => {
-      expect(requests.some((request) => request.method === 'thread/start')).toBe(true);
-    });
-    output.write(`${JSON.stringify({ id: 2, result: createThreadSessionResult() })}\n`);
+    const { connection, requests } = createHarness(createIsolatedThreadResponder());
 
-    await expect(starting).resolves.toMatchObject({
+    await expect(
+      connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' }),
+    ).resolves.toMatchObject({
       thread: { id: 'thread-1' },
       model: 'gpt-current',
     });
     expect(requests).toContainEqual({
-      id: 2,
+      id: expect.any(Number),
+      method: 'thread/start',
+      params: {
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+        config: BASE_THREAD_CONFIG,
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        serviceName: 'v2er-insight-tool-probe',
+        ephemeral: true,
+      },
+    });
+    expect(requests).toContainEqual({
+      id: expect.any(Number),
       method: 'thread/start',
       params: {
         model: 'gpt-current',
         cwd: 'D:\\data',
         config: {
-          web_search: 'disabled',
-          features: {
-            apps: false,
-            goals: false,
-            hooks: false,
-            multi_agent: false,
-            remote_plugin: false,
-            shell_snapshot: false,
-            shell_tool: false,
-          },
+          ...BASE_THREAD_CONFIG,
+          mcp_servers: { 'direct-server': { enabled: false } },
         },
         approvalPolicy: 'never',
         sandbox: 'read-only',
@@ -244,64 +246,61 @@ describe('CodexAppServerConnection', () => {
       },
     });
 
-    const naming = connection.setThreadName('thread-1', 'alice-insight');
-    await vi.waitFor(() => {
-      expect(requests.some((request) => request.method === 'thread/name/set')).toBe(true);
-    });
-    output.write(`${JSON.stringify({ id: 3, result: {} })}\n`);
-    await expect(naming).resolves.toBeUndefined();
+    await expect(connection.setThreadName('thread-1', 'alice-insight')).resolves.toBeUndefined();
     await connection.close();
   });
 
   it('should resume and read threads with persisted turns', async () => {
-    const { connection, output, requests } = createHarness();
-    const resuming = connection.resumeThread({
-      threadId: 'thread-1',
-      model: 'gpt-current',
-      cwd: 'D:\\data',
-    });
-    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
-    await vi.waitFor(() => {
-      expect(requests.some((request) => request.method === 'thread/resume')).toBe(true);
-    });
-    output.write(`${JSON.stringify({ id: 2, result: createThreadSessionResult() })}\n`);
-    await expect(resuming).resolves.toMatchObject({ thread: { id: 'thread-1' } });
+    const { connection, requests } = createHarness(createIsolatedThreadResponder());
+
+    await expect(
+      connection.resumeThread({
+        threadId: 'thread-1',
+        model: 'gpt-current',
+        cwd: 'D:\\data',
+      }),
+    ).resolves.toMatchObject({ thread: { id: 'thread-1' } });
     expect(requests).toContainEqual({
-      id: 2,
+      id: expect.any(Number),
       method: 'thread/resume',
       params: {
         threadId: 'thread-1',
         model: 'gpt-current',
         cwd: 'D:\\data',
         config: {
-          web_search: 'disabled',
-          features: {
-            apps: false,
-            goals: false,
-            hooks: false,
-            multi_agent: false,
-            remote_plugin: false,
-            shell_snapshot: false,
-            shell_tool: false,
-          },
+          ...BASE_THREAD_CONFIG,
+          mcp_servers: { 'direct-server': { enabled: false } },
         },
         approvalPolicy: 'never',
         sandbox: 'read-only',
       },
     });
 
-    const reading = connection.readThread('thread-1');
-    await vi.waitFor(() => {
-      expect(requests.some((request) => request.method === 'thread/read')).toBe(true);
+    await expect(connection.readThread('thread-1')).resolves.toMatchObject({
+      id: 'thread-1',
+      turns: [],
     });
-    output.write(
-      `${JSON.stringify({ id: 3, result: { thread: createThreadSessionResult().thread } })}\n`,
-    );
-    await expect(reading).resolves.toMatchObject({ id: 'thread-1', turns: [] });
     expect(requests).toContainEqual({
-      id: 3,
+      id: expect.any(Number),
       method: 'thread/read',
       params: { threadId: 'thread-1', includeTurns: true },
+    });
+    await connection.close();
+  });
+
+  it('should reject a persisted thread that still exposes MCP tools', async () => {
+    const { connection } = createHarness(
+      createIsolatedThreadResponder({
+        persistedTools: { remaining: { name: 'remaining', inputSchema: {} } },
+      }),
+    );
+
+    await expect(
+      connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' }),
+    ).rejects.toMatchObject({
+      name: 'CodexToolIsolationError',
+      threadId: 'thread-1',
+      tools: ['direct-server/remaining'],
     });
     await connection.close();
   });
@@ -427,10 +426,10 @@ describe('CodexAppServerConnection', () => {
   });
 });
 
-function createThreadSessionResult() {
+function createThreadSessionResult(threadId = 'thread-1') {
   return {
     thread: {
-      id: 'thread-1',
+      id: threadId,
       name: null,
       cwd: 'D:\\data',
       status: { type: 'idle' },
@@ -441,6 +440,51 @@ function createThreadSessionResult() {
     instructionSources: [],
     reasoningEffort: 'low',
   };
+}
+
+function createIsolatedThreadResponder(
+  options: { persistedTools?: Record<string, unknown> } = {},
+): (request: Record<string, unknown>, output: PassThrough) => void {
+  return (request, output) => {
+    if (typeof request.id !== 'number') return;
+    const params = isRecord(request.params) ? request.params : {};
+
+    switch (request.method) {
+      case 'initialize':
+        writeResult(output, request.id, initializeResult);
+        return;
+      case 'thread/start':
+        writeResult(
+          output,
+          request.id,
+          createThreadSessionResult(params.ephemeral === true ? 'probe-thread' : 'thread-1'),
+        );
+        return;
+      case 'thread/resume':
+        writeResult(output, request.id, createThreadSessionResult());
+        return;
+      case 'mcpServerStatus/list': {
+        const tools =
+          params.threadId === 'probe-thread'
+            ? { direct: { name: 'direct', inputSchema: {} } }
+            : (options.persistedTools ?? {});
+        writeResult(output, request.id, {
+          data: [{ name: 'direct-server', tools }],
+          nextCursor: null,
+        });
+        return;
+      }
+      case 'thread/name/set':
+        writeResult(output, request.id, {});
+        return;
+      case 'thread/read':
+        writeResult(output, request.id, { thread: createThreadSessionResult().thread });
+    }
+  };
+}
+
+function writeResult(output: PassThrough, id: number, result: unknown): void {
+  output.write(`${JSON.stringify({ id, result })}\n`);
 }
 
 function createModel(model: string) {
