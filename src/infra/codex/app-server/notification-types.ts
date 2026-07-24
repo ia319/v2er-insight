@@ -9,6 +9,13 @@ export type CodexSessionNotification =
   | { kind: 'turnStarted'; threadId: string; turn: CodexTurnInfo }
   | { kind: 'turnCompleted'; threadId: string; turn: CodexTurnInfo }
   | {
+      kind: 'itemStarted';
+      threadId: string;
+      turnId: string;
+      itemId: string;
+      itemType: string;
+    }
+  | {
       kind: 'itemCompleted';
       threadId: string;
       turnId: string;

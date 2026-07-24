@@ -30,6 +30,7 @@ export {
   CodexAppServerProcess,
   CodexAppServerTransportError,
   CodexToolIsolationError,
+  CodexUnexpectedTurnActionError,
   CodexTurnWaitTimeoutError,
   JsonlRpcClient,
   connectCodexAppServer,

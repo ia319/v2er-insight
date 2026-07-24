@@ -1,5 +1,9 @@
 import packageJson from '../../../../package.json';
-import { CodexAppServerProtocolError, CodexToolIsolationError } from './errors';
+import {
+  CodexAppServerProtocolError,
+  CodexToolIsolationError,
+  CodexUnexpectedTurnActionError,
+} from './errors';
 import {
   decodeAccountReadResponse,
   decodeInitializeResponse,
@@ -11,6 +15,7 @@ import {
   decodeThreadResumeResponse,
   decodeThreadSetNameResponse,
   decodeThreadStartResponse,
+  decodeTurnInterruptResponse,
   decodeTurnStartResponse,
 } from './thread-decoders';
 import type {
@@ -30,6 +35,7 @@ import {
   CODEX_TOOL_PROBE_SERVICE_NAME,
   listAvailableMcpTools,
 } from './tool-isolation';
+import { isUnexpectedTurnAction } from './turn-action';
 import type { CodexThreadInfo, CodexThreadSessionInfo, CodexTurnInfo } from './thread-types';
 import { CodexTurnCompletionCollector } from './turn-completion';
 import type {
@@ -41,6 +47,7 @@ import { startCodexAppServer } from './process';
 import type { CodexExecutableCandidate } from '../executable';
 
 type AppServerProcessHandle = Pick<CodexAppServerProcess, 'client' | 'close'>;
+type CodexItemStartedNotification = Extract<CodexSessionNotification, { kind: 'itemStarted' }>;
 const MAX_MODEL_LIST_PAGES = 100;
 const MAX_MCP_SERVER_LIST_PAGES = 100;
 
@@ -256,6 +263,21 @@ export class CodexAppServerConnection {
     );
   }
 
+  /**
+   * Requests interruption of one active turn.
+   * @param threadId - Owning thread identity.
+   * @param turnId - Active turn identity.
+   * @returns Completion after App Server accepts the interruption.
+   */
+  async interruptTurn(threadId: string, turnId: string): Promise<void> {
+    await this.initialize();
+    await this.process.client.request(
+      'turn/interrupt',
+      { threadId, turnId },
+      decodeTurnInterruptResponse,
+    );
+  }
+
   /** Subscribes before starting a turn and waits for its terminal notification. */
   async runTurn(
     options: CodexTurnStartOptions,
@@ -267,19 +289,62 @@ export class CodexAppServerConnection {
     }
 
     const collector = new CodexTurnCompletionCollector(options.threadId);
+    const bufferedActions = new Map<string, CodexItemStartedNotification>();
+    let startedTurnId: string | undefined;
+    let interruption: Promise<void> | undefined;
+    const interruptUnexpectedAction = (action: CodexItemStartedNotification): void => {
+      const error = new CodexUnexpectedTurnActionError(
+        action.threadId,
+        action.turnId,
+        action.itemId,
+        action.itemType,
+      );
+      collector.fail(error);
+      interruption ??= this.interruptTurn(action.threadId, action.turnId);
+      void interruption.catch(() => undefined);
+    };
     const unsubscribe = this.subscribeSessionNotifications(
-      (notification) => collector.accept(notification),
+      (notification) => {
+        if (
+          notification.kind === 'itemStarted' &&
+          notification.threadId === options.threadId &&
+          isUnexpectedTurnAction(notification.itemType)
+        ) {
+          bufferedActions.set(notification.turnId, notification);
+          if (notification.turnId === startedTurnId) interruptUnexpectedAction(notification);
+          return;
+        }
+        collector.accept(notification);
+      },
       (error) => collector.fail(error),
     );
     try {
       const started = await this.startTurn(options);
+      startedTurnId = started.id;
       if (started.status !== 'inProgress') {
         throw new CodexAppServerProtocolError(
           `turn/start returned terminal status "${started.status}" for turn "${started.id}"`,
         );
       }
+      const bufferedAction = bufferedActions.get(started.id);
+      if (bufferedAction) interruptUnexpectedAction(bufferedAction);
       await onStarted?.(started);
       return await collector.waitFor(started.id, timeoutMs);
+    } catch (error) {
+      if (error instanceof CodexUnexpectedTurnActionError && interruption) {
+        try {
+          await interruption;
+        } catch (interruptError) {
+          throw new CodexUnexpectedTurnActionError(
+            error.threadId,
+            error.turnId,
+            error.itemId,
+            error.itemType,
+            interruptError instanceof Error ? interruptError : new Error(String(interruptError)),
+          );
+        }
+      }
+      throw error;
     } finally {
       unsubscribe();
     }

@@ -58,6 +58,43 @@ describe('App Server session notification decoder', () => {
     ).toMatchObject({ kind: 'itemCompleted', message: null });
   });
 
+  it('should decode started item identities without trusting their payload', () => {
+    expect(
+      decodeSessionNotification({
+        method: 'item/started',
+        params: {
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          startedAtMs: 1,
+          item: {
+            type: 'commandExecution',
+            id: 'command-1',
+            command: 'whoami',
+            cwd: 'D:\\data',
+            status: 'inProgress',
+          },
+        },
+      }),
+    ).toEqual({
+      kind: 'itemStarted',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemId: 'command-1',
+      itemType: 'commandExecution',
+    });
+
+    expect(() =>
+      decodeSessionNotification({
+        method: 'item/started',
+        params: {
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          item: { type: 'commandExecution' },
+        },
+      }),
+    ).toThrow(CodexAppServerProtocolError);
+  });
+
   it('should decode deltas, retry errors, and thread status changes', () => {
     expect(
       decodeSessionNotification({

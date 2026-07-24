@@ -33,6 +33,19 @@ function decodeItemCompleted(notification: JsonRpcNotification): CodexSessionNot
   };
 }
 
+function decodeItemStarted(notification: JsonRpcNotification): CodexSessionNotification {
+  const path = 'item/started.params';
+  const params = expectRecord(notification.params, path);
+  const item = expectRecord(params.item, `${path}.item`);
+  return {
+    kind: 'itemStarted',
+    threadId: expectString(params.threadId, `${path}.threadId`, false),
+    turnId: expectString(params.turnId, `${path}.turnId`, false),
+    itemId: expectString(item.id, `${path}.item.id`, false),
+    itemType: expectString(item.type, `${path}.item.type`, false),
+  };
+}
+
 function decodeAgentMessageDelta(notification: JsonRpcNotification): CodexSessionNotification {
   const path = 'item/agentMessage/delta.params';
   const params = expectRecord(notification.params, path);
@@ -81,6 +94,8 @@ export function decodeSessionNotification(
       return decodeTurnLifecycle(notification, 'turnStarted');
     case 'turn/completed':
       return decodeTurnLifecycle(notification, 'turnCompleted');
+    case 'item/started':
+      return decodeItemStarted(notification);
     case 'item/completed':
       return decodeItemCompleted(notification);
     case 'item/agentMessage/delta':

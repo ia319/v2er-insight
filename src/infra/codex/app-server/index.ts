@@ -4,6 +4,7 @@ export {
   CodexAppServerRpcError,
   CodexAppServerTransportError,
   CodexToolIsolationError,
+  CodexUnexpectedTurnActionError,
   CodexTurnWaitTimeoutError,
 } from './errors';
 export type {
@@ -42,6 +43,7 @@ export {
   decodeThreadResumeResponse,
   decodeThreadSetNameResponse,
   decodeThreadStartResponse,
+  decodeTurnInterruptResponse,
   decodeTurnStartResponse,
 } from './thread-decoders';
 export type {

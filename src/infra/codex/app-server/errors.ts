@@ -17,6 +17,34 @@ export class CodexToolIsolationError extends CodexAppServerProtocolError {
   }
 }
 
+export class CodexUnexpectedTurnActionError extends CodexAppServerProtocolError {
+  readonly threadId: string;
+  readonly turnId: string;
+  readonly itemId: string;
+  readonly itemType: string;
+  readonly interruptFailure?: Error;
+
+  constructor(
+    threadId: string,
+    turnId: string,
+    itemId: string,
+    itemType: string,
+    interruptFailure?: Error,
+  ) {
+    super(
+      interruptFailure
+        ? `Codex turn "${turnId}" started unexpected item "${itemType}" and interruption failed: ${interruptFailure.message}`
+        : `Codex turn "${turnId}" started unexpected item "${itemType}"`,
+    );
+    this.name = 'CodexUnexpectedTurnActionError';
+    this.threadId = threadId;
+    this.turnId = turnId;
+    this.itemId = itemId;
+    this.itemType = itemType;
+    this.interruptFailure = interruptFailure;
+  }
+}
+
 export class CodexAppServerTransportError extends Error {
   readonly cause?: Error;
 

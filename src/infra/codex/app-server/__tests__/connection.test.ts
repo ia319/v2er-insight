@@ -399,6 +399,68 @@ describe('CodexAppServerConnection', () => {
     await connection.close();
   });
 
+  it('should interrupt and reject an unexpected action received before the start response', async () => {
+    const { connection, output, requests } = createHarness();
+    const acceptedTurnIds: string[] = [];
+    const running = connection.runTurn(
+      {
+        threadId: 'thread-1',
+        text: 'analyze',
+        cwd: 'D:\\data',
+        model: 'gpt-current',
+        effort: 'high',
+      },
+      1000,
+      (turn) => {
+        acceptedTurnIds.push(turn.id);
+      },
+    );
+    const rejection = expect(running).rejects.toMatchObject({
+      name: 'CodexUnexpectedTurnActionError',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemId: 'command-1',
+      itemType: 'commandExecution',
+    });
+    output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(true);
+    });
+    output.write(
+      `${JSON.stringify({
+        method: 'item/started',
+        params: {
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          startedAtMs: 1,
+          item: {
+            type: 'commandExecution',
+            id: 'command-1',
+            command: 'whoami',
+            cwd: 'D:\\data',
+            status: 'inProgress',
+          },
+        },
+      })}\n${JSON.stringify({
+        id: 2,
+        result: { turn: { id: 'turn-1', status: 'inProgress', error: null, items: [] } },
+      })}\n`,
+    );
+    await vi.waitFor(() => {
+      expect(requests.some((request) => request.method === 'turn/interrupt')).toBe(true);
+    });
+    const interruptRequest = requests.find((request) => request.method === 'turn/interrupt');
+    if (typeof interruptRequest?.id !== 'number') throw new Error('Missing interrupt request');
+    expect(interruptRequest).toMatchObject({
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+    output.write(`${JSON.stringify({ id: interruptRequest.id, result: {} })}\n`);
+
+    await rejection;
+    expect(acceptedTurnIds).toEqual(['turn-1']);
+    await connection.close();
+  });
+
   it('should decode subscribed session notifications and isolate decoder failures', () => {
     const { connection, output } = createHarness();
     const notifications = vi.fn();
