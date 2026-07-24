@@ -62,7 +62,10 @@ Windows 发现通过只读进程路径查询取得正在运行的 `codex.exe`；
   → initialize / initialized
   → account/read(refreshToken=false)
   → model/list
-  → thread/start 或 thread/resume
+  → ephemeral thread/start
+  → mcpServerStatus/list
+  → thread/start 或 thread/resume（按名称关闭 MCP）
+  → mcpServerStatus/list（MCP 工具数量为零）
   → turn/start 并等待最终状态
   → 关闭 stdin
   → 等待子进程退出
@@ -167,7 +170,7 @@ Codex provider 使用以下运行边界：
 - `sandbox: read-only`。
 - `approvalPolicy: never`。
 - `web_search: disabled`。
-- 稳定 feature `apps`、`goals`、`hooks`、`multi_agent`、`remote_plugin`、`shell_snapshot` 和 `shell_tool` 关闭。
+- 稳定 feature 中的执行、浏览器、App、plugin、hook、协作、skill 安装和工具发现能力关闭。
 - 默认 `cwd` 为 storage `getDataRootDir()`；显式覆盖使用规范化绝对路径。
 - 每个 analysis turn 显式复用同一权限和 `cwd`。
 
@@ -175,11 +178,22 @@ Codex provider 使用以下运行边界：
 
 `networkAccess: false` 约束 sandbox 内本地工具的网络访问。模型传输和 App Server 管理的集成使用各自的 runtime 网络边界。
 
-v2er 的 thread config 覆盖 Web 搜索和本节列出的稳定 feature，不发送 `mcp_servers`、plugin 配置或 `config/read` 请求。Direct MCP 与已安装 plugin 的有效工具范围由 App Server 根据所选 Codex home 解析。
+临时 ephemeral thread 使用相同模型、Project 和基础权限配置，模型 turn 数量为零。`mcpServerStatus/list(detail: toolsAndAuthOnly)` 提供所选 Codex home 解析后的服务名与工具名。持久 thread config 按动态服务名写入 `mcp_servers.<name>.enabled: false`。
+
+持久 thread 创建或恢复后再次读取 MCP 清单。MCP 工具数量为零时进入提示轮或分析轮；非空清单和无法验证的响应归入协议错误。清单读取最多包含 100 页，重复游标归入协议错误。
 
 画像分析使用独立 App Server 的标准 thread/turn 方法。App Server 发给客户端的反向请求统一返回 method-not-found；App Server 内部执行的模型工具不经过该客户端反向请求通道。工具审批请求映射为明确失败，命令保持可终止状态。
 
-`AnalyzerOutput` 中的帖子和回复来自外部内容，并与统计字段共同组成分析轮的普通 user message。
+### 提示词注入安全边界
+
+- 不可信输入范围：`AnalyzerOutput` 中的帖子和回复；消息类型为分析轮普通 user message。
+- 发送前执行隔离：thread 权限配置与持久 thread 零 MCP 工具校验。
+- 运行期监听：App Server `turn`（一次用户输入触发的处理过程）事件监听先于 `turn` 创建；`runTurn()` 订阅 `item/started` 后调用 `turn/start`。`item/started` 表示 `turn` 内容或动作开始。
+- 允许事件类型：user message、agent message、plan、reasoning 和 context compaction。
+- 中断条件：工具调用、其他非分析动作或未知动作开始。
+- 中断流程：程序通过 `turn/interrupt` 请求 Codex 停止当前 `turn`；`runTurn()` 抛出 `CodexUnexpectedTurnActionError`。
+- 数据路径：当前 AI 步骤返回失败；流程结束于 `parseAIAnalysisResult()` 和 `result.json` 写入之前；已有 `result.json` 保持原状。
+- 事件时序：`item/started` 通知与对应动作并发；运行期监听位于通知接收之后。
 
 ## 10. 并发和幂等
 
