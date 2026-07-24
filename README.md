@@ -42,7 +42,7 @@ v2er session check --provider codex
 
 Codex 版本探测和 App Server 使用受限子进程环境。环境继承范围限于 Codex runtime、用户与系统目录、临时目录、区域设置、代理和证书路径；API Key、access token、`NODE_OPTIONS`、`ComSpec` 和其他业务变量位于继承范围之外。显式 `.cmd` shim 使用经过文件检查的系统命令处理器。代理值可能包含代理凭据。
 
-Codex thread 固定使用只读 sandbox、`approvalPolicy: never` 和 `networkAccess: false`，关闭 Web 搜索、shell、apps/connectors、hooks、子代理和远程 plugin 目录。v2er 不发送 MCP 或 plugin 配置；Direct MCP 与已安装 plugin 的有效工具范围由 App Server 根据所选 Codex home 解析。详细边界见 [Codex App Server 接入规范](docs/codex-app-server-integration.md#9-权限与工具边界)。
+Codex thread 固定使用只读 sandbox、`approvalPolicy: never` 和 `networkAccess: false`，关闭 Web 搜索、shell、apps/connectors、hooks、子代理和 plugin 能力。临时 thread 读取所选 Codex home 的实际 MCP 工具名称，持久 thread 按名称关闭对应服务；持久 thread 的 MCP 工具清单为空后进入消息发送。详细边界见 [Codex App Server 接入规范](docs/codex-app-server-integration.md#9-权限与工具边界)。
 
 Codex 默认 Project 为 `~/.v2er-insight/data`。该目录注册为 App 本地 Project 后，创建的任务显示在项目树中；thread 创建独立于该注册状态。
 
@@ -307,5 +307,6 @@ pnpm run ci             # 完整 CI（类型 + lint + 格式 + 测试）
 - 文件权限：在 Linux/Mac 系统上，程序创建的配置文件权限为 `0600`（仅当前用户读写）。
 - 隐私保护：建议避免在配置文件中直接存储包含明文凭据的代理 URL。
 - Windows 用户建议：手动检查 `~/.v2er-insight/config.json` 的访问控制列表 (ACL)，确保其安全性。
-- Codex 本地工具：只读 sandbox 允许读取 Project 内容；默认 Project 包含各用户的 raw、analyzed、result 和 session 数据。
-- Codex 集成工具：Direct MCP 与已安装 plugin 工具遵循有效 `CODEX_HOME` 配置；工具范围由用户维护的有效 `CODEX_HOME` 配置决定。
+- Codex 本地执行边界：持久分析 thread 的 sandbox 为 read-only；Web、shell、apps、plugins 和 MCP 工具为关闭状态。
+- Codex 提示词注入安全边界：不可信输入范围为 `AnalyzerOutput` 中的帖子和回复；发送前执行隔离为持久 thread 零 MCP 工具校验。程序在一次分析请求开始前订阅 Codex 事件；工具调用、其他非分析动作或未知动作开始时，程序请求中断当前分析。当前 AI 步骤返回失败，流程结束于画像解析和 `result.json` 写入之前，已有 `result.json` 保持原状。
+- Codex Project：默认目录包含各用户的 raw、analyzed、result 和 session 数据；App Server 加载的 Project 指令来源保留在 thread 元数据中。
