@@ -329,8 +329,9 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `v2er <username>` → One-click pipeline (fetch → analyze → ai → show)
 - `v2er fetch <username>` → Fetch and save Raw Snapshot V2 with collection diagnostics (raw.json)
 - `v2er analyze <username>` → Validate Raw Snapshot V2 and generate statistics (analyzed.json)
-- `v2er ai <username>` → Generate user profile via Gemini (result.json)
+- `v2er ai <username>` → Generate user profile through the selected AI provider (result.json)
 - `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
+- `v2er session check [username] [--provider gemini|codex]` → Run read-only provider diagnostics
 - `v2er config show [group]` → View config (with apiKey masking)
 - `v2er config set <path> <value>` → Set config via dot-path (e.g. `ai.model`)
 - `v2er config reset [group]` → Reset to defaults
@@ -339,12 +340,17 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 **Main Command Options** (`v2er <username>`):
 
 - `--force` → Force re-fetch from scratch
-- `--model [name]` → Specify AI model (optional value)
-- `--thinking-level [level]` → Specify thinking level (optional value)
+- `--provider <provider>` → Select `gemini` or `codex`
+- `--model [name]` → Specify the selected provider model (optional value)
+- `--thinking-level [level]` → Specify Gemini thinking level (optional value)
+- `--reasoning-effort <effort>` → Specify Codex reasoning effort
+- `--new-thread` → Create a new Codex thread generation
+- `--codex-project <path>` → Specify the Project path for a new Codex thread
 - `--resend` → Force resend complete analyzed data
 - `-v, --verbose` → Show debug output
 
-The `ai` subcommand also accepts `--model`, `--thinking-level`, and `--resend`.
+The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
+`--reasoning-effort`, `--new-thread`, `--codex-project`, `--resend`, and `--verbose`.
 
 **Shared Logic** (`utils.ts` and `utils/error.ts`):
 
