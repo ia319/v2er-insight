@@ -24,10 +24,13 @@ export { JsonlRpcClient } from './jsonl-client';
 export {
   decodeAccountReadResponse,
   decodeInitializeResponse,
+  decodeMcpServerStatusListResponse,
   decodeModelListResponse,
 } from './method-decoders';
 export type {
   CodexAccountStatus,
+  CodexMcpServerStatus,
+  CodexMcpServerStatusPage,
   CodexModelInfo,
   CodexModelPage,
   CodexReasoningEffortOption,

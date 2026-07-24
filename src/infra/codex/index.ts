@@ -36,6 +36,7 @@ export {
   connectCodexAppServer,
   decodeAccountReadResponse,
   decodeInitializeResponse,
+  decodeMcpServerStatusListResponse,
   decodeModelListResponse,
   startCodexAppServer,
 } from './app-server';
@@ -44,6 +45,8 @@ export type {
   CodexAppServerConnectionOptions,
   CodexAppServerExit,
   CodexAppServerProcessOptions,
+  CodexMcpServerStatus,
+  CodexMcpServerStatusPage,
   CodexModelInfo,
   CodexModelPage,
   CodexReasoningEffortOption,
