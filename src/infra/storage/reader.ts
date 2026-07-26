@@ -15,15 +15,12 @@ export type DataFileReadResult =
   | { status: 'success'; data: unknown };
 
 /**
- * Reads one JSON data file with explicit missing and invalid states.
+ * Reads and parses one JSON file without hiding missing or invalid states.
  *
- * @param username - V2EX username that owns the data file.
- * @param type - Supported data file type.
+ * @param filePath - Validated application-owned file path.
  * @returns A typed read status with parsed data on success.
  */
-export function readDataFileResult(username: string, type: DataFileType): DataFileReadResult {
-  const filePath = getDataFilePath(username, type);
-
+export function readJsonFileResult(filePath: string): DataFileReadResult {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const data: unknown = JSON.parse(content);
@@ -34,6 +31,17 @@ export function readDataFileResult(username: string, type: DataFileType): DataFi
     }
     return { status: 'invalid' };
   }
+}
+
+/**
+ * Reads one JSON data file with explicit missing and invalid states.
+ *
+ * @param username - V2EX username that owns the data file.
+ * @param type - Supported data file type.
+ * @returns A typed read status with parsed data on success.
+ */
+export function readDataFileResult(username: string, type: DataFileType): DataFileReadResult {
+  return readJsonFileResult(getDataFilePath(username, type));
 }
 
 /**

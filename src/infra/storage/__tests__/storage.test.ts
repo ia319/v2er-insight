@@ -220,6 +220,22 @@ describe('storage/writer', () => {
       const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
       expect(mockedFs.unlinkSync).toHaveBeenCalledWith(tempPath);
     });
+
+    it('should publish an immutable JSON target through an exclusive hard link', async () => {
+      mockedFs.mkdirSync.mockImplementation(() => '' as never);
+      mockedFs.writeFileSync.mockImplementation(() => {});
+      mockedFs.linkSync.mockImplementation(() => {});
+      mockedFs.unlinkSync.mockImplementation(() => {});
+      const { writeJsonFileExclusively } = await import('../writer');
+      const targetPath = path.join(mockDataBase, 'livid', 'results', 'versions', 'v000001.json');
+
+      writeJsonFileExclusively(targetPath, { schemaVersion: 1 });
+
+      const tempPath = mockedFs.writeFileSync.mock.calls[0]?.[0];
+      expect(mockedFs.linkSync).toHaveBeenCalledWith(tempPath, targetPath);
+      expect(mockedFs.unlinkSync).toHaveBeenCalledWith(tempPath);
+      expect(mockedFs.renameSync).not.toHaveBeenCalled();
+    });
   });
 
   describe('writeDataFileWithRollback', () => {

@@ -11,6 +11,17 @@ export {
 export type { DataFileReadResult } from './reader';
 export { readDataFile, readDataFileResult } from './reader';
 export { DataFilePostWriteError, writeDataFile, writeDataFileWithRollback } from './writer';
+export type {
+  ResultVersionIndexReadResult,
+  StoredResultVersionReadResult,
+} from './result-version-files';
+export {
+  listStoredResultVersionIds,
+  readResultVersionIndex,
+  readStoredResultVersion,
+  writeResultVersionIndex,
+  writeStoredResultVersion,
+} from './result-version-files';
 export { cleanExpiredData } from './cleaner';
 export type {
   CleanableDataFileType,
