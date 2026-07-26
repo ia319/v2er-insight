@@ -22,6 +22,14 @@ export {
   writeResultVersionIndex,
   writeStoredResultVersion,
 } from './result-version-files';
+export type { ResultVersionLockOwner, ResultVersionLockState } from './result-version-lock';
+export {
+  readResultVersionLock,
+  ResultVersionLockBusyError,
+  ResultVersionLockOwnershipError,
+  ResultVersionLockReleaseError,
+  withResultVersionLock,
+} from './result-version-lock';
 export { cleanExpiredData } from './cleaner';
 export type {
   CleanableDataFileType,
