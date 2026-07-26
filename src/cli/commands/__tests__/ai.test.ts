@@ -7,12 +7,12 @@ import {
   computeAnalysisFingerprint,
   computePayloadHash,
   computeProviderStateKey,
+  hashCanonicalJson,
   type AnalysisState,
 } from '@/core/provenance';
 import type { ResultVersionMetadata, ResultVersionSource } from '@/core/result-version';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
-const mockedWriteDataFileWithRollback = vi.hoisted(() => vi.fn());
 const mockedCleanExpiredData = vi.hoisted(() => vi.fn());
 const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
 const mockedUpdateAnalysisState = vi.hoisted(() => vi.fn());
@@ -23,6 +23,7 @@ const mockedBuildAnalysisRequest = vi.hoisted(() => vi.fn());
 const mockedParseResponse = vi.hoisted(() => vi.fn());
 const mockedWithRetry = vi.hoisted(() => vi.fn());
 const mockedExecuteCodexAnalysis = vi.hoisted(() => vi.fn());
+const mockedInspectCodexResultDeliverySession = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedWithCodexExecutionLock = vi.hoisted(() => vi.fn());
 
@@ -51,7 +52,6 @@ vi.mock('@/infra/storage', async (importOriginal) => {
   return {
     ...actual,
     readDataFile: mockedReadDataFile,
-    writeDataFileWithRollback: mockedWriteDataFileWithRollback,
     cleanExpiredData: mockedCleanExpiredData,
     readAnalysisState: mockedReadAnalysisState,
     recoverResultVersionDelivery: mockedRecoverResultVersionDelivery,
@@ -83,6 +83,7 @@ vi.mock('@/config', async () => {
 
 vi.mock('../ai/codex', () => ({
   executeCodexAnalysis: mockedExecuteCodexAnalysis,
+  inspectCodexResultDeliverySession: mockedInspectCodexResultDeliverySession,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -91,10 +92,11 @@ vi.mock('@/infra/logger', () => ({
 
 import { runAi } from '../ai';
 import { CodexProjectPathError } from '@/core/ai/providers/codex';
-import { CodexExecutionLockBusyError, DataFilePostWriteError } from '@/infra/storage';
+import { CodexExecutionLockBusyError } from '@/infra/storage';
 
 const SOURCE_HASH = 'a'.repeat(64);
 const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CODEX_PROVIDER_KEY = `codex:${'d'.repeat(64)}`;
 const defaultRequest = {
   systemPrompt: 'You are an analyst',
   promptHash: 'c'.repeat(64),
@@ -263,6 +265,24 @@ function setPendingGeminiDelivery(
   };
 }
 
+function setPendingCodexDelivery(
+  state: AnalysisState,
+  resultVersionId: string | null = null,
+): void {
+  if (!state.analyzed) {
+    throw new Error('Expected analyzed fixture provenance');
+  }
+  state.pendingResultDelivery = {
+    deliveryId: DELIVERY_ID,
+    providerKey: CODEX_PROVIDER_KEY,
+    analysisFingerprint: state.analyzed.analysisFingerprint,
+    payloadHash: state.analyzed.payloadHash,
+    basedOnPartial: false,
+    deliveryMode: 'change',
+    resultVersionId,
+  };
+}
+
 function createSavedMetadata(
   source: ResultVersionSource,
   overrides: Partial<ResultVersionMetadata> = {},
@@ -310,15 +330,7 @@ describe('runAi', () => {
     mockedWithCodexExecutionLock.mockImplementation(
       (_username: string, operation: () => Promise<unknown>) => operation(),
     );
-    mockedWriteDataFileWithRollback.mockImplementation(
-      (_username: string, _type: string, _data: unknown, afterWrite: () => void) => {
-        try {
-          afterWrite();
-        } catch (error) {
-          throw new DataFilePostWriteError(error);
-        }
-      },
-    );
+    mockedInspectCodexResultDeliverySession.mockReturnValue('completed');
     mockedRecoverResultVersionDelivery.mockReturnValue({ status: 'missing' });
     mockedSaveResultVersion.mockImplementation(
       (_username: string, _result: AIAnalysisResult, source: ResultVersionSource) =>
@@ -399,7 +411,7 @@ describe('runAi', () => {
     expect(result.status).toBe('skipped');
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
     expect(MockGeminiProvider).not.toHaveBeenCalled();
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
   });
 
@@ -441,6 +453,23 @@ describe('runAi', () => {
     expect(MockGeminiProvider).not.toHaveBeenCalled();
     expect(context.getState().pendingResultDelivery).toBeUndefined();
     expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
+  });
+
+  it('should block Gemini while an accepted Codex delivery remains incomplete', async () => {
+    const context = mockInput();
+    setPendingCodexDelivery(context.getState());
+
+    const result = await runAi('testuser', {});
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
+    });
+    expect(mockedWithCodexExecutionLock).toHaveBeenCalledOnce();
+    expect(mockedRecoverResultVersionDelivery).toHaveBeenCalledOnce();
+    expect(mockedResolveApiKey).not.toHaveBeenCalled();
+    expect(MockGeminiProvider).not.toHaveBeenCalled();
+    expect(mockedExecuteCodexAnalysis).not.toHaveBeenCalled();
   });
 
   it('should send again when the persisted result does not satisfy the result contract', async () => {
@@ -600,7 +629,6 @@ describe('runAi', () => {
         appVersion: '1.2.0',
       }),
     );
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).toHaveBeenCalledTimes(3);
     expect(context.getState().currentResult?.deliveryMode).toBe('change');
     expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
@@ -791,7 +819,6 @@ describe('runAi', () => {
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
     expect(mockSendMessage).not.toHaveBeenCalled();
@@ -843,7 +870,6 @@ describe('runAi', () => {
     const result = await runAi('testuser', {});
 
     expect(mockedParseResponse).toHaveBeenCalledOnce();
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
@@ -865,7 +891,6 @@ describe('runAi', () => {
 
     expect(mockSendMessage).toHaveBeenCalledOnce();
     expect(mockedParseResponse).not.toHaveBeenCalled();
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
@@ -945,10 +970,10 @@ describe('runAi', () => {
         }
       },
     );
-    mockedWriteDataFileWithRollback.mockImplementation(
-      (_username: string, _type: string, _data: unknown, afterWrite: () => void) => {
+    mockedSaveResultVersion.mockImplementation(
+      (_username: string, _result: AIAnalysisResult, source: ResultVersionSource) => {
         expect(lockHeld).toBe(true);
-        afterWrite();
+        return createSavedMetadata(source);
       },
     );
     complete.mockImplementation(async () => {
@@ -962,12 +987,14 @@ describe('runAi', () => {
       status: 'result',
       model: 'gpt-current',
       reasoningEffort: 'high',
-      providerKey: 'codex:provider-key',
+      providerKey: CODEX_PROVIDER_KEY,
       localSessionId: 'local-1',
       threadId: 'thread-1',
+      threadName: 'testuser-insight',
       result: createAiResult('Codex result'),
       delivery: {
-        providerKey: 'codex:provider-key',
+        deliveryId: DELIVERY_ID,
+        providerKey: CODEX_PROVIDER_KEY,
         analysisFingerprint: analyzedState.analysisFingerprint,
         payloadHash: analyzedState.payloadHash,
         basedOnPartial: false,
@@ -980,18 +1007,40 @@ describe('runAi', () => {
 
     expect(output).toMatchObject({
       status: 'success',
-      meta: { provider: 'codex', model: 'gpt-current' },
+      meta: { provider: 'codex', model: 'gpt-current', resultVersionId: 'v000001' },
     });
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
     expect(mockedExecuteCodexAnalysis).toHaveBeenCalledWith(
       expect.objectContaining({ proxyUrl: 'http://config-proxy.example' }),
     );
-    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledOnce();
+    expect(mockedSaveResultVersion).toHaveBeenCalledWith(
+      'testuser',
+      expect.objectContaining({ summary: 'Codex result' }),
+      expect.objectContaining({
+        deliveryId: DELIVERY_ID,
+        provider: 'codex',
+        model: 'gpt-current',
+        reasoningLevel: 'high',
+        localSessionId: 'local-1',
+        externalThreadId: 'thread-1',
+        threadName: 'testuser-insight',
+      }),
+    );
     expect(complete).toHaveBeenCalledOnce();
     expect(lockHeld).toBe(false);
-    expect(mockedWriteDataFileWithRollback.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockedSaveResultVersion.mock.invocationCallOrder[0]).toBeLessThan(
       complete.mock.invocationCallOrder[0]!,
     );
+    expect(input.getState()).toMatchObject({
+      providers: {
+        [CODEX_PROVIDER_KEY]: {
+          lastSentAnalysisFingerprint: analyzedState.analysisFingerprint,
+          lastSentPayloadHash: analyzedState.payloadHash,
+        },
+      },
+      currentResult: { resultVersionId: 'v000001' },
+    });
+    expect(input.getState().pendingResultDelivery).toBeUndefined();
   });
 
   it('should return busy before Codex runtime access when another process holds the lock', async () => {
@@ -1033,7 +1082,7 @@ describe('runAi', () => {
     const output = await runAi('testuser', { provider: 'codex' });
 
     expect(output).toMatchObject({ status: 'failed', reasonCode: 'AI_CODEX_BUSY' });
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 
@@ -1056,7 +1105,7 @@ describe('runAi', () => {
     expect(output.recoverActions).not.toContainEqual(
       expect.objectContaining({ content: expect.stringContaining('config proxy') }),
     );
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
   });
 
   it('should preserve a committed Codex result when session completion fails', async () => {
@@ -1068,12 +1117,14 @@ describe('runAi', () => {
       status: 'result',
       model: 'gpt-current',
       reasoningEffort: 'high',
-      providerKey: 'codex:provider-key',
+      providerKey: CODEX_PROVIDER_KEY,
       localSessionId: 'local-1',
       threadId: 'thread-1',
+      threadName: 'testuser-insight',
       result: createAiResult('Codex result'),
       delivery: {
-        providerKey: 'codex:provider-key',
+        deliveryId: DELIVERY_ID,
+        providerKey: CODEX_PROVIDER_KEY,
         analysisFingerprint: analyzedState.analysisFingerprint,
         payloadHash: analyzedState.payloadHash,
         basedOnPartial: false,
@@ -1087,8 +1138,79 @@ describe('runAi', () => {
     expect(output).toMatchObject({
       status: 'failed',
       reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
+      meta: { resultVersionId: 'v000001' },
     });
-    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledOnce();
+    expect(mockedSaveResultVersion).toHaveBeenCalledOnce();
+    expect(input.getState().pendingResultDelivery).toMatchObject({
+      deliveryId: DELIVERY_ID,
+      resultVersionId: 'v000001',
+    });
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+  });
+
+  it('should reuse a saved Codex result while completing its accepted turn', async () => {
+    const result = createAiResult('Recovered Codex result');
+    const input = mockInput(createAnalyzedData(), result);
+    const state = input.getState();
+    const analyzedState = state.analyzed;
+    if (!analyzedState) throw new Error('Expected analyzed provenance');
+    setPendingCodexDelivery(state, 'v000001');
+    const metadata = createSavedMetadata(
+      {
+        deliveryId: DELIVERY_ID,
+        origin: 'analysis',
+        createdAt: '2026-07-26T07:00:00.000Z',
+        provider: 'codex',
+        model: 'gpt-current',
+        reasoningLevel: 'high',
+        localSessionId: 'local-1',
+        externalThreadId: 'thread-1',
+        threadName: 'testuser-insight',
+        promptHash: defaultRequest.promptHash,
+        analysisFingerprint: analyzedState.analysisFingerprint,
+        payloadHash: analyzedState.payloadHash,
+        dataQuality: 'complete',
+        warningCount: 0,
+        appVersion: '0.0.0',
+      },
+      { resultHash: hashCanonicalJson(result) },
+    );
+    mockedRecoverResultVersionDelivery.mockReturnValue({
+      status: 'recovered',
+      metadata,
+      result,
+    });
+    mockedInspectCodexResultDeliverySession.mockReturnValue('pending');
+    const complete = vi.fn().mockResolvedValue(undefined);
+    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedExecuteCodexAnalysis.mockResolvedValue({
+      status: 'result',
+      model: 'gpt-current',
+      reasoningEffort: 'high',
+      providerKey: CODEX_PROVIDER_KEY,
+      localSessionId: 'local-1',
+      threadId: 'thread-1',
+      threadName: 'testuser-insight',
+      result,
+      delivery: {
+        deliveryId: DELIVERY_ID,
+        providerKey: CODEX_PROVIDER_KEY,
+        analysisFingerprint: analyzedState.analysisFingerprint,
+        payloadHash: analyzedState.payloadHash,
+        basedOnPartial: false,
+        deliveryMode: 'change',
+      },
+      complete,
+    });
+
+    const output = await runAi('testuser', { provider: 'codex' });
+
+    expect(output).toMatchObject({
+      status: 'success',
+      meta: { provider: 'codex', resultVersionId: 'v000001' },
+    });
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledOnce();
+    expect(input.getState().pendingResultDelivery).toBeUndefined();
   });
 });
