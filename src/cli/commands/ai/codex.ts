@@ -14,6 +14,7 @@ import {
   hasProviderReceivedAnalysis,
   type AnalysisState,
   type AnalyzedProvenanceCheck,
+  type PendingResultDeliveryState,
   type ResultDeliveryMode,
 } from '@/core/provenance';
 import type { ResolvedCodexConfig } from '@/config';
@@ -47,6 +48,7 @@ interface CodexCommandExecutionBase {
   providerKey: string;
   localSessionId: string;
   threadId: string;
+  threadName: string;
 }
 
 export type CodexCommandExecution =
@@ -56,6 +58,7 @@ export type CodexCommandExecution =
       status: 'result';
       result: AIAnalysisResult;
       delivery: {
+        deliveryId: string;
         providerKey: string;
         analysisFingerprint: string;
         payloadHash: string;
@@ -90,6 +93,65 @@ function hasReusableResult(options: ExecuteCodexAnalysisOptions, providerKey: st
     !options.analysisState.currentResult.stale &&
     isAIAnalysisResult(options.savedResult)
   );
+}
+
+export type CodexResultDeliverySessionStatus = 'pending' | 'completed';
+
+/**
+ * Determines whether a saved Codex delivery still requires registry completion.
+ *
+ * @param username - V2EX username that owns the Codex registry.
+ * @param pending - Durable result delivery from analysis-state.json.
+ * @param localSessionId - Session recorded by the saved result metadata.
+ * @returns Pending when the accepted turn remains recoverable, otherwise completed.
+ * @throws When the registry, session, or pending delivery is missing or inconsistent.
+ */
+export function inspectCodexResultDeliverySession(
+  username: string,
+  pending: PendingResultDeliveryState,
+  localSessionId: string,
+): CodexResultDeliverySessionStatus {
+  const registryState = readCodexThreadRegistry(username);
+  if (registryState.status !== 'valid') {
+    throw new CodexThreadRegistryCorruptError();
+  }
+
+  const session = registryState.registry.sessions.find(
+    (candidate) => candidate.localSessionId === localSessionId,
+  );
+  if (!session) {
+    throw new Error(`Codex local session "${localSessionId}" was not found`);
+  }
+
+  const duplicate = registryState.registry.sessions.some(
+    (candidate) =>
+      candidate.localSessionId !== localSessionId &&
+      candidate.pendingAnalysis?.deliveryId === pending.deliveryId,
+  );
+  if (duplicate) {
+    throw new Error(`Codex delivery "${pending.deliveryId}" belongs to multiple sessions`);
+  }
+
+  const registryDelivery = session.pendingAnalysis;
+  if (registryDelivery) {
+    if (
+      registryDelivery.deliveryId !== pending.deliveryId ||
+      registryDelivery.providerKey !== pending.providerKey ||
+      registryDelivery.analysisFingerprint !== pending.analysisFingerprint ||
+      registryDelivery.payloadHash !== pending.payloadHash ||
+      registryDelivery.basedOnPartial !== pending.basedOnPartial ||
+      registryDelivery.deliveryMode !== pending.deliveryMode ||
+      registryDelivery.turnId === null
+    ) {
+      throw new Error(`Codex delivery "${pending.deliveryId}" does not match its session`);
+    }
+    return 'pending';
+  }
+
+  if (session.bootstrapStatus !== 'ready') {
+    throw new Error(`Codex delivery "${pending.deliveryId}" has no completed session state`);
+  }
+  return 'completed';
 }
 
 /**
@@ -160,6 +222,7 @@ export async function executeCodexAnalysis(
       providerKey: execution.providerKey,
       localSessionId: execution.state.localSessionId,
       threadId: execution.state.threadId,
+      threadName: execution.state.displayName,
     };
     if (execution.status === 'skipped') return { ...base, status: 'skipped' };
     if (execution.status === 'busy') {
@@ -172,6 +235,7 @@ export async function executeCodexAnalysis(
       status: 'result',
       result: advance.result,
       delivery: {
+        deliveryId: advance.delivery.deliveryId,
         providerKey: advance.delivery.providerKey,
         analysisFingerprint: advance.delivery.analysisFingerprint,
         payloadHash: advance.delivery.payloadHash,
