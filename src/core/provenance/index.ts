@@ -13,6 +13,7 @@ export {
   completeResultDelivery,
   hasProviderReceivedAnalysis,
   matchesPendingResultDelivery,
+  matchesResultDeliveryTarget,
   prepareResultDelivery,
   recordProviderDelivery,
   recordSavedResultVersion,

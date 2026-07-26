@@ -33,7 +33,14 @@ export interface ProviderDeliveryRecordInput {
 
 export type ResultDeliveryTarget = ProviderDeliveryRecordInput;
 
-function matchesResultDeliveryTarget(
+/**
+ * Checks whether a pending delivery targets the same provider and analyzed payload.
+ *
+ * @param pending - Validated pending delivery state.
+ * @param target - Provider target and analyzed payload identity.
+ * @returns Whether the pending delivery can be reused for the target.
+ */
+export function matchesResultDeliveryTarget(
   pending: PendingResultDeliveryState,
   target: ResultDeliveryTarget,
 ): boolean {

@@ -11,9 +11,12 @@ import {
 import {
   computeProviderStateKey,
   hasProviderReceivedAnalysis,
+  isPendingResultDeliveryState,
+  matchesResultDeliveryTarget,
   type AnalysisState,
   type AnalyzedProvenanceCheck,
-  type ProviderDeliveryRecordInput,
+  type PendingResultDeliveryState,
+  type ResultDeliveryTarget,
 } from '@/core/provenance';
 import { THINKING_LEVELS, type ResolvedGeminiConfig, type ThinkingLevel } from '@/config';
 import { logger } from '@/infra/logger';
@@ -31,6 +34,7 @@ export interface ExecuteGeminiAnalysisOptions {
   model?: string;
   thinkingLevel?: string;
   resend?: boolean;
+  prepareDelivery: (target: ResultDeliveryTarget) => PendingResultDeliveryState;
 }
 
 interface GeminiCommandExecutionBase {
@@ -46,7 +50,8 @@ export type GeminiCommandExecution =
       providerKey: string;
       result: AIAnalysisResult;
       warnings: ValidationResult['warnings'];
-      delivery: ProviderDeliveryRecordInput;
+      thinkingLevel: ThinkingLevel;
+      delivery: PendingResultDeliveryState;
     });
 
 function isThinkingLevel(value: string): value is ThinkingLevel {
@@ -94,6 +99,22 @@ export async function executeGeminiAnalysis(
   const apiKey = resolveApiKey();
   if (!apiKey) return { status: 'apiKeyMissing', model };
 
+  const target: ResultDeliveryTarget = {
+    providerKey,
+    analysisFingerprint: options.provenance.analysisFingerprint,
+    payloadHash: options.provenance.payloadHash,
+    basedOnPartial: options.provenance.basedOnPartial,
+    deliveryMode: options.resend ? 'resend' : 'change',
+  };
+  const delivery = options.prepareDelivery(target);
+  if (
+    !isPendingResultDeliveryState(delivery) ||
+    !matchesResultDeliveryTarget(delivery, target) ||
+    delivery.resultVersionId !== null
+  ) {
+    throw new Error('Gemini result delivery was not prepared for provider execution');
+  }
+
   const provider = new GeminiProvider(apiKey, model);
   const retryOptions = {
     maxRetries: options.config.maxRetries,
@@ -122,12 +143,7 @@ export async function executeGeminiAnalysis(
     providerKey,
     result: parsed.data,
     warnings: parsed.warnings,
-    delivery: {
-      providerKey,
-      analysisFingerprint: options.provenance.analysisFingerprint,
-      payloadHash: options.provenance.payloadHash,
-      basedOnPartial: options.provenance.basedOnPartial,
-      deliveryMode: options.resend ? 'resend' : 'change',
-    },
+    thinkingLevel,
+    delivery,
   };
 }

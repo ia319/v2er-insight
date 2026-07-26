@@ -7,14 +7,17 @@ import {
   computeAnalysisFingerprint,
   computePayloadHash,
   computeProviderStateKey,
-  type AnalysisStateV1,
+  type AnalysisState,
 } from '@/core/provenance';
+import type { ResultVersionMetadata, ResultVersionSource } from '@/core/result-version';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedWriteDataFileWithRollback = vi.hoisted(() => vi.fn());
 const mockedCleanExpiredData = vi.hoisted(() => vi.fn());
 const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
 const mockedUpdateAnalysisState = vi.hoisted(() => vi.fn());
+const mockedRecoverResultVersionDelivery = vi.hoisted(() => vi.fn());
+const mockedSaveResultVersion = vi.hoisted(() => vi.fn());
 const mockedResolveApiKey = vi.hoisted(() => vi.fn());
 const mockedBuildAnalysisRequest = vi.hoisted(() => vi.fn());
 const mockedParseResponse = vi.hoisted(() => vi.fn());
@@ -51,6 +54,8 @@ vi.mock('@/infra/storage', async (importOriginal) => {
     writeDataFileWithRollback: mockedWriteDataFileWithRollback,
     cleanExpiredData: mockedCleanExpiredData,
     readAnalysisState: mockedReadAnalysisState,
+    recoverResultVersionDelivery: mockedRecoverResultVersionDelivery,
+    saveResultVersion: mockedSaveResultVersion,
     updateAnalysisState: mockedUpdateAnalysisState,
     withCodexExecutionLock: mockedWithCodexExecutionLock,
   };
@@ -89,6 +94,7 @@ import { CodexProjectPathError } from '@/core/ai/providers/codex';
 import { CodexExecutionLockBusyError, DataFilePostWriteError } from '@/infra/storage';
 
 const SOURCE_HASH = 'a'.repeat(64);
+const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const defaultRequest = {
   systemPrompt: 'You are an analyst',
   promptHash: 'c'.repeat(64),
@@ -160,10 +166,10 @@ function createAiResult(summary = 'Saved result'): AIAnalysisResult {
   };
 }
 
-function createAnalysisState(analyzed: AnalyzerOutput): AnalysisStateV1 {
+function createAnalysisState(analyzed: AnalyzerOutput): AnalysisState {
   const analysisConfigHash = computeAnalysisConfigHash();
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     raw: {
       semanticDataHash: SOURCE_HASH,
       captureStatus:
@@ -187,7 +193,7 @@ function createAnalysisState(analyzed: AnalyzerOutput): AnalysisStateV1 {
 }
 
 interface MockInputContext {
-  getState(): AnalysisStateV1;
+  getState(): AnalysisState;
 }
 
 function mockInput(analyzed = createAnalyzedData(), result: unknown = null): MockInputContext {
@@ -199,7 +205,7 @@ function mockInput(analyzed = createAnalyzedData(), result: unknown = null): Moc
   });
   mockedReadAnalysisState.mockImplementation(() => ({ status: 'valid', state }));
   mockedUpdateAnalysisState.mockImplementation(
-    (_username: string, update: (current: AnalysisStateV1) => AnalysisStateV1) => {
+    (_username: string, update: (current: AnalysisState) => AnalysisState) => {
       state = update(state);
       return state;
     },
@@ -207,7 +213,7 @@ function mockInput(analyzed = createAnalyzedData(), result: unknown = null): Moc
   return { getState: () => state };
 }
 
-function markDelivered(state: AnalysisStateV1): void {
+function markDelivered(state: AnalysisState): void {
   if (!state.analyzed) {
     throw new Error('Expected analyzed fixture provenance');
   }
@@ -229,6 +235,61 @@ function markDelivered(state: AnalysisStateV1): void {
     stale: false,
     basedOnPartial: false,
     deliveryMode: 'change',
+    resultVersionId: null,
+  };
+}
+
+function setPendingGeminiDelivery(
+  state: AnalysisState,
+  resultVersionId: string | null = null,
+): void {
+  if (!state.analyzed) {
+    throw new Error('Expected analyzed fixture provenance');
+  }
+  state.pendingResultDelivery = {
+    deliveryId: DELIVERY_ID,
+    providerKey: computeProviderStateKey({
+      provider: 'gemini',
+      model: 'gemini-3.1-pro-preview',
+      systemPrompt: defaultRequest.systemPrompt,
+      thinkingLevel: 'high',
+      sessionKey: 'default',
+    }),
+    analysisFingerprint: state.analyzed.analysisFingerprint,
+    payloadHash: state.analyzed.payloadHash,
+    basedOnPartial: false,
+    deliveryMode: 'change',
+    resultVersionId,
+  };
+}
+
+function createSavedMetadata(
+  source: ResultVersionSource,
+  overrides: Partial<ResultVersionMetadata> = {},
+): ResultVersionMetadata {
+  return {
+    versionId: 'v000001',
+    sequence: 1,
+    origin: source.origin,
+    deliveryId: source.deliveryId,
+    previousLatestVersionId: null,
+    previousCurrentHash: null,
+    createdAt: source.createdAt,
+    savedAt: '2026-07-26T08:00:00.000Z',
+    provider: source.provider,
+    model: source.model,
+    reasoningLevel: source.reasoningLevel,
+    localSessionId: source.localSessionId,
+    externalThreadId: source.externalThreadId,
+    threadName: source.threadName,
+    promptHash: source.promptHash,
+    analysisFingerprint: source.analysisFingerprint,
+    payloadHash: source.payloadHash,
+    resultHash: 'f'.repeat(64),
+    dataQuality: source.dataQuality,
+    warningCount: source.warningCount,
+    appVersion: source.appVersion,
+    ...overrides,
   };
 }
 
@@ -257,6 +318,11 @@ describe('runAi', () => {
           throw new DataFilePostWriteError(error);
         }
       },
+    );
+    mockedRecoverResultVersionDelivery.mockReturnValue({ status: 'missing' });
+    mockedSaveResultVersion.mockImplementation(
+      (_username: string, _result: AIAnalysisResult, source: ResultVersionSource) =>
+        createSavedMetadata(source),
     );
     mockInput();
     mockedBuildAnalysisRequest.mockReturnValue(defaultRequest);
@@ -335,6 +401,46 @@ describe('runAi', () => {
     expect(MockGeminiProvider).not.toHaveBeenCalled();
     expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
+  });
+
+  it('should recover a saved Gemini delivery before considering another provider call', async () => {
+    const recoveredResult = createAiResult('Recovered result');
+    const context = mockInput();
+    const state = context.getState();
+    setPendingGeminiDelivery(state);
+    const pending = state.pendingResultDelivery;
+    if (!pending) throw new Error('Expected pending Gemini delivery');
+    const metadata = createSavedMetadata({
+      deliveryId: pending.deliveryId,
+      origin: 'analysis',
+      createdAt: '2026-07-26T07:59:00.000Z',
+      provider: 'gemini',
+      model: 'gemini-3.1-pro-preview',
+      reasoningLevel: 'high',
+      localSessionId: null,
+      externalThreadId: null,
+      threadName: null,
+      promptHash: defaultRequest.promptHash,
+      analysisFingerprint: pending.analysisFingerprint,
+      payloadHash: pending.payloadHash,
+      dataQuality: 'complete',
+      warningCount: 0,
+      appVersion: '1.2.0',
+    });
+    mockedRecoverResultVersionDelivery.mockReturnValue({
+      status: 'recovered',
+      metadata,
+      result: recoveredResult,
+    });
+
+    const result = await runAi('testuser', {});
+
+    expect(result.status).toBe('skipped');
+    expect(mockedRecoverResultVersionDelivery).toHaveBeenCalledWith('testuser', pending);
+    expect(mockedResolveApiKey).not.toHaveBeenCalled();
+    expect(MockGeminiProvider).not.toHaveBeenCalled();
+    expect(context.getState().pendingResultDelivery).toBeUndefined();
+    expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
   });
 
   it('should send again when the persisted result does not satisfy the result contract', async () => {
@@ -418,6 +524,22 @@ describe('runAi', () => {
     expect(result.reasonCode).toBe('AI_API_KEY_MISSING');
   });
 
+  it('should stop before provider access when delivery preparation cannot be persisted', async () => {
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedUpdateAnalysisState.mockImplementation(() => {
+      throw new Error('state unavailable');
+    });
+
+    const result = await runAi('testuser', {});
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      reasonCode: 'PROVENANCE_UPDATE_FAILED',
+    });
+    expect(MockGeminiProvider).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+  });
+
   it('should complete full flow and persist result', async () => {
     const analyzedData = createAnalyzedData();
     const request = defaultRequest;
@@ -461,23 +583,49 @@ describe('runAi', () => {
     );
     expect(mockedParseResponse).toHaveBeenCalledOnce();
     expect(mockedParseResponse).toHaveBeenCalledWith('raw response');
-    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledWith(
+    expect(mockedSaveResultVersion).toHaveBeenCalledWith(
       'testuser',
-      'result',
       aiResult,
-      expect.any(Function),
+      expect.objectContaining({
+        deliveryId: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
+        origin: 'analysis',
+        provider: 'gemini',
+        model: 'gemini-3.1-pro-preview',
+        reasoningLevel: 'high',
+        promptHash: request.promptHash,
+        dataQuality: 'complete',
+        warningCount: 0,
+        appVersion: '1.2.0',
+      }),
     );
-    expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
+    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
+    expect(mockedUpdateAnalysisState).toHaveBeenCalledTimes(3);
     expect(context.getState().currentResult?.deliveryMode).toBe('change');
-    const [writeOrder] = mockedWriteDataFileWithRollback.mock.invocationCallOrder;
-    const [stateOrder] = mockedUpdateAnalysisState.mock.invocationCallOrder;
-    if (writeOrder === undefined || stateOrder === undefined) {
-      throw new Error('Expected result and provenance writes');
+    expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
+    expect(context.getState().pendingResultDelivery).toBeUndefined();
+    const [prepareOrder, savedStateOrder, completedStateOrder] =
+      mockedUpdateAnalysisState.mock.invocationCallOrder;
+    const [saveOrder] = mockedSaveResultVersion.mock.invocationCallOrder;
+    if (
+      prepareOrder === undefined ||
+      savedStateOrder === undefined ||
+      completedStateOrder === undefined ||
+      saveOrder === undefined
+    ) {
+      throw new Error('Expected prepared delivery, result version, and provenance writes');
     }
-    expect(writeOrder).toBeLessThan(stateOrder);
+    expect(prepareOrder).toBeLessThan(createSessionOrder);
+    expect(sendMessageOrder).toBeLessThan(saveOrder);
+    expect(saveOrder).toBeLessThan(savedStateOrder);
+    expect(savedStateOrder).toBeLessThan(completedStateOrder);
     expect(mockedCleanExpiredData).toHaveBeenCalledWith('testuser');
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
-    expect(result.status).toBe('success');
+    expect(result).toMatchObject({
+      status: 'success',
+      meta: { resultVersionId: 'v000001' },
+    });
   });
 
   it('should warn before sending analysis based on partial data', async () => {
@@ -500,20 +648,26 @@ describe('runAi', () => {
     expect(warningOrder).toBeLessThan(sendOrder);
   });
 
-  it('should not advance delivery state when result persistence fails', async () => {
+  it('should retain pending delivery when result version persistence fails', async () => {
+    const context = mockInput();
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({ data: { summary: 'result' }, warnings: [] });
-    mockedWriteDataFileWithRollback.mockImplementation(() => {
+    mockedSaveResultVersion.mockImplementation(() => {
       throw new Error('disk full');
     });
 
     const result = await runAi('testuser', {});
 
     expect(result.reasonCode).toBe('AI_RESULT_WRITE_FAILED');
-    expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
+    expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
+    expect(context.getState().pendingResultDelivery).toMatchObject({
+      resultVersionId: null,
+      deliveryMode: 'change',
+    });
+    expect(context.getState().providers).toBeUndefined();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 
@@ -531,29 +685,35 @@ describe('runAi', () => {
     const result = await runAi('testuser', {});
 
     expect(result.reasonCode).toBe('PROVENANCE_UPDATE_FAILED');
-    expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 
   it('should not clean intermediate files when delivery state persistence fails', async () => {
+    const context = mockInput();
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({ data: { summary: 'result' }, warnings: [] });
-    mockedUpdateAnalysisState.mockImplementation(() => {
-      throw new Error('state changed');
-    });
+    mockedUpdateAnalysisState
+      .mockImplementationOnce(
+        (_username: string, update: (current: AnalysisState) => AnalysisState) =>
+          update(context.getState()),
+      )
+      .mockImplementationOnce(() => {
+        throw new Error('state changed');
+      });
 
     const result = await runAi('testuser', {});
 
     expect(result.reasonCode).toBe('PROVENANCE_UPDATE_FAILED');
-    expect(mockedWriteDataFileWithRollback).toHaveBeenCalledWith(
+    expect(mockedSaveResultVersion).toHaveBeenCalledWith(
       'testuser',
-      'result',
       { summary: 'result' },
-      expect.any(Function),
+      expect.any(Object),
     );
+    expect(result.meta).toMatchObject({ resultVersionId: 'v000001' });
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 
@@ -561,6 +721,7 @@ describe('runAi', () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
+      promptHash: defaultRequest.promptHash,
       payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
@@ -585,6 +746,7 @@ describe('runAi', () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
+      promptHash: defaultRequest.promptHash,
       payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
@@ -620,6 +782,7 @@ describe('runAi', () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
+      promptHash: defaultRequest.promptHash,
       payload: 'payload',
     });
     mockCreateSession.mockRejectedValue(new Error('Auth failed'));
@@ -629,15 +792,45 @@ describe('runAi', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Auth failed'));
     expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
-    expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+    expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
+  });
+
+  it('should reuse the pending Gemini delivery ID after a provider failure', async () => {
+    const context = mockInput();
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockCreateSession.mockRejectedValueOnce(new Error('Temporary failure'));
+
+    const first = await runAi('testuser', {});
+    const pendingId = context.getState().pendingResultDelivery?.deliveryId;
+
+    expect(first.reasonCode).toBe('AI_PROVIDER_FAILED');
+    expect(pendingId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+
+    mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
+    mockCreateSession.mockResolvedValue(undefined);
+    mockSendMessage.mockResolvedValue('response');
+    mockedParseResponse.mockReturnValue({ data: createAiResult('Retried result'), warnings: [] });
+
+    const second = await runAi('testuser', {});
+
+    expect(second.status).toBe('success');
+    expect(mockedSaveResultVersion).toHaveBeenCalledWith(
+      'testuser',
+      expect.any(Object),
+      expect.objectContaining({ deliveryId: pendingId }),
+    );
   });
 
   it('should not persist or clean data when response parsing fails', async () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
+      promptHash: defaultRequest.promptHash,
       payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
@@ -651,7 +844,8 @@ describe('runAi', () => {
 
     expect(mockedParseResponse).toHaveBeenCalledOnce();
     expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
-    expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+    expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
   });
@@ -660,6 +854,7 @@ describe('runAi', () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
+      promptHash: defaultRequest.promptHash,
       payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
@@ -671,7 +866,8 @@ describe('runAi', () => {
     expect(mockSendMessage).toHaveBeenCalledOnce();
     expect(mockedParseResponse).not.toHaveBeenCalled();
     expect(mockedWriteDataFileWithRollback).not.toHaveBeenCalled();
-    expect(mockedUpdateAnalysisState).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+    expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
     expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
   });
@@ -680,6 +876,7 @@ describe('runAi', () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
+      promptHash: defaultRequest.promptHash,
       payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
@@ -700,6 +897,7 @@ describe('runAi', () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
+      promptHash: defaultRequest.promptHash,
       payload: 'payload',
     });
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());

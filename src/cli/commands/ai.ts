@@ -10,10 +10,15 @@ import { buildAnalysisRequest } from '@/core/ai';
 import type { AIAnalysisResult, ValidationResult } from '@/core/ai';
 import {
   checkAnalyzedProvenance,
+  completeResultDelivery,
+  prepareResultDelivery,
   recordProviderDelivery,
+  recordSavedResultVersion,
   type AnalysisState,
+  type PendingResultDeliveryState,
   type ProviderDeliveryRecordInput,
 } from '@/core/provenance';
+import type { ResultVersionSource } from '@/core/result-version';
 import {
   DEFAULT_CONFIG,
   getConfig,
@@ -26,8 +31,10 @@ import {
   cleanExpiredData,
   CodexExecutionLockBusyError,
   DataFilePostWriteError,
+  recoverResultVersionDelivery,
   readAnalysisState,
   readDataFile,
+  saveResultVersion,
   updateAnalysisState,
   withCodexExecutionLock,
   writeDataFileWithRollback,
@@ -42,6 +49,7 @@ import { executeCodexAnalysis } from './ai/codex';
 import { classifyCodexFailure } from './ai/codex-errors';
 import { executeGeminiAnalysis } from './ai/gemini';
 import { AiProviderOptionError, resolveAiProviderOptions } from './ai/provider-options';
+import packageJson from '../../../package.json';
 
 /**
  * Run the AI analysis command for one user.
@@ -214,14 +222,28 @@ async function runAiForProvider(
   }
 
   const request = buildAnalysisRequest(analyzed);
-  const savedResult = readDataFile<unknown>(username, 'result');
+  let savedResult = readDataFile<unknown>(username, 'result');
   if (provenance.basedOnPartial) {
     logger.warn('当前分析基于不完整抓取数据；缺失记录状态未知');
   }
 
+  const assertAnalyzedProvenanceUnchanged = (state: AnalysisState): void => {
+    const latest = checkAnalyzedProvenance(state, analyzed, config.analyzer);
+    if (
+      latest.status !== 'valid' ||
+      latest.analysisFingerprint !== provenance.analysisFingerprint ||
+      latest.payloadHash !== provenance.payloadHash
+    ) {
+      throw new Error('analyzed provenance changed during AI delivery');
+    }
+  };
+
+  let providerAnalysisState = analysisState.state;
   let model: string;
   let result: AIAnalysisResult;
   let delivery: ProviderDeliveryRecordInput;
+  let geminiDelivery: PendingResultDeliveryState | undefined;
+  let geminiThinkingLevel: string | undefined;
   let completeCodexSession: (() => Promise<void>) | undefined;
   let warnings: ValidationResult['warnings'] = [];
 
@@ -299,21 +321,94 @@ async function runAiForProvider(
     const configuredModel = typeof options.model === 'string' ? options.model : undefined;
     const configuredThinkingLevel =
       typeof options.thinkingLevel === 'string' ? options.thinkingLevel : undefined;
+
+    const pending = providerAnalysisState.pendingResultDelivery;
+    if (pending?.providerKey.startsWith('gemini:')) {
+      let recovered;
+      try {
+        recovered = recoverResultVersionDelivery(username, pending);
+      } catch (error) {
+        const { message, raw } = extractErrorDetails(error);
+        logger.error(`恢复 AI 分析结果失败: ${message}`);
+        return {
+          step: 'ai',
+          status: 'failed',
+          reasonCode: 'AI_RESULT_WRITE_FAILED',
+          message: `无法恢复已写入的 AI 结果版本: ${message}`,
+          recoverable: true,
+          recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
+          meta: { rawError: raw },
+        };
+      }
+
+      if (recovered.status === 'recovered') {
+        try {
+          providerAnalysisState = updateAnalysisState(username, (state) =>
+            recordSavedResultVersion(state, recovered.metadata),
+          );
+          providerAnalysisState = updateAnalysisState(username, (state) =>
+            completeResultDelivery(state, pending.deliveryId),
+          );
+          savedResult = recovered.result;
+        } catch (error) {
+          const { message, raw } = extractErrorDetails(error);
+          logger.error(`协调已保存的 AI 结果状态失败: ${message}`);
+          return {
+            step: 'ai',
+            status: 'failed',
+            reasonCode: 'PROVENANCE_UPDATE_FAILED',
+            message: `AI 结果版本已恢复，但 provenance 状态更新失败: ${message}`,
+            recoverable: true,
+            recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+            meta: { rawError: raw },
+          };
+        }
+      }
+    }
+
     let execution: Awaited<ReturnType<typeof executeGeminiAnalysis>>;
+    let preparationFailed = false;
     try {
       execution = await executeGeminiAnalysis({
         username,
         config: geminiConfig,
         request,
-        analysisState: analysisState.state,
+        analysisState: providerAnalysisState,
         provenance,
         savedResult,
         ...(configuredModel ? { model: configuredModel } : {}),
         ...(configuredThinkingLevel ? { thinkingLevel: configuredThinkingLevel } : {}),
         resend: options.resend,
+        prepareDelivery: (target) => {
+          try {
+            providerAnalysisState = updateAnalysisState(username, (state) => {
+              assertAnalyzedProvenanceUnchanged(state);
+              return prepareResultDelivery(state, target);
+            });
+          } catch (error) {
+            preparationFailed = true;
+            throw error;
+          }
+
+          const prepared = providerAnalysisState.pendingResultDelivery;
+          if (!prepared) throw new Error('Gemini result delivery preparation was not persisted');
+          return prepared;
+        },
       });
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
+      if (preparationFailed) {
+        logger.error(`准备 AI 结果投递状态失败: ${message}`);
+        return {
+          step: 'ai',
+          status: 'failed',
+          reasonCode: 'PROVENANCE_UPDATE_FAILED',
+          message: `AI 请求未发送，provenance 状态更新失败: ${message}`,
+          recoverable: true,
+          recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+          meta: { rawError: raw },
+        };
+      }
       if (!options.pipeline) {
         logger.error(`AI 单次分析请求失败: ${message}`);
         logger.debug(raw);
@@ -366,6 +461,8 @@ async function runAiForProvider(
     result = execution.result;
     warnings = execution.warnings;
     delivery = execution.delivery;
+    geminiDelivery = execution.delivery;
+    geminiThinkingLevel = execution.thinkingLevel;
   }
 
   if (warnings.length > 0) {
@@ -374,17 +471,6 @@ async function runAiForProvider(
       logger.warn(`  ${warning}`);
     }
   }
-
-  const assertAnalyzedProvenanceUnchanged = (state: AnalysisState): void => {
-    const latest = checkAnalyzedProvenance(state, analyzed, config.analyzer);
-    if (
-      latest.status !== 'valid' ||
-      latest.analysisFingerprint !== provenance.analysisFingerprint ||
-      latest.payloadHash !== provenance.payloadHash
-    ) {
-      throw new Error('analyzed provenance changed during AI delivery');
-    }
-  };
 
   try {
     const stateBeforeWrite = readAnalysisState(username);
@@ -404,6 +490,76 @@ async function runAiForProvider(
       recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
       meta: { rawError: raw },
     };
+  }
+
+  if (selectedProvider === 'gemini') {
+    if (!geminiDelivery || !geminiThinkingLevel) {
+      throw new Error('Gemini result is missing its prepared delivery identity');
+    }
+
+    const source: ResultVersionSource = {
+      deliveryId: geminiDelivery.deliveryId,
+      origin: geminiDelivery.deliveryMode === 'resend' ? 'resend' : 'analysis',
+      createdAt: new Date().toISOString(),
+      provider: 'gemini',
+      model,
+      reasoningLevel: geminiThinkingLevel,
+      localSessionId: null,
+      externalThreadId: null,
+      threadName: null,
+      promptHash: request.promptHash,
+      analysisFingerprint: geminiDelivery.analysisFingerprint,
+      payloadHash: geminiDelivery.payloadHash,
+      dataQuality: geminiDelivery.basedOnPartial ? 'partial' : 'complete',
+      warningCount: warnings.length,
+      appVersion: packageJson.version,
+    };
+
+    let metadata;
+    try {
+      metadata = saveResultVersion(username, result, source);
+    } catch (error) {
+      const { message, raw } = extractErrorDetails(error);
+      logger.error(`保存 AI 分析结果版本失败: ${message}`);
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'AI_RESULT_WRITE_FAILED',
+        message: `AI 已返回结果，但结果版本保存失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
+        meta: { rawError: raw },
+      };
+    }
+
+    try {
+      updateAnalysisState(username, (state) => recordSavedResultVersion(state, metadata));
+      updateAnalysisState(username, (state) =>
+        completeResultDelivery(state, geminiDelivery.deliveryId),
+      );
+    } catch (error) {
+      const { message, raw } = extractErrorDetails(error);
+      logger.error(`提交 AI provenance 状态失败: ${message}`);
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'PROVENANCE_UPDATE_FAILED',
+        message: `AI 结果版本 ${metadata.versionId} 已保存，provenance 状态更新失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+        meta: { rawError: raw, resultVersionId: metadata.versionId },
+      };
+    }
+
+    return finishAiSuccess(
+      username,
+      options,
+      model,
+      selectedProvider,
+      warnings.length,
+      delivery.deliveryMode,
+      metadata.versionId,
+    );
   }
 
   try {
@@ -464,6 +620,25 @@ async function runAiForProvider(
     }
   }
 
+  return finishAiSuccess(
+    username,
+    options,
+    model,
+    selectedProvider,
+    warnings.length,
+    delivery.deliveryMode,
+  );
+}
+
+function finishAiSuccess(
+  username: string,
+  options: AiCommandOptions,
+  model: string,
+  provider: AIProviderId,
+  warningCount: number,
+  deliveryMode: ProviderDeliveryRecordInput['deliveryMode'],
+  resultVersionId?: string,
+): StepRunResult {
   const cleanup = cleanExpiredData(username);
   const cleaned = cleanup.deleted;
   const cleanupNotice = createDataFilesCleanedNotice(username, cleanup);
@@ -478,10 +653,11 @@ async function runAiForProvider(
     message: 'AI 分析完成',
     meta: {
       model,
-      provider: selectedProvider,
-      warningCount: warnings.length,
+      provider,
+      warningCount,
       cleanedFiles: cleaned,
-      deliveryMode: delivery.deliveryMode,
+      deliveryMode,
+      ...(resultVersionId ? { resultVersionId } : {}),
     },
     notices: cleanupNotice ? [cleanupNotice] : undefined,
   };
