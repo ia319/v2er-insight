@@ -5,7 +5,6 @@ import {
   completeResultDelivery,
   hasProviderReceivedAnalysis,
   prepareResultDelivery,
-  recordProviderDelivery,
   recordSavedResultVersion,
 } from '../ai-delivery';
 import { recordAnalyzedProvenance, recordRawProvenance } from '../state-transitions';
@@ -170,51 +169,6 @@ describe('provider delivery state', () => {
     expect(hasProviderReceivedAnalysis(state, 'target', 'a'.repeat(64))).toBe(true);
     expect(hasProviderReceivedAnalysis(state, 'other', 'a'.repeat(64))).toBe(false);
     expect(hasProviderReceivedAnalysis(state, 'target', 'b'.repeat(64))).toBe(false);
-  });
-
-  it('records a successful resend without discarding other providers', () => {
-    const output = createOutput();
-    const state = createState(output);
-    const checked = checkAnalyzedProvenance(state, output);
-    if (checked.status !== 'valid') {
-      throw new Error('Expected valid fixture provenance');
-    }
-    state.providers = { existing: { lastSentPayloadHash: 'c'.repeat(64) } };
-
-    const next = recordProviderDelivery(state, {
-      providerKey: 'target',
-      analysisFingerprint: checked.analysisFingerprint,
-      payloadHash: checked.payloadHash,
-      basedOnPartial: checked.basedOnPartial,
-      deliveryMode: 'resend',
-    });
-
-    expect(next.providers?.existing).toEqual(state.providers.existing);
-    expect(next.providers?.target).toEqual({
-      lastSentAnalysisFingerprint: checked.analysisFingerprint,
-      lastSentPayloadHash: checked.payloadHash,
-    });
-    expect(next.currentResult).toEqual({
-      analysisFingerprint: checked.analysisFingerprint,
-      stale: false,
-      basedOnPartial: false,
-      deliveryMode: 'resend',
-      resultVersionId: null,
-    });
-  });
-
-  it('rejects a state that changed while delivery was running', () => {
-    const state = createState();
-
-    expect(() =>
-      recordProviderDelivery(state, {
-        providerKey: 'target',
-        analysisFingerprint: 'a'.repeat(64),
-        payloadHash: 'b'.repeat(64),
-        basedOnPartial: false,
-        deliveryMode: 'change',
-      }),
-    ).toThrow('analyzed provenance changed');
   });
 
   it('prepares one stable delivery ID before provider access', () => {

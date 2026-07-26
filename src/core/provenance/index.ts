@@ -15,14 +15,9 @@ export {
   matchesPendingResultDelivery,
   matchesResultDeliveryTarget,
   prepareResultDelivery,
-  recordProviderDelivery,
   recordSavedResultVersion,
 } from './ai-delivery';
-export type {
-  AnalyzedProvenanceCheck,
-  ProviderDeliveryRecordInput,
-  ResultDeliveryTarget,
-} from './ai-delivery';
+export type { AnalyzedProvenanceCheck, ResultDeliveryTarget } from './ai-delivery';
 export { ANALYSIS_STATE_LEGACY_SCHEMA_VERSION, ANALYSIS_STATE_SCHEMA_VERSION } from './state-types';
 export type {
   AnalysisState,

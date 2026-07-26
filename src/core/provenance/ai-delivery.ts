@@ -23,15 +23,13 @@ export type AnalyzedProvenanceCheck =
       basedOnPartial: boolean;
     };
 
-export interface ProviderDeliveryRecordInput {
+export interface ResultDeliveryTarget {
   providerKey: string;
   analysisFingerprint: string;
   payloadHash: string;
   basedOnPartial: boolean;
   deliveryMode: ResultDeliveryMode;
 }
-
-export type ResultDeliveryTarget = ProviderDeliveryRecordInput;
 
 /**
  * Checks whether a pending delivery targets the same provider and analyzed payload.
@@ -275,37 +273,4 @@ export function completeResultDelivery(state: AnalysisState, deliveryId: string)
   };
   delete next.pendingResultDelivery;
   return next;
-}
-
-/**
- * Advances provider and current-result provenance after result.json is durable.
- *
- * @param state - Latest validated analysis state.
- * @param input - Delivery identity and result quality metadata.
- * @returns A new state with the successful delivery recorded.
- * @throws When analyzed provenance changed while the provider request was in flight.
- */
-export function recordProviderDelivery(
-  state: AnalysisState,
-  input: ProviderDeliveryRecordInput,
-): AnalysisState {
-  assertAnalyzedIdentity(state, input);
-
-  return {
-    ...state,
-    providers: {
-      ...state.providers,
-      [input.providerKey]: {
-        lastSentAnalysisFingerprint: input.analysisFingerprint,
-        lastSentPayloadHash: input.payloadHash,
-      },
-    },
-    currentResult: {
-      analysisFingerprint: input.analysisFingerprint,
-      stale: false,
-      basedOnPartial: input.basedOnPartial,
-      deliveryMode: input.deliveryMode,
-      resultVersionId: null,
-    },
-  };
 }
