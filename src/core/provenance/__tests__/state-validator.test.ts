@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AnalysisStateV1 } from '../state-types';
-import { isAnalysisStateV1 } from '../state-validator';
+import type { AnalysisStateV2 } from '../state-types';
+import { isAnalysisStateV1, isAnalysisStateV2, migrateAnalysisStateV1 } from '../state-validator';
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
+const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-function createState(): AnalysisStateV1 {
+function createState(): AnalysisStateV2 {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     raw: {
       semanticDataHash: HASH_A,
       captureStatus: 'complete',
@@ -25,6 +26,16 @@ function createState(): AnalysisStateV1 {
       stale: false,
       basedOnPartial: false,
       deliveryMode: 'change',
+      resultVersionId: 'v000001',
+    },
+    pendingResultDelivery: {
+      deliveryId: DELIVERY_ID,
+      providerKey: 'gemini:model',
+      analysisFingerprint: HASH_A,
+      payloadHash: HASH_B,
+      basedOnPartial: false,
+      deliveryMode: 'change',
+      resultVersionId: null,
     },
     providers: {
       gemini: {
@@ -36,17 +47,42 @@ function createState(): AnalysisStateV1 {
   };
 }
 
-describe('isAnalysisStateV1', () => {
+describe('analysis state validation', () => {
   it('accepts empty and fully populated versioned states', () => {
     expect(isAnalysisStateV1({ schemaVersion: 1 })).toBe(true);
-    expect(isAnalysisStateV1(createState())).toBe(true);
+    expect(isAnalysisStateV2({ schemaVersion: 2 })).toBe(true);
+    expect(isAnalysisStateV2(createState())).toBe(true);
+  });
+
+  it('migrates v1 current results without inventing a version ID', () => {
+    const migrated = migrateAnalysisStateV1({
+      schemaVersion: 1,
+      currentResult: {
+        analysisFingerprint: HASH_A,
+        stale: false,
+        basedOnPartial: true,
+        deliveryMode: 'resend',
+      },
+    });
+
+    expect(migrated).toEqual({
+      schemaVersion: 2,
+      currentResult: {
+        analysisFingerprint: HASH_A,
+        stale: false,
+        basedOnPartial: true,
+        deliveryMode: 'resend',
+        resultVersionId: null,
+      },
+    });
+    expect(isAnalysisStateV2(migrated)).toBe(true);
   });
 
   it.each([
-    { schemaVersion: 2 },
-    { schemaVersion: 1, raw: { semanticDataHash: 'invalid', captureStatus: 'complete' } },
+    { schemaVersion: 3 },
+    { schemaVersion: 2, raw: { semanticDataHash: 'invalid', captureStatus: 'complete' } },
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
       analyzed: {
         sourceSemanticHash: HASH_A,
         analyzerSchemaVersion: 0,
@@ -56,29 +92,52 @@ describe('isAnalysisStateV1', () => {
       },
     },
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
       currentResult: {
         analysisFingerprint: HASH_A,
         stale: 'false',
         basedOnPartial: false,
+        resultVersionId: null,
       },
     },
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
       currentResult: {
         analysisFingerprint: HASH_A,
         stale: false,
         basedOnPartial: false,
         deliveryMode: 'retry',
+        resultVersionId: null,
       },
     },
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
+      currentResult: {
+        analysisFingerprint: HASH_A,
+        stale: false,
+        basedOnPartial: false,
+        resultVersionId: 'v1',
+      },
+    },
+    {
+      schemaVersion: 2,
+      pendingResultDelivery: {
+        deliveryId: 'invalid',
+        providerKey: 'gemini:model',
+        analysisFingerprint: HASH_A,
+        payloadHash: HASH_B,
+        basedOnPartial: false,
+        deliveryMode: 'change',
+        resultVersionId: null,
+      },
+    },
+    {
+      schemaVersion: 2,
       providers: {
         gemini: { lastSentPayloadHash: 'invalid' },
       },
     },
   ])('rejects invalid state %#', (state) => {
-    expect(isAnalysisStateV1(state)).toBe(false);
+    expect(isAnalysisStateV2(state)).toBe(false);
   });
 });

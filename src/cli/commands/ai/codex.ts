@@ -12,7 +12,7 @@ import {
 } from '@/core/ai/providers/codex';
 import {
   hasProviderReceivedAnalysis,
-  type AnalysisStateV1,
+  type AnalysisState,
   type AnalyzedProvenanceCheck,
   type ResultDeliveryMode,
 } from '@/core/provenance';
@@ -30,7 +30,7 @@ export interface ExecuteCodexAnalysisOptions {
   username: string;
   config: ResolvedCodexConfig;
   request: AnalysisRequest;
-  analysisState: AnalysisStateV1;
+  analysisState: AnalysisState;
   provenance: ValidAnalyzedProvenance;
   savedResult: unknown;
   model?: string;

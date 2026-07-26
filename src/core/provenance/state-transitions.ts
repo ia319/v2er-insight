@@ -8,7 +8,7 @@ import {
 } from './analysis-hash';
 import { computeSemanticDataHash } from './semantic-hash';
 import type {
-  AnalysisStateV1,
+  AnalysisState,
   AnalyzedProvenanceState,
   CaptureStatus,
   RawProvenanceState,
@@ -20,11 +20,17 @@ function deriveCaptureStatus(snapshot: RawSnapshotV2): CaptureStatus {
     : 'partial';
 }
 
-/** Records the semantic identity and completeness of a persisted raw snapshot. */
+/**
+ * Records the semantic identity and completeness of a persisted raw snapshot.
+ *
+ * @param state - Current validated analysis state.
+ * @param snapshot - Persisted raw snapshot.
+ * @returns A new state with raw provenance and updated result freshness.
+ */
 export function recordRawProvenance(
-  state: AnalysisStateV1,
+  state: AnalysisState,
   snapshot: RawSnapshotV2,
-): AnalysisStateV1 & { raw: RawProvenanceState } {
+): AnalysisState & { raw: RawProvenanceState } {
   const raw: RawProvenanceState = {
     semanticDataHash: computeSemanticDataHash(snapshot),
     captureStatus: deriveCaptureStatus(snapshot),
@@ -47,13 +53,21 @@ export function recordRawProvenance(
     : next;
 }
 
-/** Records Analyzer provenance and recomputes current-result freshness. */
+/**
+ * Records Analyzer provenance and recomputes current-result freshness.
+ *
+ * @param state - Current validated analysis state.
+ * @param snapshot - Raw snapshot consumed by the analyzer.
+ * @param output - Persisted analyzer output.
+ * @param config - Analyzer settings that affect semantic output.
+ * @returns A new state with analyzed provenance and updated result freshness.
+ */
 export function recordAnalyzedProvenance(
-  state: AnalysisStateV1,
+  state: AnalysisState,
   snapshot: RawSnapshotV2,
   output: AnalyzerOutput,
   config?: AnalyzerConfig,
-): AnalysisStateV1 & { analyzed: AnalyzedProvenanceState } {
+): AnalysisState & { analyzed: AnalyzedProvenanceState } {
   const sourceSemanticHash = computeSemanticDataHash(snapshot);
   const analysisConfigHash = computeAnalysisConfigHash(config);
   const analysisFingerprint = computeAnalysisFingerprint({

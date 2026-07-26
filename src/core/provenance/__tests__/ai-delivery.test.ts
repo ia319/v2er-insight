@@ -6,7 +6,7 @@ import {
   recordProviderDelivery,
 } from '../ai-delivery';
 import { recordAnalyzedProvenance, recordRawProvenance } from '../state-transitions';
-import type { AnalysisStateV1 } from '../state-types';
+import type { AnalysisState } from '../state-types';
 import type { RawSnapshotV2 } from '@/core/snapshot';
 
 function createSnapshot(): RawSnapshotV2 {
@@ -61,9 +61,9 @@ function createOutput(): AnalyzerOutput {
   };
 }
 
-function createState(output = createOutput()): AnalysisStateV1 {
+function createState(output = createOutput()): AnalysisState {
   const snapshot = createSnapshot();
-  const withRaw = recordRawProvenance({ schemaVersion: 1 }, snapshot);
+  const withRaw = recordRawProvenance({ schemaVersion: 2 }, snapshot);
   return recordAnalyzedProvenance(withRaw, snapshot, output);
 }
 
@@ -87,7 +87,7 @@ describe('checkAnalyzedProvenance', () => {
       throw new Error('Expected analyzed fixture provenance');
     }
 
-    expect(checkAnalyzedProvenance({ schemaVersion: 1 }, output)).toEqual({ status: 'missing' });
+    expect(checkAnalyzedProvenance({ schemaVersion: 2 }, output)).toEqual({ status: 'missing' });
     expect(
       checkAnalyzedProvenance(
         {
@@ -110,8 +110,8 @@ describe('checkAnalyzedProvenance', () => {
 
 describe('provider delivery state', () => {
   it('skips only the matching provider target and fingerprint', () => {
-    const state: AnalysisStateV1 = {
-      schemaVersion: 1,
+    const state: AnalysisState = {
+      schemaVersion: 2,
       providers: {
         target: { lastSentAnalysisFingerprint: 'a'.repeat(64) },
       },
@@ -149,6 +149,7 @@ describe('provider delivery state', () => {
       stale: false,
       basedOnPartial: false,
       deliveryMode: 'resend',
+      resultVersionId: null,
     });
   });
 

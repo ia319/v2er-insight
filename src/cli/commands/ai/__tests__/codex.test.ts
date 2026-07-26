@@ -93,13 +93,14 @@ function createOptions(): ExecuteCodexAnalysisOptions {
     },
     request: { systemPrompt: 'prompt', promptHash: HASH, payload: '{}' },
     analysisState: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       providers: { key: { lastSentAnalysisFingerprint: HASH, lastSentPayloadHash: HASH } },
       currentResult: {
         analysisFingerprint: HASH,
         stale: false,
         basedOnPartial: false,
         deliveryMode: 'change',
+        resultVersionId: null,
       },
     },
     provenance: {

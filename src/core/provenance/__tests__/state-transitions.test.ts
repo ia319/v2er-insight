@@ -4,7 +4,7 @@ import type { AnalyzerOutput } from '@/core/analyzer';
 import type { RawSnapshotV2 } from '@/core/snapshot';
 import { computeSemanticDataHash } from '../semantic-hash';
 import { recordAnalyzedProvenance, recordRawProvenance } from '../state-transitions';
-import type { AnalysisStateV1 } from '../state-types';
+import type { AnalysisState } from '../state-types';
 
 const HASH = 'a'.repeat(64);
 
@@ -62,8 +62,8 @@ function createOutput(): AnalyzerOutput {
 
 describe('recordRawProvenance', () => {
   it('records complete capture identity without discarding unrelated state', () => {
-    const state: AnalysisStateV1 = {
-      schemaVersion: 1,
+    const state: AnalysisState = {
+      schemaVersion: 2,
       providers: { gemini: { lastSentPayloadHash: HASH } },
     };
     const snapshot = createSnapshot();
@@ -87,22 +87,23 @@ describe('recordRawProvenance', () => {
         totalExpected: null,
       };
 
-      expect(recordRawProvenance({ schemaVersion: 1 }, snapshot).raw.captureStatus).toBe('partial');
+      expect(recordRawProvenance({ schemaVersion: 2 }, snapshot).raw.captureStatus).toBe('partial');
     },
   );
 
   it('marks the current result stale when a new raw identity replaces its analyzed source', () => {
     const existing = recordAnalyzedProvenance(
-      recordRawProvenance({ schemaVersion: 1 }, createSnapshot()),
+      recordRawProvenance({ schemaVersion: 2 }, createSnapshot()),
       createSnapshot(),
       createOutput(),
     );
-    const state: AnalysisStateV1 = {
+    const state: AnalysisState = {
       ...existing,
       currentResult: {
         analysisFingerprint: existing.analyzed.analysisFingerprint,
         stale: false,
         basedOnPartial: false,
+        resultVersionId: null,
       },
     };
     const changedSnapshot = createSnapshot();
@@ -116,16 +117,17 @@ describe('recordRawProvenance', () => {
   it('keeps the current result freshness when a repeated raw identity is recorded', () => {
     const snapshot = createSnapshot();
     const existing = recordAnalyzedProvenance(
-      recordRawProvenance({ schemaVersion: 1 }, snapshot),
+      recordRawProvenance({ schemaVersion: 2 }, snapshot),
       snapshot,
       createOutput(),
     );
-    const state: AnalysisStateV1 = {
+    const state: AnalysisState = {
       ...existing,
       currentResult: {
         analysisFingerprint: existing.analyzed.analysisFingerprint,
         stale: false,
         basedOnPartial: false,
+        resultVersionId: null,
       },
     };
 
@@ -135,12 +137,13 @@ describe('recordRawProvenance', () => {
 
 describe('recordAnalyzedProvenance', () => {
   it('records all analyzed hashes and marks a different current result stale', () => {
-    const state: AnalysisStateV1 = {
-      schemaVersion: 1,
+    const state: AnalysisState = {
+      schemaVersion: 2,
       currentResult: {
         analysisFingerprint: HASH,
         stale: false,
         basedOnPartial: false,
+        resultVersionId: null,
       },
     };
 
@@ -157,13 +160,14 @@ describe('recordAnalyzedProvenance', () => {
   });
 
   it('keeps a result fresh when its analysis fingerprint still matches', () => {
-    const first = recordAnalyzedProvenance({ schemaVersion: 1 }, createSnapshot(), createOutput());
-    const state: AnalysisStateV1 = {
+    const first = recordAnalyzedProvenance({ schemaVersion: 2 }, createSnapshot(), createOutput());
+    const state: AnalysisState = {
       ...first,
       currentResult: {
         analysisFingerprint: first.analyzed.analysisFingerprint,
         stale: true,
         basedOnPartial: false,
+        resultVersionId: null,
       },
     };
 
@@ -174,18 +178,18 @@ describe('recordAnalyzedProvenance', () => {
 
   it('changes analysis identity for semantic config without using chunk limits', () => {
     const baseline = recordAnalyzedProvenance(
-      { schemaVersion: 1 },
+      { schemaVersion: 2 },
       createSnapshot(),
       createOutput(),
     );
     const semanticChange = recordAnalyzedProvenance(
-      { schemaVersion: 1 },
+      { schemaVersion: 2 },
       createSnapshot(),
       createOutput(),
       { inactivityThreshold: 30 },
     );
     const layoutChange = recordAnalyzedProvenance(
-      { schemaVersion: 1 },
+      { schemaVersion: 2 },
       createSnapshot(),
       createOutput(),
       { chunkMaxTopics: 1, chunkMaxReplies: 1 },

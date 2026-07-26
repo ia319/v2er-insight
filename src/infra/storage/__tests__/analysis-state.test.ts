@@ -11,7 +11,7 @@ vi.mock('../writer', () => ({
   writeDataFile: mockedWriteDataFile,
 }));
 
-import type { AnalysisStateV1 } from '@/core/provenance';
+import type { AnalysisState } from '@/core/provenance';
 import {
   AnalysisStateCorruptError,
   readAnalysisState,
@@ -20,9 +20,9 @@ import {
 
 const HASH = 'a'.repeat(64);
 
-function createState(): AnalysisStateV1 {
+function createState(): AnalysisState {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     raw: {
       semanticDataHash: HASH,
       captureStatus: 'complete',
@@ -47,6 +47,57 @@ describe('analysis state storage', () => {
     expect(readAnalysisState('alice')).toEqual({ status: 'valid', state });
   });
 
+  it('reads v1 sidecars as v2 without writing during a read', () => {
+    mockedReadDataFileResult.mockReturnValue({
+      status: 'success',
+      data: {
+        schemaVersion: 1,
+        currentResult: {
+          analysisFingerprint: HASH,
+          stale: false,
+          basedOnPartial: false,
+        },
+      },
+    });
+
+    expect(readAnalysisState('alice')).toEqual({
+      status: 'valid',
+      state: {
+        schemaVersion: 2,
+        currentResult: {
+          analysisFingerprint: HASH,
+          stale: false,
+          basedOnPartial: false,
+          resultVersionId: null,
+        },
+      },
+    });
+    expect(mockedWriteDataFile).not.toHaveBeenCalled();
+  });
+
+  it('writes migrated v1 state only when an update occurs', () => {
+    mockedReadDataFileResult.mockReturnValue({
+      status: 'success',
+      data: {
+        schemaVersion: 1,
+        currentResult: {
+          analysisFingerprint: HASH,
+          stale: false,
+          basedOnPartial: false,
+        },
+      },
+    });
+
+    const next = updateAnalysisState('alice', (state) => ({
+      ...state,
+      providers: { gemini: { lastSentAnalysisFingerprint: HASH } },
+    }));
+
+    expect(next.schemaVersion).toBe(2);
+    expect(next.currentResult?.resultVersionId).toBeNull();
+    expect(mockedWriteDataFile).toHaveBeenCalledWith('alice', 'analysisState', next);
+  });
+
   it('creates and atomically persists state from a missing sidecar', () => {
     mockedReadDataFileResult.mockReturnValue({ status: 'missing' });
 
@@ -63,7 +114,7 @@ describe('analysis state storage', () => {
   });
 
   it('updates a valid sidecar without discarding unrelated fields', () => {
-    const state: AnalysisStateV1 = {
+    const state: AnalysisState = {
       ...createState(),
       providers: { gemini: { lastSentAnalysisFingerprint: HASH } },
     };
@@ -75,6 +126,7 @@ describe('analysis state storage', () => {
         analysisFingerprint: HASH,
         stale: true,
         basedOnPartial: false,
+        resultVersionId: null,
       },
     }));
 
@@ -92,7 +144,7 @@ describe('analysis state storage', () => {
   it('does not persist an invalid updater result', () => {
     mockedReadDataFileResult.mockReturnValue({ status: 'missing' });
 
-    expect(() => updateAnalysisState('alice', () => ({ schemaVersion: 2 }))).toThrow(TypeError);
+    expect(() => updateAnalysisState('alice', () => ({ schemaVersion: 1 }))).toThrow(TypeError);
     expect(mockedWriteDataFile).not.toHaveBeenCalled();
   });
 });

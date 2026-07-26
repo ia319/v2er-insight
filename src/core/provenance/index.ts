@@ -14,15 +14,19 @@ export {
   recordProviderDelivery,
 } from './ai-delivery';
 export type { AnalyzedProvenanceCheck, ProviderDeliveryRecordInput } from './ai-delivery';
-export { ANALYSIS_STATE_SCHEMA_VERSION } from './state-types';
+export { ANALYSIS_STATE_LEGACY_SCHEMA_VERSION, ANALYSIS_STATE_SCHEMA_VERSION } from './state-types';
 export type {
+  AnalysisState,
   AnalysisStateV1,
+  AnalysisStateV2,
   AnalyzedProvenanceState,
   CaptureStatus,
   CurrentResultState,
+  LegacyCurrentResultState,
+  PendingResultDeliveryState,
   ProviderProvenanceState,
   RawProvenanceState,
   ResultDeliveryMode,
 } from './state-types';
-export { isAnalysisStateV1 } from './state-validator';
+export { isAnalysisStateV1, isAnalysisStateV2, migrateAnalysisStateV1 } from './state-validator';
 export { recordAnalyzedProvenance, recordRawProvenance } from './state-transitions';

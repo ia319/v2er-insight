@@ -11,7 +11,7 @@ import {
 import {
   computeProviderStateKey,
   hasProviderReceivedAnalysis,
-  type AnalysisStateV1,
+  type AnalysisState,
   type AnalyzedProvenanceCheck,
   type ProviderDeliveryRecordInput,
 } from '@/core/provenance';
@@ -25,7 +25,7 @@ export interface ExecuteGeminiAnalysisOptions {
   username: string;
   config: ResolvedGeminiConfig;
   request: AnalysisRequest;
-  analysisState: AnalysisStateV1;
+  analysisState: AnalysisState;
   provenance: ValidAnalyzedProvenance;
   savedResult: unknown;
   model?: string;

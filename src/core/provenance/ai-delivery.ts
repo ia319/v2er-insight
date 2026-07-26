@@ -5,7 +5,7 @@ import {
   computeAnalysisFingerprint,
   computePayloadHash,
 } from './analysis-hash';
-import type { AnalysisStateV1, ResultDeliveryMode } from './state-types';
+import type { AnalysisState, ResultDeliveryMode } from './state-types';
 
 export type AnalyzedProvenanceCheck =
   | { status: 'missing' }
@@ -34,7 +34,7 @@ export interface ProviderDeliveryRecordInput {
  * @returns A typed status with reusable delivery identity when valid.
  */
 export function checkAnalyzedProvenance(
-  state: AnalysisStateV1,
+  state: AnalysisState,
   output: AnalyzerOutput,
   config?: AnalyzerConfig,
 ): AnalyzedProvenanceCheck {
@@ -82,7 +82,7 @@ export function checkAnalyzedProvenance(
  * @returns Whether a normal send can be skipped.
  */
 export function hasProviderReceivedAnalysis(
-  state: AnalysisStateV1,
+  state: AnalysisState,
   providerKey: string,
   analysisFingerprint: string,
 ): boolean {
@@ -98,9 +98,9 @@ export function hasProviderReceivedAnalysis(
  * @throws When analyzed provenance changed while the provider request was in flight.
  */
 export function recordProviderDelivery(
-  state: AnalysisStateV1,
+  state: AnalysisState,
   input: ProviderDeliveryRecordInput,
-): AnalysisStateV1 {
+): AnalysisState {
   if (
     state.analyzed?.analysisFingerprint !== input.analysisFingerprint ||
     state.analyzed.payloadHash !== input.payloadHash
@@ -122,6 +122,7 @@ export function recordProviderDelivery(
       stale: false,
       basedOnPartial: input.basedOnPartial,
       deliveryMode: input.deliveryMode,
+      resultVersionId: null,
     },
   };
 }

@@ -11,7 +11,7 @@ import type { AIAnalysisResult, ValidationResult } from '@/core/ai';
 import {
   checkAnalyzedProvenance,
   recordProviderDelivery,
-  type AnalysisStateV1,
+  type AnalysisState,
   type ProviderDeliveryRecordInput,
 } from '@/core/provenance';
 import {
@@ -375,7 +375,7 @@ async function runAiForProvider(
     }
   }
 
-  const assertAnalyzedProvenanceUnchanged = (state: AnalysisStateV1): void => {
+  const assertAnalyzedProvenanceUnchanged = (state: AnalysisState): void => {
     const latest = checkAnalyzedProvenance(state, analyzed, config.analyzer);
     if (
       latest.status !== 'valid' ||
