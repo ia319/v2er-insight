@@ -66,7 +66,7 @@ function isPendingResultDeliveryState(value: unknown): value is PendingResultDel
     isRecord(value) &&
     isResultDeliveryId(value.deliveryId) &&
     typeof value.providerKey === 'string' &&
-    value.providerKey.length > 0 &&
+    /^(?:gemini|codex):[a-f0-9]{64}$/.test(value.providerKey) &&
     isSha256Hash(value.analysisFingerprint) &&
     isSha256Hash(value.payloadHash) &&
     typeof value.basedOnPartial === 'boolean' &&

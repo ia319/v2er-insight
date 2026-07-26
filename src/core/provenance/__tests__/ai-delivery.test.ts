@@ -2,12 +2,19 @@ import { describe, expect, it } from 'vitest';
 import type { AnalyzerOutput } from '@/core/analyzer';
 import {
   checkAnalyzedProvenance,
+  completeResultDelivery,
   hasProviderReceivedAnalysis,
+  prepareResultDelivery,
   recordProviderDelivery,
+  recordSavedResultVersion,
 } from '../ai-delivery';
 import { recordAnalyzedProvenance, recordRawProvenance } from '../state-transitions';
 import type { AnalysisState } from '../state-types';
 import type { RawSnapshotV2 } from '@/core/snapshot';
+import type { ResultVersionMetadata } from '@/core/result-version';
+
+const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER_DELIVERY_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 function createSnapshot(): RawSnapshotV2 {
   return {
@@ -65,6 +72,49 @@ function createState(output = createOutput()): AnalysisState {
   const snapshot = createSnapshot();
   const withRaw = recordRawProvenance({ schemaVersion: 2 }, snapshot);
   return recordAnalyzedProvenance(withRaw, snapshot, output);
+}
+
+function createDeliveryTarget(state: AnalysisState) {
+  if (!state.analyzed) throw new Error('Expected analyzed fixture provenance');
+  return {
+    providerKey: `gemini:${'c'.repeat(64)}`,
+    analysisFingerprint: state.analyzed.analysisFingerprint,
+    payloadHash: state.analyzed.payloadHash,
+    basedOnPartial: false,
+    deliveryMode: 'change' as const,
+  };
+}
+
+function createVersionMetadata(
+  state: AnalysisState,
+  overrides: Partial<ResultVersionMetadata> = {},
+): ResultVersionMetadata {
+  if (!state.pendingResultDelivery) throw new Error('Expected pending fixture delivery');
+  const pending = state.pendingResultDelivery;
+  return {
+    versionId: 'v000001',
+    sequence: 1,
+    origin: pending.deliveryMode === 'resend' ? 'resend' : 'analysis',
+    deliveryId: pending.deliveryId,
+    previousLatestVersionId: null,
+    previousCurrentHash: null,
+    createdAt: '2026-07-13T01:00:00.000Z',
+    savedAt: '2026-07-13T01:01:00.000Z',
+    provider: 'gemini',
+    model: 'gemini-3.1-pro-preview',
+    reasoningLevel: 'high',
+    localSessionId: null,
+    externalThreadId: null,
+    threadName: null,
+    promptHash: 'd'.repeat(64),
+    analysisFingerprint: pending.analysisFingerprint,
+    payloadHash: pending.payloadHash,
+    resultHash: 'e'.repeat(64),
+    dataQuality: pending.basedOnPartial ? 'partial' : 'complete',
+    warningCount: 0,
+    appVersion: '1.2.0',
+    ...overrides,
+  };
 }
 
 describe('checkAnalyzedProvenance', () => {
@@ -165,5 +215,72 @@ describe('provider delivery state', () => {
         deliveryMode: 'change',
       }),
     ).toThrow('analyzed provenance changed');
+  });
+
+  it('prepares one stable delivery ID before provider access', () => {
+    const state = createState();
+    const target = createDeliveryTarget(state);
+    const prepared = prepareResultDelivery(state, target, () => DELIVERY_ID);
+
+    expect(prepared.pendingResultDelivery).toEqual({
+      deliveryId: DELIVERY_ID,
+      ...target,
+      resultVersionId: null,
+    });
+    expect(prepareResultDelivery(prepared, target, () => OTHER_DELIVERY_ID)).toBe(prepared);
+  });
+
+  it('replaces only an uncommitted delivery when the target changes', () => {
+    const state = createState();
+    const target = createDeliveryTarget(state);
+    const prepared = prepareResultDelivery(state, target, () => DELIVERY_ID);
+    const replacement = prepareResultDelivery(
+      prepared,
+      { ...target, deliveryMode: 'resend' },
+      () => OTHER_DELIVERY_ID,
+    );
+
+    expect(replacement.pendingResultDelivery?.deliveryId).toBe(OTHER_DELIVERY_ID);
+    expect(replacement.pendingResultDelivery?.deliveryMode).toBe('resend');
+
+    const saved = recordSavedResultVersion(prepared, createVersionMetadata(prepared));
+    expect(() =>
+      prepareResultDelivery(saved, { ...target, deliveryMode: 'resend' }, () => OTHER_DELIVERY_ID),
+    ).toThrow('must be completed');
+  });
+
+  it('links a saved version before completing provider delivery', () => {
+    const state = createState();
+    const prepared = prepareResultDelivery(state, createDeliveryTarget(state), () => DELIVERY_ID);
+    const metadata = createVersionMetadata(prepared);
+    const saved = recordSavedResultVersion(prepared, metadata);
+
+    expect(saved.pendingResultDelivery?.resultVersionId).toBe('v000001');
+    expect(saved.currentResult).toEqual({
+      analysisFingerprint: prepared.pendingResultDelivery?.analysisFingerprint,
+      stale: false,
+      basedOnPartial: false,
+      deliveryMode: 'change',
+      resultVersionId: 'v000001',
+    });
+
+    const completed = completeResultDelivery(saved, DELIVERY_ID);
+    expect(completed.pendingResultDelivery).toBeUndefined();
+    expect(completed.providers?.[prepared.pendingResultDelivery!.providerKey]).toEqual({
+      lastSentAnalysisFingerprint: prepared.pendingResultDelivery?.analysisFingerprint,
+      lastSentPayloadHash: prepared.pendingResultDelivery?.payloadHash,
+    });
+  });
+
+  it('rejects saved metadata from another delivery identity', () => {
+    const state = createState();
+    const prepared = prepareResultDelivery(state, createDeliveryTarget(state), () => DELIVERY_ID);
+
+    expect(() =>
+      recordSavedResultVersion(
+        prepared,
+        createVersionMetadata(prepared, { deliveryId: OTHER_DELIVERY_ID }),
+      ),
+    ).toThrow('does not match');
   });
 });

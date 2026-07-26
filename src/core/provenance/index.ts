@@ -10,10 +10,17 @@ export { computeProviderStateKey } from './provider-state-key';
 export type { ProviderStateKeyInput } from './provider-state-key';
 export {
   checkAnalyzedProvenance,
+  completeResultDelivery,
   hasProviderReceivedAnalysis,
+  prepareResultDelivery,
   recordProviderDelivery,
+  recordSavedResultVersion,
 } from './ai-delivery';
-export type { AnalyzedProvenanceCheck, ProviderDeliveryRecordInput } from './ai-delivery';
+export type {
+  AnalyzedProvenanceCheck,
+  ProviderDeliveryRecordInput,
+  ResultDeliveryTarget,
+} from './ai-delivery';
 export { ANALYSIS_STATE_LEGACY_SCHEMA_VERSION, ANALYSIS_STATE_SCHEMA_VERSION } from './state-types';
 export type {
   AnalysisState,

@@ -6,6 +6,7 @@ import { isAnalysisStateV1, isAnalysisStateV2, migrateAnalysisStateV1 } from '..
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
 const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const PROVIDER_KEY = `gemini:${HASH_A}`;
 
 function createState(): AnalysisStateV2 {
   return {
@@ -30,7 +31,7 @@ function createState(): AnalysisStateV2 {
     },
     pendingResultDelivery: {
       deliveryId: DELIVERY_ID,
-      providerKey: 'gemini:model',
+      providerKey: PROVIDER_KEY,
       analysisFingerprint: HASH_A,
       payloadHash: HASH_B,
       basedOnPartial: false,
@@ -123,7 +124,7 @@ describe('analysis state validation', () => {
       schemaVersion: 2,
       pendingResultDelivery: {
         deliveryId: 'invalid',
-        providerKey: 'gemini:model',
+        providerKey: PROVIDER_KEY,
         analysisFingerprint: HASH_A,
         payloadHash: HASH_B,
         basedOnPartial: false,
