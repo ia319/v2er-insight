@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import { createAIAnalysisResultFixture } from '@/core/ai/__tests__/result-fixture';
 import type { AIAnalysisResult } from '@/core/ai';
+import type { PendingResultDeliveryState } from '@/core/provenance';
 import type {
   ResultVersionIndexV1,
   ResultVersionSource,
@@ -41,7 +42,11 @@ vi.mock('../result-version-lock', () => ({
 }));
 
 import { hashCanonicalJson } from '@/core/provenance/canonical-json';
-import { ResultVersionSaveError, saveResultVersion } from '../save-result-version';
+import {
+  recoverResultVersionDelivery,
+  ResultVersionSaveError,
+  saveResultVersion,
+} from '../save-result-version';
 
 const NOW = '2026-07-26T08:00:00.000Z';
 const CREATED_AT = '2026-07-26T07:59:00.000Z';
@@ -76,6 +81,21 @@ function createSource(overrides: Partial<ResultVersionSource> = {}): ResultVersi
     dataQuality: 'complete',
     warningCount: 0,
     appVersion: '1.2.0',
+    ...overrides,
+  };
+}
+
+function createPending(
+  overrides: Partial<PendingResultDeliveryState> = {},
+): PendingResultDeliveryState {
+  return {
+    deliveryId: DELIVERY_A,
+    providerKey: `gemini:${HASH}`,
+    analysisFingerprint: HASH,
+    payloadHash: HASH,
+    basedOnPartial: false,
+    deliveryMode: 'change',
+    resultVersionId: null,
     ...overrides,
   };
 }
@@ -243,6 +263,67 @@ describe('saveResultVersion', () => {
     expect(saveResultVersion('alice', result, source).versionId).toBe('v000001');
     expect(currentState).toEqual({ status: 'success', data: result });
     expect(mocks.writeCurrent).toHaveBeenCalledOnce();
+    expect(mocks.writeIndex).not.toHaveBeenCalled();
+  });
+
+  it('recovers a committed delivery without the original result or source input', () => {
+    const result = createAIAnalysisResultFixture();
+    saveResultVersion('alice', result, createSource());
+    currentState = { status: 'missing' };
+    clearWriteCalls();
+
+    const recovered = recoverResultVersionDelivery('alice', createPending());
+
+    expect(recovered).toEqual({
+      status: 'recovered',
+      metadata: getIndex().versions[0],
+      result,
+    });
+    expect(currentState).toEqual({ status: 'success', data: result });
+    expect(mocks.writeCurrent).toHaveBeenCalledOnce();
+    expect(mocks.writeStored).not.toHaveBeenCalled();
+    expect(mocks.writeIndex).not.toHaveBeenCalled();
+  });
+
+  it('recovers an unindexed delivery candidate from pending state', () => {
+    const result = createAIAnalysisResultFixture();
+    mocks.writeIndex.mockImplementationOnce(() => {
+      throw new Error('index write failed');
+    });
+    expect(() => saveResultVersion('alice', result, createSource())).toThrow('index write failed');
+    clearWriteCalls();
+
+    const recovered = recoverResultVersionDelivery('alice', createPending());
+
+    expect(recovered.status).toBe('recovered');
+    expect(getIndex().latestVersionId).toBe('v000001');
+    expect(versionFiles.size).toBe(1);
+    expect(mocks.writeCurrent).not.toHaveBeenCalled();
+    expect(mocks.writeIndex).toHaveBeenCalledOnce();
+  });
+
+  it('returns missing when a pending delivery has no saved file', () => {
+    expect(recoverResultVersionDelivery('alice', createPending())).toEqual({
+      status: 'missing',
+    });
+    expect(mocks.writeStored).not.toHaveBeenCalled();
+    expect(mocks.writeCurrent).not.toHaveBeenCalled();
+    expect(mocks.writeIndex).not.toHaveBeenCalled();
+  });
+
+  it('rejects pending identity that conflicts with a saved delivery', () => {
+    saveResultVersion('alice', createAIAnalysisResultFixture(), createSource());
+    clearWriteCalls();
+
+    expectSaveError(
+      () =>
+        recoverResultVersionDelivery(
+          'alice',
+          createPending({ analysisFingerprint: 'b'.repeat(64) }),
+        ),
+      'RESULT_DELIVERY_CONFLICT',
+    );
+    expect(mocks.writeCurrent).not.toHaveBeenCalled();
     expect(mocks.writeIndex).not.toHaveBeenCalled();
   });
 

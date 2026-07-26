@@ -12,6 +12,7 @@ export {
   checkAnalyzedProvenance,
   completeResultDelivery,
   hasProviderReceivedAnalysis,
+  matchesPendingResultDelivery,
   prepareResultDelivery,
   recordProviderDelivery,
   recordSavedResultVersion,
@@ -35,5 +36,10 @@ export type {
   RawProvenanceState,
   ResultDeliveryMode,
 } from './state-types';
-export { isAnalysisStateV1, isAnalysisStateV2, migrateAnalysisStateV1 } from './state-validator';
+export {
+  isAnalysisStateV1,
+  isAnalysisStateV2,
+  isPendingResultDeliveryState,
+  migrateAnalysisStateV1,
+} from './state-validator';
 export { recordAnalyzedProvenance, recordRawProvenance } from './state-transitions';

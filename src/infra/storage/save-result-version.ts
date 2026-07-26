@@ -1,6 +1,11 @@
 import fs from 'fs';
 import { isDeepStrictEqual } from 'node:util';
 import { isAIAnalysisResult, type AIAnalysisResult } from '@/core/ai';
+import {
+  isPendingResultDeliveryState,
+  matchesPendingResultDelivery,
+  type PendingResultDeliveryState,
+} from '@/core/provenance';
 import { hashCanonicalJson } from '@/core/provenance/canonical-json';
 import {
   formatResultVersionId,
@@ -29,6 +34,14 @@ export type ResultVersionSaveErrorCode =
   | 'RESULT_DELIVERY_CONFLICT'
   | 'RESULT_CURRENT_DIVERGED'
   | 'RESULT_CURRENT_INVALID';
+
+export type ResultVersionDeliveryRecovery =
+  | { status: 'missing' }
+  | {
+      status: 'recovered';
+      metadata: ResultVersionMetadata;
+      result: AIAnalysisResult;
+    };
 
 /** Error raised when saved result state cannot be advanced without data loss. */
 export class ResultVersionSaveError extends Error {
@@ -322,15 +335,10 @@ function recoverGeneratedCandidate(
   return metadata;
 }
 
-function recoverCandidate(
+function readUnindexedCandidate(
   username: string,
   loaded: LoadedResultVersions,
-  current: CurrentResultState,
-  result: AIAnalysisResult,
-  resultHash: string,
-  source: ResultVersionSource,
-  now: string,
-): ResultVersionMetadata | null {
+): StoredResultVersionV1 | null {
   const indexedIds = new Set(loaded.index.versions.map((metadata) => metadata.versionId));
   const candidateIds = listStoredResultVersionIds(username).filter(
     (versionId) => !indexedIds.has(versionId),
@@ -358,6 +366,20 @@ function recoverCandidate(
       `Candidate result version "${candidateId}" does not follow the current index`,
     );
   }
+  return candidate;
+}
+
+function recoverCandidate(
+  username: string,
+  loaded: LoadedResultVersions,
+  current: CurrentResultState,
+  result: AIAnalysisResult,
+  resultHash: string,
+  source: ResultVersionSource,
+  now: string,
+): ResultVersionMetadata | null {
+  const candidate = readUnindexedCandidate(username, loaded);
+  if (!candidate) return null;
 
   if (candidate.metadata.deliveryId === null) {
     recoverProtectedCandidate(username, loaded, candidate, current, now);
@@ -419,6 +441,133 @@ function recoverCommittedDelivery(
     );
   }
   return metadata;
+}
+
+function sourceFromMetadata(metadata: ResultVersionMetadata): ResultVersionSource {
+  if (
+    metadata.deliveryId === null ||
+    (metadata.origin !== 'analysis' && metadata.origin !== 'resend') ||
+    metadata.createdAt === null ||
+    metadata.provider === 'unknown' ||
+    metadata.model === null ||
+    metadata.promptHash === null ||
+    metadata.analysisFingerprint === null ||
+    metadata.payloadHash === null ||
+    metadata.dataQuality === 'unknown' ||
+    metadata.warningCount === null ||
+    metadata.appVersion === null
+  ) {
+    return fail(
+      'RESULT_VERSION_CORRUPT',
+      `Result version "${metadata.versionId}" does not contain generated delivery metadata`,
+    );
+  }
+
+  return {
+    deliveryId: metadata.deliveryId,
+    origin: metadata.origin,
+    createdAt: metadata.createdAt,
+    provider: metadata.provider,
+    model: metadata.model,
+    reasoningLevel: metadata.reasoningLevel,
+    localSessionId: metadata.localSessionId,
+    externalThreadId: metadata.externalThreadId,
+    threadName: metadata.threadName,
+    promptHash: metadata.promptHash,
+    analysisFingerprint: metadata.analysisFingerprint,
+    payloadHash: metadata.payloadHash,
+    dataQuality: metadata.dataQuality,
+    warningCount: metadata.warningCount,
+    appVersion: metadata.appVersion,
+  };
+}
+
+function assertPendingMatchesVersion(
+  pending: PendingResultDeliveryState,
+  metadata: ResultVersionMetadata,
+): void {
+  if (
+    !matchesPendingResultDelivery(metadata, pending) ||
+    (pending.resultVersionId !== null && pending.resultVersionId !== metadata.versionId)
+  ) {
+    fail(
+      'RESULT_DELIVERY_CONFLICT',
+      `Pending delivery "${pending.deliveryId}" conflicts with result version "${metadata.versionId}"`,
+    );
+  }
+}
+
+function recoverResultVersionDeliveryUnderLock(
+  username: string,
+  pending: PendingResultDeliveryState,
+  now: string,
+): ResultVersionDeliveryRecovery {
+  const loaded = loadResultVersions(username, now);
+  const current = readCurrentResult(username);
+  const indexedMetadata = loaded.index.versions.find(
+    (metadata) => metadata.deliveryId === pending.deliveryId,
+  );
+
+  if (indexedMetadata) {
+    assertPendingMatchesVersion(pending, indexedMetadata);
+    const stored = loaded.versions.get(indexedMetadata.versionId);
+    if (!stored) {
+      return fail(
+        'RESULT_VERSION_CORRUPT',
+        `Result version "${indexedMetadata.versionId}" is unavailable`,
+      );
+    }
+    const source = sourceFromMetadata(indexedMetadata);
+    const recovered = recoverCommittedDelivery(
+      username,
+      loaded,
+      current,
+      indexedMetadata.resultHash,
+      source,
+    );
+    if (!recovered) {
+      return fail(
+        'RESULT_VERSION_CORRUPT',
+        `Delivery "${pending.deliveryId}" disappeared during recovery`,
+      );
+    }
+    return { status: 'recovered', metadata: recovered, result: stored.result };
+  }
+
+  if (pending.resultVersionId !== null) {
+    return fail(
+      'RESULT_VERSION_CORRUPT',
+      `Pending delivery "${pending.deliveryId}" references a missing committed result version`,
+    );
+  }
+
+  const candidate = readUnindexedCandidate(username, loaded);
+  if (!candidate) return { status: 'missing' };
+
+  if (candidate.metadata.deliveryId === null) {
+    recoverProtectedCandidate(username, loaded, candidate, current, now);
+    return { status: 'missing' };
+  }
+  if (candidate.metadata.deliveryId !== pending.deliveryId) {
+    return fail(
+      'RESULT_DELIVERY_CONFLICT',
+      `Pending delivery "${candidate.metadata.deliveryId}" must be reconciled before "${pending.deliveryId}"`,
+    );
+  }
+
+  assertPendingMatchesVersion(pending, candidate.metadata);
+  const source = sourceFromMetadata(candidate.metadata);
+  const metadata = recoverGeneratedCandidate(
+    username,
+    loaded,
+    candidate,
+    current,
+    candidate.result,
+    candidate.metadata.resultHash,
+    source,
+    now,
+  );
+  return { status: 'recovered', metadata, result: candidate.result };
 }
 
 function protectCurrentResult(
@@ -525,5 +674,29 @@ export function saveResultVersion(
   const resultHash = validateSaveInput(result, source, now);
   return withResultVersionLock(username, () =>
     saveResultVersionUnderLock(username, result, resultHash, source, now),
+  );
+}
+
+/**
+ * Recovers an already written result using only its durable pending delivery identity.
+ *
+ * @param username - V2EX username that owns the result.
+ * @param pending - Validated pending delivery from analysis-state.json.
+ * @returns The recovered version and result, or missing when no write started.
+ * @throws {ResultVersionSaveError} When persisted state is corrupt, conflicting, or divergent.
+ * @throws {TypeError} When the pending delivery is invalid.
+ * @throws A lock, serialization, or filesystem error.
+ */
+export function recoverResultVersionDelivery(
+  username: string,
+  pending: PendingResultDeliveryState,
+): ResultVersionDeliveryRecovery {
+  if (!isPendingResultDeliveryState(pending)) {
+    throw new TypeError('Pending result delivery is invalid');
+  }
+
+  const now = new Date().toISOString();
+  return withResultVersionLock(username, () =>
+    recoverResultVersionDeliveryUnderLock(username, pending, now),
   );
 }

@@ -61,7 +61,13 @@ function isCurrentResultState(value: unknown): value is CurrentResultState {
   );
 }
 
-function isPendingResultDeliveryState(value: unknown): value is PendingResultDeliveryState {
+/**
+ * Validates one pending provider delivery before recovery or state persistence.
+ *
+ * @param value - Untrusted pending delivery value.
+ * @returns Whether the value satisfies the durable v2 pending contract.
+ */
+export function isPendingResultDeliveryState(value: unknown): value is PendingResultDeliveryState {
   return (
     isRecord(value) &&
     isResultDeliveryId(value.deliveryId) &&

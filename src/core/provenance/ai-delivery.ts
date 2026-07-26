@@ -58,7 +58,14 @@ function assertAnalyzedIdentity(
   }
 }
 
-function metadataMatchesPendingDelivery(
+/**
+ * Checks whether saved metadata belongs to one durable pending delivery.
+ *
+ * @param metadata - Validated generated result metadata.
+ * @param pending - Validated pending delivery state.
+ * @returns Whether delivery, provider, analyzed input, mode, and quality agree.
+ */
+export function matchesPendingResultDelivery(
   metadata: ResultVersionMetadata,
   pending: PendingResultDeliveryState,
 ): boolean {
@@ -198,7 +205,7 @@ export function recordSavedResultVersion(
   }
 
   const pending = state.pendingResultDelivery;
-  if (!pending || !metadataMatchesPendingDelivery(metadata, pending)) {
+  if (!pending || !matchesPendingResultDelivery(metadata, pending)) {
     throw new Error('saved result version does not match the pending AI delivery');
   }
   if (pending.resultVersionId && pending.resultVersionId !== metadata.versionId) {

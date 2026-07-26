@@ -30,8 +30,15 @@ export {
   ResultVersionLockReleaseError,
   withResultVersionLock,
 } from './result-version-lock';
-export type { ResultVersionSaveErrorCode } from './save-result-version';
-export { ResultVersionSaveError, saveResultVersion } from './save-result-version';
+export type {
+  ResultVersionDeliveryRecovery,
+  ResultVersionSaveErrorCode,
+} from './save-result-version';
+export {
+  recoverResultVersionDelivery,
+  ResultVersionSaveError,
+  saveResultVersion,
+} from './save-result-version';
 export { cleanExpiredData } from './cleaner';
 export type {
   CleanableDataFileType,
