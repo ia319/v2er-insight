@@ -19,11 +19,19 @@ export type ResultVersionLockState =
 
 /** Error raised when another process owns a user's result version write lock. */
 export class ResultVersionLockBusyError extends Error {
+  readonly lockPath: string;
   readonly state: Exclude<ResultVersionLockState, { status: 'missing' }>;
 
-  constructor(state: Exclude<ResultVersionLockState, { status: 'missing' }>) {
-    super('Result version writing is already running for this user');
+  constructor(lockPath: string, state: Exclude<ResultVersionLockState, { status: 'missing' }>) {
+    const ownerDetails =
+      state.status === 'locked'
+        ? `Owner PID: ${state.owner.pid}; acquired at: ${state.owner.acquiredAt}. Remove the lock only after confirming the owner process has stopped.`
+        : 'Lock owner data is invalid. Inspect the lock file before removing it.';
+    super(
+      `Result version writing is already running for this user. Lock file: "${lockPath}". ${ownerDetails}`,
+    );
     this.name = 'ResultVersionLockBusyError';
+    this.lockPath = lockPath;
     this.state = state;
   }
 }
@@ -109,6 +117,7 @@ function acquireResultVersionLock(username: string): () => void {
     if (hasErrorCode(error, 'EEXIST')) {
       const state = readResultVersionLock(username);
       throw new ResultVersionLockBusyError(
+        lockPath,
         state.status === 'missing' ? { status: 'invalid' } : state,
       );
     }

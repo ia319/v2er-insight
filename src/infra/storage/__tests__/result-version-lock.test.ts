@@ -64,7 +64,29 @@ describe('result version write lock', () => {
     });
     const operation = vi.fn();
 
-    expect(() => withResultVersionLock('alice', operation)).toThrow(ResultVersionLockBusyError);
+    const error = (() => {
+      try {
+        withResultVersionLock('alice', operation);
+        return null;
+      } catch (reason) {
+        return reason;
+      }
+    })();
+
+    expect(error).toBeInstanceOf(ResultVersionLockBusyError);
+    expect(error).toMatchObject({
+      lockPath: 'C:\\data\\alice\\results\\.write.lock',
+      state: {
+        status: 'locked',
+        owner: {
+          pid: process.pid,
+          acquiredAt: ACQUIRED_AT,
+        },
+      },
+    });
+    expect((error as Error).message).toContain(
+      'Remove the lock only after confirming the owner process has stopped.',
+    );
     expect(operation).not.toHaveBeenCalled();
   });
 
