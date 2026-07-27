@@ -93,6 +93,7 @@ vi.mock('@/infra/logger', () => ({
 import { runAi } from '../ai';
 import { CodexProjectPathError } from '@/core/ai/providers/codex';
 import { CodexExecutionLockBusyError } from '@/infra/storage';
+import packageJson from '../../../../package.json';
 
 const SOURCE_HASH = 'a'.repeat(64);
 const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -626,7 +627,7 @@ describe('runAi', () => {
         promptHash: request.promptHash,
         dataQuality: 'complete',
         warningCount: 0,
-        appVersion: '1.2.0',
+        appVersion: packageJson.version,
       }),
     );
     expect(mockedUpdateAnalysisState).toHaveBeenCalledTimes(3);
