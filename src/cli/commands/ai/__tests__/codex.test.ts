@@ -297,6 +297,13 @@ describe('inspectCodexResultDeliverySession', () => {
         'local-1',
       ),
     ).toThrow('does not match its session');
+  });
+
+  it('distinguishes a missing registry from an invalid registry', () => {
+    mocks.readRegistry.mockReturnValue({ status: 'missing' });
+    expect(() => inspectCodexResultDeliverySession('alice', pending, 'local-1')).toThrow(
+      'codex-sessions.json is missing',
+    );
 
     mocks.readRegistry.mockReturnValue({ status: 'invalid' });
     expect(() => inspectCodexResultDeliverySession('alice', pending, 'local-1')).toThrow(

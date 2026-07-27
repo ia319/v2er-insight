@@ -112,8 +112,13 @@ export function inspectCodexResultDeliverySession(
   localSessionId: string,
 ): CodexResultDeliverySessionStatus {
   const registryState = readCodexThreadRegistry(username);
-  if (registryState.status !== 'valid') {
+  if (registryState.status === 'invalid') {
     throw new CodexThreadRegistryCorruptError();
+  }
+  if (registryState.status === 'missing') {
+    throw new Error(
+      `Codex delivery "${pending.deliveryId}" cannot be recovered because codex-sessions.json is missing`,
+    );
   }
 
   const session = registryState.registry.sessions.find(
