@@ -595,7 +595,7 @@ function validateSaveInput(
     throw new TypeError('AI result is invalid');
   }
   const resultHash = hashCanonicalJson(result);
-  const preview = buildGeneratedVersion(
+  buildGeneratedVersion(
     {
       index: createEmptyIndex(now),
       indexWasMissing: true,
@@ -607,9 +607,6 @@ function validateSaveInput(
     source,
     now,
   );
-  if (!isResultVersionMetadata(preview.metadata)) {
-    throw new TypeError('Result version source is invalid');
-  }
   return resultHash;
 }
 
