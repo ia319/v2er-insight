@@ -112,13 +112,19 @@ function getIndex(): ResultVersionIndexV1 {
 }
 
 function expectSaveError(operation: () => unknown, code: ResultVersionSaveError['code']): void {
+  let didThrow = false;
+  let caught: unknown;
   try {
     operation();
-    throw new Error('Expected result version save error');
   } catch (error) {
-    expect(error).toBeInstanceOf(ResultVersionSaveError);
-    expect((error as ResultVersionSaveError).code).toBe(code);
+    didThrow = true;
+    caught = error;
   }
+  if (!didThrow) {
+    throw new Error('Expected result version save error');
+  }
+  expect(caught).toBeInstanceOf(ResultVersionSaveError);
+  expect((caught as ResultVersionSaveError).code).toBe(code);
 }
 
 function clearWriteCalls(): void {
