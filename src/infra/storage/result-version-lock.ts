@@ -90,13 +90,22 @@ function isResultVersionLockOwner(value: unknown): value is ResultVersionLockOwn
  * @returns Missing, invalid, or validated lock state.
  */
 export function readResultVersionLock(username: string): ResultVersionLockState {
+  let contents: string;
   try {
-    const value: unknown = JSON.parse(fs.readFileSync(getResultVersionLockPath(username), 'utf-8'));
+    contents = fs.readFileSync(getResultVersionLockPath(username), 'utf-8');
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) return { status: 'missing' };
+    throw error;
+  }
+
+  try {
+    const value: unknown = JSON.parse(contents);
     return isResultVersionLockOwner(value)
       ? { status: 'locked', owner: value }
       : { status: 'invalid' };
   } catch (error) {
-    return hasErrorCode(error, 'ENOENT') ? { status: 'missing' } : { status: 'invalid' };
+    if (error instanceof SyntaxError) return { status: 'invalid' };
+    throw error;
   }
 }
 

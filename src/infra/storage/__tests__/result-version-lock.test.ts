@@ -10,6 +10,7 @@ vi.mock('../result-version-paths', () => ({
 }));
 
 import {
+  readResultVersionLock,
   ResultVersionLockBusyError,
   ResultVersionLockOwnershipError,
   ResultVersionLockReleaseError,
@@ -38,6 +39,29 @@ describe('result version write lock', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it.each(['{', '{}'])('reports invalid lock contents for %s', (contents) => {
+    mockedFs.readFileSync.mockReturnValue(contents);
+
+    expect(readResultVersionLock('alice')).toEqual({ status: 'invalid' });
+  });
+
+  it('reports a missing lock only when the file does not exist', () => {
+    mockedFs.readFileSync.mockImplementation(() => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+
+    expect(readResultVersionLock('alice')).toEqual({ status: 'missing' });
+  });
+
+  it('preserves filesystem errors while reading the lock', () => {
+    const readError = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    mockedFs.readFileSync.mockImplementation(() => {
+      throw readError;
+    });
+
+    expect(() => readResultVersionLock('alice')).toThrow(readError);
   });
 
   it('holds the exclusive private lock through the complete write operation', () => {
