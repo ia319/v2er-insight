@@ -166,22 +166,7 @@ function sourceMatchesMetadata(
   resultHash: string,
 ): boolean {
   return (
-    metadata.deliveryId === source.deliveryId &&
-    metadata.origin === source.origin &&
-    metadata.createdAt === source.createdAt &&
-    metadata.provider === source.provider &&
-    metadata.model === source.model &&
-    metadata.reasoningLevel === source.reasoningLevel &&
-    metadata.localSessionId === source.localSessionId &&
-    metadata.externalThreadId === source.externalThreadId &&
-    metadata.threadName === source.threadName &&
-    metadata.promptHash === source.promptHash &&
-    metadata.analysisFingerprint === source.analysisFingerprint &&
-    metadata.payloadHash === source.payloadHash &&
-    metadata.dataQuality === source.dataQuality &&
-    metadata.warningCount === source.warningCount &&
-    metadata.appVersion === source.appVersion &&
-    metadata.resultHash === resultHash
+    metadata.resultHash === resultHash && isDeepStrictEqual(sourceFromMetadata(metadata), source)
   );
 }
 
