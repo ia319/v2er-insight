@@ -131,7 +131,7 @@ v2er ai <username> [选项]
 | `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径 |
 | `--resend`                    | 强制重新发送完整分析数据            |
 
-AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。
+AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。每次成功分析保存当前 `result.json` 和一个不可变结果版本；命令结果的 `meta.resultVersionId` 标识对应版本。
 
 默认 provider 为 `gemini`。
 
@@ -270,7 +270,7 @@ Codex App Server 继承 v2er-insight 进程白名单中的 `HTTP_PROXY`、`HTTPS
   - **AI / Gemini**：`undici` `ProxyAgent` + `setGlobalDispatcher`（原生 `fetch()` 代理）
   - **AI / Codex**：App Server 子进程的受限代理环境
 - **AI / Codex**：发现兼容 Codex CLI，自动候选优先来自本机 App，独立短生命周期 App Server 使用已登录的 Codex home 创建或恢复 thread。
-- 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下。
+- 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下；`results/versions/` 保存不可变结果版本，`results/index.json` 保存版本顺序和 metadata。
 - 环境要求：Node.js >= 20.18.1（undici 7.x 要求）。
 
 ---
@@ -308,5 +308,5 @@ pnpm run ci             # 完整 CI（类型 + lint + 格式 + 测试）
 - 隐私保护：建议避免在配置文件中直接存储包含明文凭据的代理 URL。
 - Windows 用户建议：手动检查 `~/.v2er-insight/config.json` 的访问控制列表 (ACL)，确保其安全性。
 - Codex 本地执行边界：持久分析 thread 的 sandbox 为 read-only；Web、shell、apps、plugins 和 MCP 工具为关闭状态。
-- Codex 提示词注入安全边界：不可信输入范围为 `AnalyzerOutput` 中的帖子和回复；发送前执行隔离为持久 thread 零 MCP 工具校验。程序在一次分析请求开始前订阅 Codex 事件；工具调用、其他非分析动作或未知动作开始时，程序请求中断当前分析。当前 AI 步骤返回失败，流程结束于画像解析和 `result.json` 写入之前，已有 `result.json` 保持原状。
+- Codex 提示词注入安全边界：不可信输入范围为 `AnalyzerOutput` 中的帖子和回复；发送前执行隔离为持久 thread 零 MCP 工具校验。程序在一次分析请求开始前订阅 Codex 事件；工具调用、其他非分析动作或未知动作开始时，程序请求中断当前分析。当前 AI 步骤返回失败，流程结束于画像解析、不可变版本、`result.json` 和结果索引写入之前，已有结果文件保持原状。
 - Codex Project：默认目录包含各用户的 raw、analyzed、result 和 session 数据；App Server 加载的 Project 指令来源保留在 thread 元数据中。
