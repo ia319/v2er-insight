@@ -98,7 +98,7 @@ Session 选择顺序为显式新建、最高 generation 的兼容 pending sessio
 
 未完成 session 的恢复与结算先于结果复用判断。每次状态推进最多启动一个外部 turn；活动回合返回 busy，已完成回合按持久 ID 恢复结果。
 
-Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和回合恢复。自有 App Server 在成功、跳过、busy 和异常路径均进入关闭流程。画像结果与 provenance 持久化成功后，session 才进入完成状态。
+Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和回合恢复。自有 App Server 在成功、跳过、busy 和异常路径均进入关闭流程。不可变结果版本、当前 `result.json`、结果索引和 pending 版本关联持久化后，session 才进入完成状态；provider 发送态在 session 完成后更新。
 
 用户在 App 中修改显示名后，v2er 继续按 thread ID 恢复，不覆盖用户名称。
 
@@ -161,7 +161,7 @@ v2er 启动的 turn 具有实时状态和持久 ID。Turn 状态包括：
 
 外部 turn ID 已持久化时，后续命令在连接中断或等待超时后按 thread ID 和 turn ID 恢复。尚未关联外部 turn ID 的 pending delivery 在后续发送中复用原 delivery ID。状态或回复完整性无法确认时返回 `AI_CODEX_TURN_STATUS_UNKNOWN`。
 
-桌面 App 中由用户直接启动的 turn 运行在 App 自有连接上，v2er 仅在恢复时读取其持久状态。Codex 分支的正常结果为 skipped、busy 或 result；result 与 provenance 先于 session 完成状态持久化，session 转移失败不回滚有效画像。
+桌面 App 中由用户直接启动的 turn 运行在 App 自有连接上，v2er 仅在恢复时读取其持久状态。Codex 分支的正常结果为 skipped、busy 或 result；解析结果携带 delivery ID、local session ID、thread ID 和 thread name。结果版本及其 pending 关联先于 session 完成状态持久化，session 转移失败保留该版本用于同一 delivery 的恢复。
 
 ## 9. 权限与工具边界
 
@@ -192,26 +192,26 @@ Codex provider 使用以下运行边界：
 - 允许事件类型：user message、agent message、plan、reasoning 和 context compaction。
 - 中断条件：工具调用、其他非分析动作或未知动作开始。
 - 中断流程：程序通过 `turn/interrupt` 请求 Codex 停止当前 `turn`；`runTurn()` 抛出 `CodexUnexpectedTurnActionError`。
-- 数据路径：当前 AI 步骤返回失败；流程结束于 `parseAIAnalysisResult()` 和 `result.json` 写入之前；已有 `result.json` 保持原状。
+- 数据路径：当前 AI 步骤返回失败；流程结束于 `parseAIAnalysisResult()`、不可变版本、`result.json` 和结果索引写入之前；已有结果文件保持原状。
 - 事件时序：`item/started` 通知与对应动作并发；运行期监听位于通知接收之后。
 
 ## 10. 并发和幂等
 
-同一用户的 Codex 分析由跨进程锁串行化。锁范围覆盖 runtime 与 turn、结果和 provenance 提交、session 完成及数据清理，与该用户共享的状态文件一致。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。
+同一用户的 Codex 分析由跨进程锁串行化。锁范围覆盖 runtime 与 turn、结果版本写入、pending 版本关联、session 完成、provider 发送态更新及数据清理，与该用户共享的状态文件一致。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。
 
 桌面 App 已有活动回合时返回 busy 状态，并保留用户当前回合。
 
 每次分析数据投递具有本地唯一 delivery ID。外部 turn ID 存在时，pending delivery 保留该关联并在后续命令中核验；无法关联持久 turn 时返回 `AI_CODEX_TURN_STATUS_UNKNOWN`。
 
-不同用户可以并行运行，各自拥有独立 App Server 子进程与 Codex 执行锁。Gemini 分支保持独立执行。
+不同用户可以并行运行，各自拥有独立 App Server 子进程与 Codex 执行锁。无待完成 Codex delivery 的 Gemini 分支独立执行；存在待完成 Codex delivery 时，同一把锁覆盖恢复与阻断判断。
 
 ## 11. 本地状态
 
 `codex-sessions.json` 保存恢复所需的 session 身份、Project、模型、提示词哈希、初始化阶段、turn ID、pending delivery identity、可执行文件路径与版本、App Server instruction sources 和时间戳。Local session ID、thread ID、generation 和显示名在文件内唯一，活动 ID 只引用 ready session。
 
-Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。外部 turn ID 存在的投递保留恢复状态；画像与 provenance 成功持久化后，session 才完成转移。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
+Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Session 完成后，provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
 
-完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史；解析后的画像结果保存于 `result.json`。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
+完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史。解析后的画像结果保存于 `results/versions/vNNNNNN.json` 不可变 envelope、`results/index.json` 和当前 `result.json`；版本 metadata 保存 model、reasoning effort、local session ID、thread ID、thread name 和分析来源哈希。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
 
 注册表读取结果分为 missing、invalid 和 valid。Invalid 文件保持原内容；有效更新使用 UTF-8 无 BOM、同目录临时文件和原子替换。目标文件的创建模式为 `0o600`；Windows 的实际访问范围由现有 ACL 决定。注册表采用永久保留策略。
 
@@ -241,6 +241,7 @@ Pending delivery identity 在外部请求前持久化，App Server 接受后关�
 | Thread 丢失            | 显式新 generation                                       |
 | Turn 状态未知          | App thread 状态核对与显式重发决策                       |
 | 最终回复缺失或结果无效 | 旧画像和 delivery 状态保持不变                          |
+| Session 完成失败       | 再次执行同一 Codex 命令，恢复已保存版本并完成原 turn    |
 
 CLI 原因码覆盖可执行文件缺失或不兼容、账户不可用、协议错误、模型或 effort 不可用、Project 不可用、thread 身份丢失、turn 失败或状态未知、输出无效、超时、本地状态无效、执行占用、锁失败和 session 完成失败。恢复动作由原因码集中映射，Codex 已分类故障使用 Codex session 检查、App 状态核对、配置修正或显式新 generation。
 
