@@ -192,7 +192,7 @@ Codex provider 使用以下运行边界：
 - 允许事件类型：user message、agent message、plan、reasoning 和 context compaction。
 - 中断条件：工具调用、其他非分析动作或未知动作开始。
 - 中断流程：程序通过 `turn/interrupt` 请求 Codex 停止当前 `turn`；`runTurn()` 抛出 `CodexUnexpectedTurnActionError`。
-- 数据路径：当前 AI 步骤返回失败；流程结束于 `parseAIAnalysisResult()`、不可变版本、`result.json` 和结果索引写入之前；已有结果文件保持原状。
+- 数据路径：工具调用、其他非分析动作或未知动作触发中断时，当前 AI 步骤在 `parseAIAnalysisResult()` 和任何结果持久化之前失败，已有结果文件保持原状。Session 完成失败不属于该边界；已保存版本及其 pending 关联是后续命令的恢复依据。
 - 事件时序：`item/started` 通知与对应动作并发；运行期监听位于通知接收之后。
 
 ## 10. 并发和幂等
