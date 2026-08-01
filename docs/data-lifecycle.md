@@ -4,16 +4,17 @@
 
 每个用户的数据位于 `~/.v2er-insight/data/<username>/`：
 
-| 文件                  | 用途                                 | 自动清理 |
-| --------------------- | ------------------------------------ | -------- |
-| `raw.json`            | 规范化抓取快照                       | 可选     |
-| `analyzed.json`       | 发送给 AI 的完整 AnalyzerOutput V2   | 可选     |
-| `result.json`         | 当前 AI 分析结果                     | 永久保留 |
-| `analysis-state.json` | 数据指纹、结果状态和 provider 发送态 | 永久保留 |
+| 文件                  | 用途                                           | 自动清理 |
+| --------------------- | ---------------------------------------------- | -------- |
+| `raw.json`            | 规范化抓取快照                                 | 可选     |
+| `analyzed.json`       | 发送给 AI 的完整 AnalyzerOutput V2             | 可选     |
+| `result.json`         | 当前 AI 分析结果                               | 永久保留 |
+| `results/`            | 不可变结果版本和有序版本 metadata              | 永久保留 |
+| `analysis-state.json` | 数据指纹、当前结果版本、pending 和 provider 态 | 永久保留 |
 
 `data.keepRaw=true` 是默认配置，对应源数据永久保留。`v2er config reset data` 恢复该配置。
 
-有效的 `analysis-state.json` 产生两类结果状态提示：`DATA_RESULT_STALE` 表示结果落后于当前数据，`DATA_SNAPSHOT_PARTIAL` 表示结果基于不完整抓取。旧版 `result.json` 保持可展示；缺少 sidecar 时 provenance 状态未知。
+有效的 `analysis-state.json` 产生两类结果状态提示：`DATA_RESULT_STALE` 表示结果落后于当前数据，`DATA_SNAPSHOT_PARTIAL` 表示结果基于不完整抓取。每个成功结果关联不可变 version ID；旧版 `result.json` 保持可展示，缺少 sidecar 时 provenance 状态未知。
 
 ## 自动清理
 
@@ -31,7 +32,7 @@ v2er config set data.rawRetention 7
 - 已有完整数据历史的外部会话独立保留其上下文。
 - `--resend` 的数据来源：可读取且 provenance 匹配的 `analyzed.json`。
 - 分析上下文重建的数据来源：`analyzed.json`。
-- `raw.json` 与 `analyzed.json` 提供完整 AnalyzerOutput 的重建数据；`result.json` 与 `analysis-state.json` 保存结果和状态元数据。
+- `raw.json` 与 `analyzed.json` 提供完整 AnalyzerOutput 的重建数据；`result.json`、`results/` 与 `analysis-state.json` 保存当前结果、不可变版本和投递状态。
 
 源数据清理后的重建命令：
 

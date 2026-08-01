@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'node:crypto';
 import type { DataFileType, WriteOptions } from './types';
-import { getDataFilePath, getUserDataDir } from './paths';
+import { getDataFilePath } from './paths';
 
 type DataFileRestorePoint = { status: 'missing' } | { status: 'present'; content: string };
 
@@ -30,11 +30,24 @@ export class DataFilePostWriteError extends Error {
   }
 }
 
-function writeFileAtomically(dataDir: string, filePath: string, content: string): void {
-  const tempPath = path.join(
-    dataDir,
+function createTemporaryPath(filePath: string): string {
+  return path.join(
+    path.dirname(filePath),
     `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`,
   );
+}
+
+function removeTemporaryFile(tempPath: string): void {
+  try {
+    fs.unlinkSync(tempPath);
+  } catch {
+    // The authoritative write error remains unchanged when no temporary file exists.
+  }
+}
+
+function writeFileAtomically(filePath: string, content: string): void {
+  const dataDir = path.dirname(filePath);
+  const tempPath = createTemporaryPath(filePath);
 
   fs.mkdirSync(dataDir, { recursive: true });
 
@@ -46,11 +59,65 @@ function writeFileAtomically(dataDir: string, filePath: string, content: string)
     });
     fs.renameSync(tempPath, filePath);
   } catch (error) {
-    try {
-      fs.unlinkSync(tempPath);
-    } catch {
-      // A creation failure can leave the temporary path absent.
-    }
+    removeTemporaryFile(tempPath);
+    throw error;
+  }
+}
+
+function stringifyJson(data: unknown, options: WriteOptions): string {
+  const { pretty = true } = options;
+  const content = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+  if (content === undefined) {
+    throw new TypeError('JSON file value is not serializable');
+  }
+  return content;
+}
+
+/**
+ * Atomically replaces one application-owned JSON file.
+ *
+ * @param filePath - Validated target path.
+ * @param data - JSON-serializable value.
+ * @param options - JSON formatting options.
+ * @throws A serialization or filesystem error.
+ */
+export function writeJsonFileAtomically(
+  filePath: string,
+  data: unknown,
+  options: WriteOptions = {},
+): void {
+  writeFileAtomically(filePath, stringifyJson(data, options));
+}
+
+/**
+ * Publishes one immutable JSON file without replacing an existing target.
+ *
+ * @param filePath - Validated target path.
+ * @param data - JSON-serializable value.
+ * @param options - JSON formatting options.
+ * @throws A serialization or filesystem error, including an existing target.
+ */
+export function writeJsonFileExclusively(
+  filePath: string,
+  data: unknown,
+  options: WriteOptions = {},
+): void {
+  const dataDir = path.dirname(filePath);
+  const tempPath = createTemporaryPath(filePath);
+  const content = stringifyJson(data, options);
+
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  try {
+    fs.writeFileSync(tempPath, content, {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: 'wx',
+    });
+    fs.linkSync(tempPath, filePath);
+    fs.unlinkSync(tempPath);
+  } catch (error) {
+    removeTemporaryFile(tempPath);
     throw error;
   }
 }
@@ -66,13 +133,9 @@ function captureRestorePoint(filePath: string): DataFileRestorePoint {
   }
 }
 
-function restoreDataFile(
-  dataDir: string,
-  filePath: string,
-  restorePoint: DataFileRestorePoint,
-): void {
+function restoreDataFile(filePath: string, restorePoint: DataFileRestorePoint): void {
   if (restorePoint.status === 'present') {
-    writeFileAtomically(dataDir, filePath, restorePoint.content);
+    writeFileAtomically(filePath, restorePoint.content);
     return;
   }
 
@@ -96,13 +159,8 @@ export function writeDataFile(
   data: unknown,
   options: WriteOptions = {},
 ): void {
-  const { pretty = true } = options;
-
-  const dataDir = getUserDataDir(username);
   const filePath = getDataFilePath(username, type);
-  const content = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
-
-  writeFileAtomically(dataDir, filePath, content);
+  writeJsonFileAtomically(filePath, data, options);
 }
 
 /**
@@ -122,7 +180,6 @@ export function writeDataFileWithRollback(
   afterWrite: () => void,
   options: WriteOptions = {},
 ): void {
-  const dataDir = getUserDataDir(username);
   const filePath = getDataFilePath(username, type);
   const restorePoint = captureRestorePoint(filePath);
 
@@ -132,7 +189,7 @@ export function writeDataFileWithRollback(
     afterWrite();
   } catch (operationError) {
     try {
-      restoreDataFile(dataDir, filePath, restorePoint);
+      restoreDataFile(filePath, restorePoint);
     } catch (rollbackError) {
       throw new DataFilePostWriteError(operationError, rollbackError);
     }

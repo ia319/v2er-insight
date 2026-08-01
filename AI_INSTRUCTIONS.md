@@ -137,10 +137,17 @@ root
 │   │   │   ├── analysis-hash.ts  # Analysis config, fingerprint, and payload hashes
 │   │   │   ├── provider-state-key.ts # Stable provider delivery target identity
 │   │   │   ├── ai-delivery.ts    # Analyzed verification and delivery state transitions
-│   │   │   ├── state-types.ts     # AnalysisStateV1 durable state contract
+│   │   │   ├── state-types.ts     # AnalysisStateV1 migration and V2 durable contracts
 │   │   │   ├── state-validator.ts # Runtime state boundary validation
 │   │   │   ├── state-transitions.ts # Pure raw/analyzed provenance transitions
 │   │   │   └── __tests__/        # Canonicalization and hash contract tests
+│   │   │
+│   │   ├── result-version/    # [Domain] Saved AI result version contracts
+│   │   │   ├── index.ts          # Public result-version exports
+│   │   │   ├── types.ts          # Version metadata, envelope, and index types
+│   │   │   ├── identifiers.ts    # Canonical version and delivery identifiers
+│   │   │   ├── validator.ts      # Metadata, envelope, and index validation
+│   │   │   └── __tests__/        # Identifier and validator contract tests
 │   │   │
 │   │   └── ai/              # [Complete] AI integration module
 │   │       ├── index.ts         # Public API exports
@@ -188,6 +195,10 @@ root
 │       │   ├── reader.ts     # JSON file reading
 │       │   ├── writer.ts     # Atomic JSON replacement and compensating rollback
 │       │   ├── analysis-state.ts # Validated sidecar reads and protected updates
+│       │   ├── result-version-paths.ts # Saved result directory and file paths
+│       │   ├── result-version-files.ts # Validated index and immutable version files
+│       │   ├── result-version-lock.ts # Per-user result version write serialization
+│       │   ├── save-result-version.ts # Idempotent result save and recovery
 │       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
 │           ├── index.ts      # Public API exports
@@ -312,9 +323,17 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `computeProviderStateKey(input)` → Delivery-state identity across provider, model, system prompt, thinking level, and logical session.
 - `checkAnalyzedProvenance(state, output, config)` → Validation of raw identity, Analyzer schema, semantic configuration, payload identity, and capture quality before delivery.
 - `hasProviderReceivedAnalysis(state, providerKey, fingerprint)` → Provider-target duplicate detection.
-- `recordProviderDelivery(state, input)` → Provider hashes and a fresh current result with `change` or `resend` delivery mode after result persistence.
-- `AnalysisStateV1` → Raw identity, analyzed identity, current-result freshness, and provider delivery hashes.
-- `isAnalysisStateV1(value)` → Parsed-state validation before workflow access to nested provenance fields.
+- `prepareResultDelivery(state, target)` → Stable UUID preparation and reuse before provider access; a different target can replace only an uncommitted pending delivery.
+- `matchesResultDeliveryTarget(pending, target)` → Reuse check across provider key, analyzed hashes, capture quality, and delivery mode.
+- `matchesPendingResultDelivery(metadata, pending)` → Delivery, provider, analyzed input, mode, version, and capture-quality association check.
+- `recordSavedResultVersion(state, metadata)` → Pending delivery and current-result association with one matching immutable version.
+- `completeResultDelivery(state, deliveryId)` → Provider hash advancement and pending-state removal only with a matching non-null saved version association.
+- `AnalysisStateV2` → Raw identity, analyzed identity, current-result version association, pending result delivery, and provider delivery hashes.
+- `currentResult.resultVersionId` → Canonical saved result ID or `null` for a migrated current result without an established association.
+- `pendingResultDelivery` → Stable delivery ID, canonical Gemini/Codex provider key, analyzed hashes, capture quality, delivery mode, and nullable committed result version.
+- `AnalysisStateV1` → Legacy read contract accepted only for deterministic migration.
+- `migrateAnalysisStateV1(state)` → In-memory v2 state without an invented result version ID or pending delivery.
+- `isAnalysisStateV1(value)` and `isAnalysisStateV2(value)` → Schema-specific validation before workflow access.
 - `recordRawProvenance(state, snapshot)` → Semantic identity, partial-capture status, and current-result freshness relative to the analyzed source.
 - `recordAnalyzedProvenance(state, snapshot, output, config)` → Analyzer hashes and result freshness by analysis-fingerprint equality.
 - Unsupported, non-finite, non-plain, and circular canonical inputs produce explicit errors.
@@ -329,7 +348,7 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `v2er <username>` → One-click pipeline (fetch → analyze → ai → show)
 - `v2er fetch <username>` → Fetch and save Raw Snapshot V2 with collection diagnostics (raw.json)
 - `v2er analyze <username>` → Validate Raw Snapshot V2 and generate statistics (analyzed.json)
-- `v2er ai <username>` → Generate user profile through the selected AI provider (result.json)
+- `v2er ai <username>` → Generate a user profile and save `result.json` plus an immutable result version
 - `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
 - `v2er session check [username] [--provider gemini|codex]` → Run read-only provider diagnostics
 - `v2er config show [group]` → View config (with apiKey masking)
@@ -389,9 +408,17 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 - Unchanged delivery reuse requires the same target fingerprint and a fresh `result.json` that satisfies the complete `AIAnalysisResult` contract.
 - `--resend` bypasses reuse and records `currentResult.deliveryMode = 'resend'`.
 - Partial-capture analysis produces a warning for provider delivery and unchanged-result reuse.
-- Analyzed provenance is revalidated immediately before `result.json` persistence and during the protected state update.
-- `result.json` persistence and provider last-sent state updates form a compensating transaction; state-update failures restore the previous result bytes.
-- Provider, parse, initial result-write, and provenance-validation failures retain the previous delivery state.
+- Gemini persists or reuses one pending delivery after API-key validation and before provider session creation or message delivery.
+- Gemini provider and parse failures retain the uncommitted pending delivery; a retry to the same target reuses its delivery ID.
+- Analyzed provenance is revalidated immediately before Gemini result-version persistence.
+- Successful Gemini output enters `saveResultVersion()` with actual model, thinking level, prompt hash, capture quality, warning count, and application version.
+- Gemini records the saved version on pending/current state before provider hashes advance and pending state clears.
+- Gemini result-write failures preserve the uncommitted pending delivery; post-save state failures preserve the immutable version for delivery-ID recovery without another provider request.
+- Codex mirrors the App Server delivery ID into `analysis-state.json` after a parsed result and before result-version persistence.
+- Successful Codex output enters `saveResultVersion()` with actual model, reasoning effort, local session ID, external thread ID, thread name, prompt hash, capture quality, and application version.
+- Codex records the saved version on pending/current state, completes the accepted session turn, then advances provider hashes and clears pending state.
+- Saved Codex delivery recovery compares the pending identity with the owning session. A matching accepted turn reuses the saved result; a completed session advances provider provenance without another model request.
+- An unresolved Codex delivery blocks Gemini execution and remains under the per-user Codex lock until session reconciliation.
 - `runShow()` accepts complete `AIAnalysisResult` values and derives stale and partial notices from valid current-result provenance.
 - Legacy results with absent sidecars retain unknown provenance; structurally invalid results produce `SHOW_RESULT_INVALID`.
 - stdout carries JSON report content; stderr carries command and workflow notices.
@@ -462,7 +489,7 @@ Codex automatic launch is limited to signed Windows native candidates discovered
 
 Codex version and App Server processes inherit an allowlisted runtime environment from the v2er-insight parent process, covering Codex home, user/system/temp paths, locale, proxy, and certificate settings. The root `proxy` setting overrides HTTP and HTTPS proxy variables for App Server launches; version probes retain the inherited values. Native candidates exclude PATH; explicitly authorized command shims retain PATH and PATHEXT. `.cmd` launchers use a validated system command processor. API keys, access tokens, `NODE_OPTIONS`, `ComSpec`, and unrelated application variables remain outside the child environment. Proxy values may contain proxy credentials.
 
-Codex thread config disables web search and stable execution, browser, app, plugin, hook, collaboration, skill-installation, and tool-discovery features on start and resume. An ephemeral thread discovers effective MCP server names with zero model turns. Persisted thread config disables each discovered server that exposes tools, and its MCP inventory contains zero tools before delivery. `runTurn()` subscribes to App Server item events before `turn/start`. Analysis-only item types enter result collection. Tool calls, other non-analysis actions, and unknown actions trigger `turn/interrupt` and `CodexUnexpectedTurnActionError` before analysis parsing and result persistence; `result.json` and delivery provenance remain unchanged. App Server reverse requests remain on the method-not-found boundary.
+Codex thread config disables web search and stable execution, browser, app, plugin, hook, collaboration, skill-installation, and tool-discovery features on start and resume. An ephemeral thread discovers effective MCP server names with zero model turns. Persisted thread config disables each discovered server that exposes tools, and its MCP inventory contains zero tools before delivery. `runTurn()` subscribes to App Server item events before `turn/start`. Analysis-only item types enter result collection. Tool calls, other non-analysis actions, and unknown actions trigger `turn/interrupt` and `CodexUnexpectedTurnActionError` before analysis parsing and result persistence; immutable versions, `result.json`, result index, and delivery state remain unchanged. App Server reverse requests remain on the method-not-found boundary.
 
 ### 7. Analyzer Module (Complete)
 
@@ -548,6 +575,31 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `isAIAnalysisResult()` enforces exact keys at every object level as well as field value constraints.
 - `result.json` stores the validated `AIAnalysisResult`.
 
+**Saved Result Version Contract** (`src/core/result-version/`):
+
+- `ResultVersionMetadata`, `StoredResultVersionV1`, and `ResultVersionIndexV1` define version metadata, stored result envelopes, and ordered index entries.
+- `formatResultVersionId(sequence)` produces zero-padded identifiers such as `v000001`.
+- `parseResultVersionId(versionId)` accepts canonical positive identifiers only.
+- `createResultDeliveryId()` produces UUID v4 delivery identifiers.
+- `isResultVersionMetadata(value)` enforces exact metadata keys and separates generated provenance from protected legacy or untracked results.
+- `isStoredResultVersionV1(value)` requires a complete `AIAnalysisResult` and a matching canonical SHA-256 result hash.
+- `isResultVersionIndexV1(value)` requires contiguous ordered sequences, a matching latest pointer, and unique non-null delivery IDs.
+- Result-version path helpers resolve the per-user `results/` root, `versions/` directory, `index.json`, version file, and write lock.
+- `getResultVersionFilePath(username, versionId)` rejects non-canonical version identifiers before path construction.
+- Result-version file reads distinguish missing, invalid, and validated data.
+- Index writes use same-directory private temporary files and atomic replacement.
+- Immutable version writes publish through an exclusive hard link and reject an existing target.
+- Candidate scans include canonical regular `vNNNNNN.json` files only and order them by numeric sequence.
+- `withResultVersionLock(username, operation)` serializes synchronous writes for one user through a private `wx` lock.
+- Lock release validates the persisted UUID token; ownership changes preserve the replacement lock and surface a release error.
+- Existing valid or invalid locks fail immediately without waiting or automatic removal.
+- `saveResultVersion(username, result, source)` validates every indexed envelope before changing current data.
+- `recoverResultVersionDelivery(username, pending)` repairs an indexed or unindexed write from durable pending identity without the original result/source arguments.
+- Existing current data without a saved version becomes `legacy`; externally changed current data becomes `untracked-current` before replacement.
+- Generated writes use immutable version file, bare `result.json`, then index order.
+- A repeated matching delivery ID returns its existing version; a missing current file is restored from that envelope.
+- One valid unindexed candidate resumes only when its previous latest/current identities match; ambiguous, conflicting, corrupt, or divergent states remain unchanged.
+
 **Defaults** (from `config/defaults.ts`):
 
 - Provider: `gemini`
@@ -565,10 +617,12 @@ Codex thread config disables web search and stable execution, browser, app, plug
 **CLI Provider Execution**:
 
 - `runAi()` validates provider-specific options before credential and runtime access.
-- Gemini execution resolves reuse, API credentials, retry policy, response parsing, and delivery provenance in `cli/commands/ai/gemini.ts`.
-- Codex execution returns skipped, busy, or parsed-result states from `cli/commands/ai/codex.ts`; the Codex branch has no Gemini API key dependency.
-- Both provider branches commit `result.json` and delivery provenance through the same rollback-protected storage boundary.
-- Codex session completion follows the durable result/provenance commit. Completion failures preserve the committed result and pending session state for recovery.
+- Gemini execution resolves reuse, API credentials, durable pre-request delivery preparation, retry policy, response parsing, and delivery provenance in `cli/commands/ai/gemini.ts`.
+- Codex execution states from `cli/commands/ai/codex.ts`: skipped, busy, or parsed result with delivery ID, local session ID, external thread ID, and thread name; no Gemini API key dependency.
+- `inspectCodexResultDeliverySession()` → Exact pending-delivery comparison against the owning Codex session and `pending` or `completed` recovery status.
+- Gemini and Codex save every successful result through `saveResultVersion()` and return `resultVersionId` in successful command metadata.
+- Codex session completion follows immutable version, `result.json`, index, and pending-version association writes.
+- Codex session completion failures preserve the saved version ID on pending analysis state for retry without another model request.
 - Codex analysis holds one per-user cross-process lock across runtime execution, result/provenance persistence, session completion, and cleanup.
 - Concurrent Codex commands return `AI_CODEX_BUSY` with validated owner PID and acquisition time when available. Filesystem or ownership failures return `AI_CODEX_LOCK_FAILED`.
 - Typed Codex runtime, Project, protocol, timeout, thread, turn, output, and registry failures map to provider-specific reason codes and recovery actions at the CLI boundary. Unclassified errors retain the shared provider failure fallback.
@@ -599,7 +653,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 | Consumer            | Location                                   | Usage                                                      |
 | ------------------- | ------------------------------------------ | ---------------------------------------------------------- |
 | Fetcher (transport) | `infra/fetcher/fetcher.ts`                 | Inline retry loop per URL, own `onRetry` via `FetchEvents` |
-| AI (request)        | `cli/commands/ai.ts`                       | `withRetry()` wrapping `provider.sendMessage()`            |
+| AI (request)        | `cli/commands/ai/gemini.ts`                | `withRetry()` wrapping `provider.sendMessage()`            |
 | Use-Case (business) | `page-orchestrator.ts`, `topics-detail.ts` | Second-pass retry for failed pages/topics                  |
 
 **CLI Logging**:
@@ -662,6 +716,10 @@ Codex thread config disables web search and stable execution, browser, app, plug
 ├── result.json     # AI analysis results
 ├── analysis-state.json # Durable provenance and provider delivery state
 ├── codex-sessions.json # Validated Codex thread registry
+├── results/
+│   ├── index.json # Ordered result version metadata
+│   ├── versions/ # Immutable vNNNNNN.json result envelopes
+│   └── .write.lock # Per-user result version writer
 └── .codex-execution.lock # Per-user Codex transaction owner
 ```
 
@@ -670,11 +728,25 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `getDataRootDir()` → Shared data root path
 - `getUserDataDir(username)` → User data directory path
 - `getDataFilePath(username, type)` → Specific data file path
+- `getResultVersionsRootDir(username)` → Saved result directory path
+- `getResultVersionFilesDir(username)` → Saved result version-file directory path
+- `getResultVersionIndexPath(username)` → Saved result index path
+- `getResultVersionFilePath(username, versionId)` → Canonical saved result file path
+- `getResultVersionLockPath(username)` → Saved result write-lock path
+- `readResultVersionIndex(username)` → Missing, invalid, or validated result version index
+- `readStoredResultVersion(username, versionId)` → Missing, invalid, or validated immutable result version
+- `listStoredResultVersionIds(username)` → Canonical regular version-file IDs in sequence order
+- `writeResultVersionIndex(username, index)` → Validated atomic index replacement
+- `writeStoredResultVersion(username, version)` → Validated immutable version publication without replacement
+- `readResultVersionLock(username)` → Missing, invalid, or validated result version lock
+- `withResultVersionLock(username, operation)` → Synchronous per-user write serialization with token-checked release
+- `saveResultVersion(username, result, source)` → Idempotent result version save with current-result protection and candidate recovery
+- `recoverResultVersionDelivery(username, pending)` → Pending-delivery recovery with result/current/index repair or an explicit missing state
 - `readDataFile<T>(username, type)` → Read a registered data-file type (returns `null` on missing/invalid)
 - `readDataFileResult(username, type)` → Single-read states where `ENOENT` is `missing` and parse or other read failures are `invalid`
 - `writeDataFile(username, type, data, options?)` → Same-directory `0600` temporary write and atomic target replacement
-- `readAnalysisState(username)` → Validated `analysis-state.json` with missing/invalid/valid distinctions
-- `updateAnalysisState(username, updater)` → Validated existing and updated state with atomic persistence
+- `readAnalysisState(username)` → Missing/invalid/valid distinctions with validated v1-to-v2 in-memory migration
+- `updateAnalysisState(username, updater)` → Validated v2 update and atomic persistence; migrated v1 state writes only on update
 - `readCodexThreadRegistry(username)` → Validated `codex-sessions.json` with missing/invalid/valid distinctions
 - `updateCodexThreadRegistry(username, updater)` → Corruption-protected registry update with validation and atomic persistence
 - `readCodexExecutionLock(username)` → Missing, invalid, or validated owner state for the per-user Codex lock
@@ -685,7 +757,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 
 - `data.keepRaw = true` → Permanent raw/analyzed retention (default)
 - `data.keepRaw = false` → Age-based cleanup after `data.rawRetention` days (default retention: 1)
-- `result.json`, `analysis-state.json`, and `codex-sessions.json` → Permanent retention
+- `result.json`, `analysis-state.json`, `codex-sessions.json`, and `results/` → Permanent retention
 - `.codex-execution.lock` → Transaction-scoped lock; abnormal termination retains owner metadata for diagnosis
 - Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
 - `docs/data-lifecycle.md` documents user-facing retention effects and recovery commands.
@@ -719,10 +791,10 @@ Detailed protocol and recovery reference: `docs/codex-app-server-integration.md`
 **Delivery and Recovery**:
 
 - **Session choice and compatibility**: Explicit new generation, highest compatible pending generation, compatible active ready session; compatibility covers prompt hash, actual model, and Project path.
-- **Delivery identity**: Provider key, analysis fingerprint, payload hash, capture-quality state, delivery mode, and reasoning effort.
+- **Delivery identity**: Stable delivery ID, provider key, analysis fingerprint, payload hash, capture-quality state, delivery mode, and reasoning effort.
 - **Turn progression**: At most one external turn per advance; exhaustive prepared-action control flow; accepted turn ID persistence before completion wait.
-- **Result boundary**: Completed terminal turn, final agent message selection, closed `AIAnalysisResult` parsing, durable result/provenance commit before session completion.
-- **Recovery boundary**: Exact thread and turn IDs, persisted pending identity, busy state for active turns, explicit error for untracked acceptance.
+- **Result boundary**: Completed terminal turn, final agent message selection, closed `AIAnalysisResult` parsing, immutable version and current-result persistence before session completion, provider-hash advancement after session completion.
+- **Recovery boundary**: Exact thread and turn IDs, persisted pending identity, owning-session comparison for saved deliveries, saved-result reuse for accepted turns, busy state for active turns, explicit error for untracked acceptance.
 
 ## Proxy Configuration
 

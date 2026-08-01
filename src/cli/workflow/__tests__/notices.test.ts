@@ -123,6 +123,7 @@ describe('result state notices', () => {
       analysisFingerprint: 'a'.repeat(64),
       stale: true,
       basedOnPartial: true,
+      resultVersionId: null,
     });
 
     expect(notices.map((notice) => notice.code)).toEqual([

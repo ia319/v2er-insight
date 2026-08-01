@@ -45,7 +45,11 @@ vi.mock('@/infra/storage', async (importOriginal) => ({
   updateCodexThreadRegistry: mocks.updateRegistry,
 }));
 
-import { executeCodexAnalysis, type ExecuteCodexAnalysisOptions } from '../codex';
+import {
+  executeCodexAnalysis,
+  inspectCodexResultDeliverySession,
+  type ExecuteCodexAnalysisOptions,
+} from '../codex';
 
 const HASH = 'a'.repeat(64);
 const CODEX_CANDIDATE: CodexExecutableCandidate = {
@@ -93,13 +97,14 @@ function createOptions(): ExecuteCodexAnalysisOptions {
     },
     request: { systemPrompt: 'prompt', promptHash: HASH, payload: '{}' },
     analysisState: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       providers: { key: { lastSentAnalysisFingerprint: HASH, lastSentPayloadHash: HASH } },
       currentResult: {
         analysisFingerprint: HASH,
         stale: false,
         basedOnPartial: false,
         deliveryMode: 'change',
+        resultVersionId: null,
       },
     },
     provenance: {
@@ -218,6 +223,10 @@ describe('executeCodexAnalysis', () => {
     expect(execution.status).toBe('result');
     expect(mocks.activate).not.toHaveBeenCalled();
     if (execution.status !== 'result') throw new Error('Expected result execution');
+    expect(execution).toMatchObject({
+      threadName: 'alice-insight',
+      delivery: { deliveryId: 'delivery-1' },
+    });
     await execution.complete();
     expect(mocks.activate).toHaveBeenCalledWith(
       expect.objectContaining({ localSessionId: 'local-1', turnId: 'turn-analysis' }),
@@ -230,5 +239,75 @@ describe('executeCodexAnalysis', () => {
 
     await expect(executeCodexAnalysis(createOptions())).rejects.toThrow('turn failed');
     expect(mocks.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('inspectCodexResultDeliverySession', () => {
+  const pending = {
+    deliveryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    providerKey: `codex:${HASH}`,
+    analysisFingerprint: HASH,
+    payloadHash: HASH,
+    basedOnPartial: false,
+    deliveryMode: 'change' as const,
+    resultVersionId: 'v000001',
+  };
+  const registryWithPending: CodexThreadRegistryV1 = {
+    ...REGISTRY,
+    sessions: [
+      {
+        ...STATE,
+        pendingAnalysis: {
+          deliveryId: pending.deliveryId,
+          providerKey: pending.providerKey,
+          analysisFingerprint: pending.analysisFingerprint,
+          payloadHash: pending.payloadHash,
+          basedOnPartial: pending.basedOnPartial,
+          deliveryMode: pending.deliveryMode,
+          reasoningEffort: 'high',
+          turnId: 'turn-analysis',
+        },
+      },
+    ],
+  };
+
+  it('identifies a completed ready session', () => {
+    expect(inspectCodexResultDeliverySession('alice', pending, 'local-1')).toBe('completed');
+  });
+
+  it('identifies the matching accepted pending turn', () => {
+    mocks.readRegistry.mockReturnValue({
+      status: 'valid',
+      registry: registryWithPending,
+    });
+
+    expect(inspectCodexResultDeliverySession('alice', pending, 'local-1')).toBe('pending');
+  });
+
+  it('rejects a missing or inconsistent recovery session', () => {
+    expect(() => inspectCodexResultDeliverySession('alice', pending, 'missing')).toThrow(
+      'was not found',
+    );
+
+    mocks.readRegistry.mockReturnValue({ status: 'valid', registry: registryWithPending });
+    expect(() =>
+      inspectCodexResultDeliverySession(
+        'alice',
+        { ...pending, payloadHash: 'b'.repeat(64) },
+        'local-1',
+      ),
+    ).toThrow('does not match its session');
+  });
+
+  it('distinguishes a missing registry from an invalid registry', () => {
+    mocks.readRegistry.mockReturnValue({ status: 'missing' });
+    expect(() => inspectCodexResultDeliverySession('alice', pending, 'local-1')).toThrow(
+      'codex-sessions.json is missing',
+    );
+
+    mocks.readRegistry.mockReturnValue({ status: 'invalid' });
+    expect(() => inspectCodexResultDeliverySession('alice', pending, 'local-1')).toThrow(
+      'invalid or unreadable',
+    );
   });
 });

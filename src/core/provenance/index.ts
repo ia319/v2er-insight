@@ -10,19 +10,32 @@ export { computeProviderStateKey } from './provider-state-key';
 export type { ProviderStateKeyInput } from './provider-state-key';
 export {
   checkAnalyzedProvenance,
+  completeResultDelivery,
   hasProviderReceivedAnalysis,
-  recordProviderDelivery,
+  matchesPendingResultDelivery,
+  matchesResultDeliveryTarget,
+  prepareResultDelivery,
+  recordSavedResultVersion,
 } from './ai-delivery';
-export type { AnalyzedProvenanceCheck, ProviderDeliveryRecordInput } from './ai-delivery';
-export { ANALYSIS_STATE_SCHEMA_VERSION } from './state-types';
+export type { AnalyzedProvenanceCheck, ResultDeliveryTarget } from './ai-delivery';
+export { ANALYSIS_STATE_LEGACY_SCHEMA_VERSION, ANALYSIS_STATE_SCHEMA_VERSION } from './state-types';
 export type {
+  AnalysisState,
   AnalysisStateV1,
+  AnalysisStateV2,
   AnalyzedProvenanceState,
   CaptureStatus,
   CurrentResultState,
+  LegacyCurrentResultState,
+  PendingResultDeliveryState,
   ProviderProvenanceState,
   RawProvenanceState,
   ResultDeliveryMode,
 } from './state-types';
-export { isAnalysisStateV1 } from './state-validator';
+export {
+  isAnalysisStateV1,
+  isAnalysisStateV2,
+  isPendingResultDeliveryState,
+  migrateAnalysisStateV1,
+} from './state-validator';
 export { recordAnalyzedProvenance, recordRawProvenance } from './state-transitions';
