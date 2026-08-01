@@ -308,5 +308,11 @@ pnpm run ci             # 完整 CI（类型 + lint + 格式 + 测试）
 - 隐私保护：建议避免在配置文件中直接存储包含明文凭据的代理 URL。
 - Windows 用户建议：手动检查 `~/.v2er-insight/config.json` 的访问控制列表 (ACL)，确保其安全性。
 - Codex 本地执行边界：持久分析 thread 的 sandbox 为 read-only；Web、shell、apps、plugins 和 MCP 工具为关闭状态。
-- Codex 提示词注入安全边界：不可信输入范围为 `AnalyzerOutput` 中的帖子和回复；发送前执行隔离为持久 thread 零 MCP 工具校验。程序在一次分析请求开始前订阅 Codex 事件；工具调用、其他非分析动作或未知动作开始时，程序通过 `turn/interrupt` 请求中断当前分析。该中断路径在画像解析和任何结果持久化之前失败，已有结果文件保持原状。Codex session 完成失败发生在结果版本、`result.json`、结果索引和 pending 版本关联写入之后；已写入的结果版本、当前结果、索引和 pending 版本关联供后续 Codex 命令恢复。
+- Codex 提示词注入安全边界：
+  - 不可信输入：`AnalyzerOutput` 中的帖子和回复。
+  - 发送前隔离：持久 thread 的 MCP 工具数量为零。
+  - 运行期监听：在分析请求开始前订阅 Codex 事件。
+  - 中断条件：工具调用、其他非分析动作或未知动作开始。
+  - 中断结果：通过 `turn/interrupt` 请求中断；画像解析和结果持久化均未开始，已有结果文件保持原状。
+- Codex session 完成失败：持久化数据包含结果版本、`result.json`、结果索引和 pending 版本关联。状态一致时，后续同一 Codex 命令复用已保存版本并完成原 turn。
 - Codex Project：默认目录包含各用户的 raw、analyzed、result 和 session 数据；App Server 加载的 Project 指令来源保留在 thread 元数据中。
