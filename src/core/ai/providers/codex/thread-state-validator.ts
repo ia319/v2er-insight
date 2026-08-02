@@ -86,7 +86,8 @@ function hasValidPendingAnalysis(
   );
 }
 
-function isCodexThreadState(value: unknown): value is CodexThreadState {
+/** Validates one Codex thread state independently from its legacy registry container. */
+export function isCodexThreadState(value: unknown): value is CodexThreadState {
   if (
     !isRecord(value) ||
     value.kind !== 'codex' ||

@@ -165,6 +165,10 @@ root
 │   │       │   ├── index.ts         # Re-exports providers
 │   │       │   ├── gemini.ts        # Google Gemini provider
 │   │       │   └── codex/           # Codex model resolution and provider components
+│   │       ├── sessions/        # Durable provider-session contracts
+│   │       │   ├── identifiers.ts   # Canonical local session ID validation
+│   │       │   ├── types.ts         # Session index and provider state types
+│   │       │   └── validator.ts     # Cross-session and history validation
 │   │       ├── parser/          # Response parsing & validation
 │   │       │   ├── index.ts         # parseResponse()
 │   │       │   └── validator.ts     # Lenient response validator
@@ -599,6 +603,15 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - Generated writes use immutable version file, bare `result.json`, then index order.
 - A repeated matching delivery ID returns its existing version; a missing current file is restored from that envelope.
 - One valid unindexed candidate resumes only when its previous latest/current identities match; ambiguous, conflicting, corrupt, or divergent states remain unchanged.
+
+**AI Session Contract** (`src/core/ai/sessions/`):
+
+- `AISessionIndexV1` stores provider activity, session summaries, migration identity, and index update time.
+- `BaseAISessionState` stores the local session identity, provider, generation, prompt and model identity, usage time, and nullable analysis-result association.
+- `CodexSessionStateV1` preserves the complete recoverable Codex thread state and requires `externalThreadId` to match its thread ID.
+- `GeminiSessionStateV1` stores one fixed system instruction and paired provider-neutral text history.
+- `isLocalSessionId(value)` accepts canonical UUID strings before file-path construction.
+- Session validators require exact persisted keys, canonical timestamps and hashes, unique index identities, valid active-session references, paired Gemini roles, and all-or-null result association fields.
 
 **Defaults** (from `config/defaults.ts`):
 
