@@ -29,6 +29,7 @@ const mockedWithCodexExecutionLock = vi.hoisted(() => vi.fn());
 const mockedEnsureCodexSessionRegistry = vi.hoisted(() => vi.fn());
 const mockedPrepareGeminiAnalysisSession = vi.hoisted(() => vi.fn());
 const mockedCompleteGeminiAnalysisSession = vi.hoisted(() => vi.fn());
+const mockedRecoverCodexAnalysisSession = vi.hoisted(() => vi.fn());
 const mockedRecoverGeminiAnalysisSession = vi.hoisted(() => vi.fn());
 
 const mockCreateSession = vi.hoisted(() => vi.fn());
@@ -65,6 +66,7 @@ vi.mock('@/infra/storage', async (importOriginal) => {
     ensureCodexSessionRegistry: mockedEnsureCodexSessionRegistry,
     prepareGeminiAnalysisSession: mockedPrepareGeminiAnalysisSession,
     completeGeminiAnalysisSession: mockedCompleteGeminiAnalysisSession,
+    recoverCodexAnalysisSession: mockedRecoverCodexAnalysisSession,
     recoverGeminiAnalysisSession: mockedRecoverGeminiAnalysisSession,
   };
 });
@@ -397,6 +399,7 @@ describe('runAi', () => {
     mockedRecoverResultVersionDelivery.mockReturnValue({ status: 'missing' });
     mockedPrepareGeminiAnalysisSession.mockReturnValue(createPreparedGeminiSession());
     mockedCompleteGeminiAnalysisSession.mockReturnValue(undefined);
+    mockedRecoverCodexAnalysisSession.mockReturnValue({ status: 'completed' });
     mockedRecoverGeminiAnalysisSession.mockImplementation(({ metadata }) => {
       mockedPrepareGeminiAnalysisSession.mockReturnValue(
         createPreparedGeminiSession({
@@ -1127,7 +1130,13 @@ describe('runAi', () => {
         threadName: 'testuser-insight',
       }),
     );
-    expect(complete).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        versionId: 'v000001',
+        provider: 'codex',
+        localSessionId: 'local-1',
+      }),
+    );
     expect(lockHeld).toBe(false);
     expect(mockedSaveResultVersion.mock.invocationCallOrder[0]).toBeLessThan(
       complete.mock.invocationCallOrder[0]!,
@@ -1268,6 +1277,61 @@ describe('runAi', () => {
     },
   );
 
+  it('should repair a completed Codex result association before clearing its delivery', async () => {
+    const result = createAiResult('Recovered Codex result');
+    const input = mockInput(createAnalyzedData(), result);
+    const state = input.getState();
+    const analyzedState = state.analyzed;
+    if (!analyzedState) throw new Error('Expected analyzed provenance');
+    setPendingCodexDelivery(state, 'v000001');
+    const metadata = createSavedMetadata(
+      {
+        deliveryId: DELIVERY_ID,
+        origin: 'analysis',
+        createdAt: '2026-07-26T07:00:00.000Z',
+        provider: 'codex',
+        model: 'gpt-current',
+        reasoningLevel: 'high',
+        localSessionId: 'local-1',
+        externalThreadId: 'thread-1',
+        threadName: 'testuser-insight',
+        promptHash: defaultRequest.promptHash,
+        analysisFingerprint: analyzedState.analysisFingerprint,
+        payloadHash: analyzedState.payloadHash,
+        dataQuality: 'complete',
+        warningCount: 0,
+        appVersion: '0.0.0',
+      },
+      { resultHash: hashCanonicalJson(result) },
+    );
+    mockedRecoverResultVersionDelivery.mockReturnValue({
+      status: 'recovered',
+      metadata,
+      result,
+    });
+    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+    mockedExecuteCodexAnalysis.mockResolvedValue({
+      status: 'skipped',
+      model: 'gpt-current',
+      reasoningEffort: 'high',
+      providerKey: CODEX_PROVIDER_KEY,
+      localSessionId: 'local-1',
+      threadId: 'thread-1',
+      threadName: 'testuser-insight',
+    });
+
+    const output = await runAi('testuser', { provider: 'codex' });
+
+    expect(output.status).toBe('skipped');
+    expect(mockedRecoverCodexAnalysisSession).toHaveBeenCalledWith({
+      username: 'testuser',
+      metadata,
+    });
+    expect(mockedInspectCodexResultDeliverySession).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+    expect(input.getState().pendingResultDelivery).toBeUndefined();
+  });
+
   it('should reuse a saved Codex result while completing its accepted turn', async () => {
     const result = createAiResult('Recovered Codex result');
     const input = mockInput(createAnalyzedData(), result);
@@ -1300,6 +1364,7 @@ describe('runAi', () => {
       metadata,
       result,
     });
+    mockedRecoverCodexAnalysisSession.mockReturnValue({ status: 'pending' });
     mockedInspectCodexResultDeliverySession.mockReturnValue('pending');
     const complete = vi.fn().mockResolvedValue(undefined);
     mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });

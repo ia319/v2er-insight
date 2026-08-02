@@ -79,6 +79,8 @@ export type {
   CompleteGeminiAnalysisSessionOptions,
   PreparedGeminiAnalysisSession,
   PrepareGeminiAnalysisSessionOptions,
+  RecoverCodexAnalysisSessionOptions,
+  RecoverCodexAnalysisSessionResult,
   RecoverGeminiAnalysisSessionOptions,
 } from './sessions';
 export {
@@ -93,6 +95,7 @@ export {
   readAISessionIndex,
   readAISessionState,
   readAISessionStore,
+  recoverCodexAnalysisSession,
   recoverGeminiAnalysisSession,
   updateCodexSessionRegistry,
   writeAISessionIndex,

@@ -34,6 +34,7 @@ import {
   AISessionStoreCorruptError,
   cleanExpiredData,
   CodexExecutionLockBusyError,
+  recoverCodexAnalysisSession,
   recoverGeminiAnalysisSession,
   recoverResultVersionDelivery,
   readAnalysisState,
@@ -309,16 +310,23 @@ async function runAiForProvider(
           if (!localSessionId) {
             throw new Error('Saved Codex result does not identify its local session');
           }
-          const sessionStatus = inspectCodexResultDeliverySession(
+          const recovery = recoverCodexAnalysisSession({
             username,
-            pendingBeforeProvider,
-            localSessionId,
-          );
-          if (sessionStatus === 'completed') {
+            metadata: recovered.metadata,
+          });
+          if (recovery.status === 'completed') {
             providerAnalysisState = updateAnalysisState(username, (state) =>
               completeResultDelivery(state, pendingBeforeProvider.deliveryId),
             );
           } else {
+            const sessionStatus = inspectCodexResultDeliverySession(
+              username,
+              pendingBeforeProvider,
+              localSessionId,
+            );
+            if (sessionStatus !== 'pending') {
+              throw new Error('Saved Codex result has inconsistent session completion state');
+            }
             recoveredResultMetadata = recovered.metadata;
           }
         } else if (recovered.metadata.provider === 'gemini') {
@@ -474,7 +482,7 @@ async function runAiForProvider(
         warningCount: 0,
         appVersion: packageJson.version,
       };
-      completeAnalysisSession = async () => execution.complete();
+      completeAnalysisSession = async (metadata) => execution.complete(metadata);
       logger.detail(`模型: ${execution.model}`);
       logger.detail(`思考深度: ${execution.reasoningEffort}`);
       logger.detail(`任务: ${execution.threadId}`);

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAIAnalysisResultFixture } from '@/core/ai/__tests__/result-fixture';
 import type { CodexThreadRegistryV1, CodexThreadState } from '@/core/ai/providers/codex';
+import type { ResultVersionMetadata } from '@/core/result-version';
 import type { CodexExecutableCandidate } from '@/infra/codex';
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   discover: vi.fn(),
   hasReceived: vi.fn(),
   readRegistry: vi.fn(),
+  recoverSession: vi.fn(),
   resolveProject: vi.fn(),
   runAnalysis: vi.fn(),
   selectModelRequest: vi.fn(),
@@ -42,6 +44,7 @@ vi.mock('@/infra/codex', async (importOriginal) => ({
 vi.mock('@/infra/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/infra/storage')>()),
   ensureCodexSessionRegistry: mocks.readRegistry,
+  recoverCodexAnalysisSession: mocks.recoverSession,
   updateCodexSessionRegistry: mocks.updateRegistry,
 }));
 
@@ -85,6 +88,30 @@ const REGISTRY: CodexThreadRegistryV1 = {
   sessions: [STATE],
 };
 
+const RESULT_METADATA: ResultVersionMetadata = {
+  versionId: 'v000001',
+  sequence: 1,
+  origin: 'analysis',
+  deliveryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  previousLatestVersionId: null,
+  previousCurrentHash: null,
+  createdAt: '2026-07-19T01:06:00.000Z',
+  savedAt: '2026-07-19T01:06:01.000Z',
+  provider: 'codex',
+  model: 'gpt-current',
+  reasoningLevel: 'high',
+  localSessionId: 'local-1',
+  externalThreadId: 'thread-1',
+  threadName: 'alice-insight',
+  promptHash: HASH,
+  analysisFingerprint: HASH,
+  payloadHash: HASH,
+  resultHash: HASH,
+  dataQuality: 'complete',
+  warningCount: 0,
+  appVersion: '0.0.0',
+};
+
 function createOptions(): ExecuteCodexAnalysisOptions {
   return {
     username: 'alice',
@@ -120,6 +147,7 @@ function createOptions(): ExecuteCodexAnalysisOptions {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.readRegistry.mockReturnValue(REGISTRY);
+  mocks.recoverSession.mockReturnValue({ status: 'completed' });
   mocks.resolveProject.mockReturnValue({ path: 'D:\\Data', source: 'storage' });
   mocks.selectModelRequest.mockReturnValue({ model: 'gpt-current', source: 'session' });
   mocks.discover.mockReturnValue({
@@ -227,10 +255,14 @@ describe('executeCodexAnalysis', () => {
       threadName: 'alice-insight',
       delivery: { deliveryId: 'delivery-1' },
     });
-    await execution.complete();
+    await execution.complete(RESULT_METADATA);
     expect(mocks.activate).toHaveBeenCalledWith(
       expect.objectContaining({ localSessionId: 'local-1', turnId: 'turn-analysis' }),
     );
+    expect(mocks.recoverSession).toHaveBeenCalledWith({
+      username: 'alice',
+      metadata: RESULT_METADATA,
+    });
     expect(mocks.close).toHaveBeenCalledOnce();
   });
 

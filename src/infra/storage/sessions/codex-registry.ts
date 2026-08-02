@@ -135,6 +135,24 @@ function loadCodexSessionStore(username: string): LoadedCodexSessionStore | null
 }
 
 /**
+ * Verifies that a retained legacy registry matches the published migration marker.
+ * @param username - Owner of the new and legacy Codex session stores.
+ * @param index - Validated shared session index.
+ * @throws {AISessionMigrationConflictError} When both stores exist without one source identity.
+ */
+export function assertCodexSessionMigrationIdentity(
+  username: string,
+  index: AISessionIndexV1,
+): void {
+  const legacy = readCodexThreadRegistry(username);
+  if (legacy.status !== 'valid') return;
+  const marker = index.migration;
+  if (!marker || marker.sourceHash !== hashCanonicalJson(legacy.registry)) {
+    throw new AISessionMigrationConflictError('sessions/index.json');
+  }
+}
+
+/**
  * Inspects new and legacy Codex session storage without writing or migrating either source.
  * @param username - Owner of the Codex session data.
  * @returns Storage states, migration status, and an unambiguous registry projection when available.
@@ -298,13 +316,7 @@ export function ensureCodexSessionRegistry(
 ): CodexThreadRegistryV1 {
   const existing = loadCodexSessionStore(username);
   if (existing) {
-    const legacy = readCodexThreadRegistry(username);
-    if (legacy.status === 'valid') {
-      const marker = existing.index.migration;
-      if (!marker || marker.sourceHash !== hashCanonicalJson(legacy.registry)) {
-        throw new AISessionMigrationConflictError('sessions/index.json');
-      }
-    }
+    assertCodexSessionMigrationIdentity(username, existing.index);
     return existing.registry;
   }
 

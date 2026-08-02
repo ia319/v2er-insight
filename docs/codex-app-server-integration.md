@@ -98,7 +98,7 @@ Session 选择顺序为显式新建、最高 generation 的兼容 pending sessio
 
 未完成 session 的恢复与结算先于结果复用判断。每次状态推进最多启动一个外部 turn；活动回合返回 busy，已完成回合按持久 ID 恢复结果。
 
-Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和回合恢复。自有 App Server 在成功、跳过、busy 和异常路径均进入关闭流程。不可变结果版本、当前 `result.json`、结果索引和 pending 版本关联持久化后，session 才进入完成状态；provider 发送态在 session 完成后更新。
+Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和回合恢复。自有 App Server 在成功、跳过、busy 和异常路径均进入关闭流程。不可变结果版本、当前 `result.json`、结果索引和 pending 版本关联持久化后，session 才进入完成状态；随后 provider 文件关联 version ID、分析指纹和成功时间，session index 发布最近成功 provider，最后更新 provider 发送态。
 
 用户在 App 中修改显示名后，v2er 继续按 thread ID 恢复，不覆盖用户名称。
 
@@ -211,7 +211,7 @@ Codex provider 使用以下运行边界：
 
 旧安装的 `codex-sessions.json` 仅作为只读迁移来源。首次 Codex 写操作在同一用户执行锁内校验旧注册表，把各 session 文件写入后再发布索引；相同内容的既有 session 文件支持中断后继续。新旧存储同时存在时，索引必须包含与旧注册表内容哈希一致的迁移标记，否则返回 `SESSION_MIGRATION_CONFLICT`，不发送模型消息。迁移写入失败返回 `SESSION_MIGRATION_FAILED`。迁移完成后只写 `sessions/`，不修改或删除旧文件。
 
-Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Session 完成后，provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
+Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Session turn 完成后，provider 文件和 index 关联该结果版本；随后 provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
 
 完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史。解析后的画像结果保存于 `results/versions/vNNNNNN.json` 不可变 envelope、`results/index.json` 和当前 `result.json`；版本 metadata 保存 model、reasoning effort、local session ID、thread ID、thread name 和分析来源哈希。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
 
@@ -234,18 +234,18 @@ Pending delivery identity 在外部请求前持久化，App Server 接受后关�
 
 恢复行为按状态区分：
 
-| 状态                   | 恢复条件或结果                                          |
-| ---------------------- | ------------------------------------------------------- |
-| App 或兼容 CLI 不可用  | App runtime 可用，或 `ai.codex.executable` 指向兼容 CLI |
-| 账户不可用             | 解析后的 `CODEX_HOME` 包含有效登录状态                  |
-| 模型或 effort 不可用   | 配置值属于当前 `model/list` 目录                        |
-| Thread busy            | 当前 App 回合结束                                       |
-| Thread 丢失            | 显式新 generation                                       |
-| Turn 状态未知          | App thread 状态核对与显式重发决策                       |
-| 最终回复缺失或结果无效 | 旧画像和 delivery 状态保持不变                          |
-| Session 迁移冲突       | 保留新旧存储并通过只读诊断核对迁移标记与 session 身份   |
-| Session 迁移失败       | 修复目录权限或空间后，再次执行同一 Codex 命令           |
-| Session 完成失败       | 再次执行同一 Codex 命令，恢复已保存版本并完成原 turn    |
+| 状态                   | 恢复条件或结果                                              |
+| ---------------------- | ----------------------------------------------------------- |
+| App 或兼容 CLI 不可用  | App runtime 可用，或 `ai.codex.executable` 指向兼容 CLI     |
+| 账户不可用             | 解析后的 `CODEX_HOME` 包含有效登录状态                      |
+| 模型或 effort 不可用   | 配置值属于当前 `model/list` 目录                            |
+| Thread busy            | 当前 App 回合结束                                           |
+| Thread 丢失            | 显式新 generation                                           |
+| Turn 状态未知          | App thread 状态核对与显式重发决策                           |
+| 最终回复缺失或结果无效 | 旧画像和 delivery 状态保持不变                              |
+| Session 迁移冲突       | 保留新旧存储并通过只读诊断核对迁移标记与 session 身份       |
+| Session 迁移失败       | 修复目录权限或空间后，再次执行同一 Codex 命令               |
+| Session 完成失败       | 再次执行同一 Codex 命令，恢复已保存版本、原 turn 和结果关联 |
 
 CLI 原因码覆盖可执行文件缺失或不兼容、账户不可用、协议错误、模型或 effort 不可用、Project 不可用、thread 身份丢失、turn 失败或状态未知、输出无效、超时、本地状态无效、执行占用、锁失败、session 迁移和 session 完成失败。恢复动作由原因码集中映射，Codex 已分类故障使用 Codex session 检查、App 状态核对、配置修正或显式新 generation。
 

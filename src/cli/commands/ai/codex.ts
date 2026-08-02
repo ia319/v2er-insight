@@ -16,9 +16,14 @@ import {
   type PendingResultDeliveryState,
   type ResultDeliveryMode,
 } from '@/core/provenance';
+import type { ResultVersionMetadata } from '@/core/result-version';
 import type { ResolvedCodexConfig } from '@/config';
 import { discoverCodexExecutables } from '@/infra/codex';
-import { ensureCodexSessionRegistry, updateCodexSessionRegistry } from '@/infra/storage';
+import {
+  ensureCodexSessionRegistry,
+  recoverCodexAnalysisSession,
+  updateCodexSessionRegistry,
+} from '@/infra/storage';
 
 type ValidAnalyzedProvenance = Extract<AnalyzedProvenanceCheck, { status: 'valid' }>;
 
@@ -60,7 +65,7 @@ export type CodexCommandExecution =
         basedOnPartial: boolean;
         deliveryMode: ResultDeliveryMode;
       };
-      complete: () => Promise<void>;
+      complete: (metadata: ResultVersionMetadata) => Promise<void>;
     });
 
 function readRegistry(username: string): CodexThreadRegistryV1 {
@@ -226,7 +231,7 @@ export async function executeCodexAnalysis(
         basedOnPartial: advance.delivery.basedOnPartial,
         deliveryMode: advance.delivery.deliveryMode,
       },
-      complete: async () => {
+      complete: async (metadata) => {
         if (advance.completion === 'initial') {
           await activateCodexInitialAnalysisTurn({
             localSessionId: advance.state.localSessionId,
@@ -234,14 +239,21 @@ export async function executeCodexAnalysis(
             reasoningEffort: advance.delivery.reasoningEffort,
             updateRegistry,
           });
-          return;
+        } else {
+          await completeCodexAnalysisUpdateTurn({
+            localSessionId: advance.state.localSessionId,
+            turnId: advance.turn.id,
+            reasoningEffort: advance.delivery.reasoningEffort,
+            updateRegistry,
+          });
         }
-        await completeCodexAnalysisUpdateTurn({
-          localSessionId: advance.state.localSessionId,
-          turnId: advance.turn.id,
-          reasoningEffort: advance.delivery.reasoningEffort,
-          updateRegistry,
+        const completion = recoverCodexAnalysisSession({
+          username: options.username,
+          metadata,
         });
+        if (completion.status !== 'completed') {
+          throw new Error('Codex analysis turn remained pending after completion');
+        }
       },
     };
   } finally {

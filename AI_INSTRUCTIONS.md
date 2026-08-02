@@ -422,7 +422,7 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 - Gemini result-write failures preserve the uncommitted pending delivery; post-save state or session failures preserve the immutable version for delivery-ID recovery without another provider request.
 - Codex mirrors the App Server delivery ID into `analysis-state.json` after a parsed result and before result-version persistence.
 - Successful Codex output enters `saveResultVersion()` with actual model, reasoning effort, local session ID, external thread ID, thread name, prompt hash, capture quality, and application version.
-- Codex records the saved version on pending/current state, completes the accepted session turn, then advances provider hashes and clears pending state.
+- Codex records the saved version on pending/current state, completes the accepted session turn, associates the version and analysis fingerprint with the provider file, publishes the shared index, then advances provider hashes and clears pending state.
 - Saved Codex delivery recovery compares the pending identity with the owning session. A matching accepted turn reuses the saved result; a completed session advances provider provenance without another model request.
 - An unresolved Codex delivery blocks Gemini execution and remains under the per-user Codex lock until session reconciliation.
 - `runShow()` accepts complete `AIAnalysisResult` values and derives stale and partial notices from valid current-result provenance.
@@ -639,6 +639,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - Gemini execution resolves reuse, API credentials, durable pre-request delivery preparation, retry policy, response parsing, and delivery provenance in `cli/commands/ai/gemini.ts`.
 - Codex execution states from `cli/commands/ai/codex.ts`: skipped, busy, or parsed result with delivery ID, local session ID, external thread ID, and thread name; no Gemini API key dependency.
 - `inspectCodexResultDeliverySession()` → Exact pending-delivery comparison against the owning Codex session and `pending` or `completed` recovery status.
+- `recoverCodexAnalysisSession()` → Pending-turn classification or idempotent Codex result association with provider-file-first index repair.
 - Gemini and Codex save every successful result through `saveResultVersion()` and return `resultVersionId` in successful command metadata.
 - Gemini recreates each SDK Chat from one fixed system instruction and the complete successful provider-neutral history; only the current AnalyzerOutput uses `sendMessage()`.
 - Gemini session completion follows immutable result version, current result, result index, and pending-version association writes. Recovery repairs a missing session or index publication from the committed version.
@@ -777,6 +778,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `prepareGeminiAnalysisSession(options)` → Compatible active Gemini session or unpersisted next generation
 - `completeGeminiAnalysisSession(options)` → Result-associated history append with provider-file-first publication
 - `recoverGeminiAnalysisSession(options)` → Idempotent repair after result-version commit
+- `recoverCodexAnalysisSession(options)` → Accepted-turn status and idempotent result association repair
 - `ensureCodexSessionRegistry(username)` → Writable Codex registry projection with locked, idempotent legacy migration
 - `inspectCodexSessionStorage(username)` → Read-only new/legacy state and migration status with an unambiguous registry projection
 - `updateCodexSessionRegistry(username, updater)` → Codex provider-file updates followed by session-index publication

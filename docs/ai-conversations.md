@@ -8,9 +8,9 @@
 
 ## Codex
 
-Codex 对话历史由所选 `CODEX_HOME` 中的持久 thread 保存。本地 `sessions/codex/<localSessionId>.json` 保存 thread ID、模型、Project、回合恢复状态和最近结果关联，不复制完整 thread 历史。
+Codex 对话历史由所选 `CODEX_HOME` 中的持久 thread 保存。本地 `sessions/codex/<localSessionId>.json` 保存 thread ID、模型、Project、回合恢复状态和最近结果关联，不复制完整 thread 历史。结果版本保存后，程序先完成已接受的 turn，再写入 `lastResultVersionId`、分析指纹和成功时间，最后发布共享会话索引。
 
-后续命令按 thread ID 恢复，不按显示名搜索。提示词或模型不兼容以及显式 `--new-thread` 产生新的 generation。
+后续命令按 thread ID 恢复，不按显示名搜索。提示词或模型不兼容以及显式 `--new-thread` 产生新的 generation。结果已经保存但 turn 或索引发布失败时，再次执行相同分析补齐原 session 和结果关联，不创建重复结果版本。
 
 ## Gemini
 
