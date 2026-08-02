@@ -53,11 +53,7 @@ export {
   updateAnalysisState,
 } from './analysis-state';
 export type { CodexThreadRegistryReadResult } from './codex-thread-registry';
-export {
-  CodexThreadRegistryCorruptError,
-  readCodexThreadRegistry,
-  updateCodexThreadRegistry,
-} from './codex-thread-registry';
+export { CodexThreadRegistryCorruptError, readCodexThreadRegistry } from './codex-thread-registry';
 export type { CodexExecutionLockOwner, CodexExecutionLockState } from './codex-execution-lock';
 export {
   CodexExecutionLockBusyError,

@@ -41,8 +41,8 @@ vi.mock('@/infra/codex', async (importOriginal) => ({
 
 vi.mock('@/infra/storage', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/infra/storage')>()),
-  readCodexThreadRegistry: mocks.readRegistry,
-  updateCodexThreadRegistry: mocks.updateRegistry,
+  ensureCodexSessionRegistry: mocks.readRegistry,
+  updateCodexSessionRegistry: mocks.updateRegistry,
 }));
 
 import {
@@ -119,7 +119,7 @@ function createOptions(): ExecuteCodexAnalysisOptions {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.readRegistry.mockReturnValue({ status: 'valid', registry: REGISTRY });
+  mocks.readRegistry.mockReturnValue(REGISTRY);
   mocks.resolveProject.mockReturnValue({ path: 'D:\\Data', source: 'storage' });
   mocks.selectModelRequest.mockReturnValue({ model: 'gpt-current', source: 'session' });
   mocks.discover.mockReturnValue({
@@ -276,10 +276,7 @@ describe('inspectCodexResultDeliverySession', () => {
   });
 
   it('identifies the matching accepted pending turn', () => {
-    mocks.readRegistry.mockReturnValue({
-      status: 'valid',
-      registry: registryWithPending,
-    });
+    mocks.readRegistry.mockReturnValue(registryWithPending);
 
     expect(inspectCodexResultDeliverySession('alice', pending, 'local-1')).toBe('pending');
   });
@@ -289,7 +286,7 @@ describe('inspectCodexResultDeliverySession', () => {
       'was not found',
     );
 
-    mocks.readRegistry.mockReturnValue({ status: 'valid', registry: registryWithPending });
+    mocks.readRegistry.mockReturnValue(registryWithPending);
     expect(() =>
       inspectCodexResultDeliverySession(
         'alice',
@@ -299,13 +296,17 @@ describe('inspectCodexResultDeliverySession', () => {
     ).toThrow('does not match its session');
   });
 
-  it('distinguishes a missing registry from an invalid registry', () => {
-    mocks.readRegistry.mockReturnValue({ status: 'missing' });
+  it('rejects an unavailable or invalid session store', () => {
+    mocks.readRegistry.mockImplementationOnce(() => {
+      throw new Error('sessions/index.json is missing');
+    });
     expect(() => inspectCodexResultDeliverySession('alice', pending, 'local-1')).toThrow(
-      'codex-sessions.json is missing',
+      'sessions/index.json is missing',
     );
 
-    mocks.readRegistry.mockReturnValue({ status: 'invalid' });
+    mocks.readRegistry.mockImplementationOnce(() => {
+      throw new Error('sessions/index.json is invalid or unreadable');
+    });
     expect(() => inspectCodexResultDeliverySession('alice', pending, 'local-1')).toThrow(
       'invalid or unreadable',
     );

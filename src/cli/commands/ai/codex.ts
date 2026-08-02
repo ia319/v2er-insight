@@ -1,6 +1,5 @@
 import { isAIAnalysisResult, type AIAnalysisResult, type AnalysisRequest } from '@/core/ai';
 import {
-  CODEX_THREAD_REGISTRY_SCHEMA_VERSION,
   activateCodexInitialAnalysisTurn,
   assertCodexProjectDirectory,
   completeCodexAnalysisUpdateTurn,
@@ -19,11 +18,7 @@ import {
 } from '@/core/provenance';
 import type { ResolvedCodexConfig } from '@/config';
 import { discoverCodexExecutables } from '@/infra/codex';
-import {
-  CodexThreadRegistryCorruptError,
-  readCodexThreadRegistry,
-  updateCodexThreadRegistry,
-} from '@/infra/storage';
+import { ensureCodexSessionRegistry, updateCodexSessionRegistry } from '@/infra/storage';
 
 type ValidAnalyzedProvenance = Extract<AnalyzedProvenanceCheck, { status: 'valid' }>;
 
@@ -69,15 +64,7 @@ export type CodexCommandExecution =
     });
 
 function readRegistry(username: string): CodexThreadRegistryV1 {
-  const result = readCodexThreadRegistry(username);
-  if (result.status === 'invalid') throw new CodexThreadRegistryCorruptError();
-  return result.status === 'valid'
-    ? result.registry
-    : {
-        schemaVersion: CODEX_THREAD_REGISTRY_SCHEMA_VERSION,
-        activeSessionId: null,
-        sessions: [],
-      };
+  return ensureCodexSessionRegistry(username);
 }
 
 function hasReusableResult(options: ExecuteCodexAnalysisOptions, providerKey: string): boolean {
@@ -98,37 +85,29 @@ function hasReusableResult(options: ExecuteCodexAnalysisOptions, providerKey: st
 export type CodexResultDeliverySessionStatus = 'pending' | 'completed';
 
 /**
- * Determines whether a saved Codex delivery still requires registry completion.
+ * Determines whether a saved Codex delivery still requires session completion.
  *
- * @param username - V2EX username that owns the Codex registry.
+ * @param username - V2EX username that owns the Codex session store.
  * @param pending - Durable result delivery from analysis-state.json.
  * @param localSessionId - Session recorded by the saved result metadata.
  * @returns Pending when the accepted turn remains recoverable, otherwise completed.
- * @throws When the registry, session, or pending delivery is missing or inconsistent.
+ * @throws When the session store, owning session, or pending delivery is missing or inconsistent.
  */
 export function inspectCodexResultDeliverySession(
   username: string,
   pending: PendingResultDeliveryState,
   localSessionId: string,
 ): CodexResultDeliverySessionStatus {
-  const registryState = readCodexThreadRegistry(username);
-  if (registryState.status === 'invalid') {
-    throw new CodexThreadRegistryCorruptError();
-  }
-  if (registryState.status === 'missing') {
-    throw new Error(
-      `Codex delivery "${pending.deliveryId}" cannot be recovered because codex-sessions.json is missing`,
-    );
-  }
+  const registry = ensureCodexSessionRegistry(username);
 
-  const session = registryState.registry.sessions.find(
+  const session = registry.sessions.find(
     (candidate) => candidate.localSessionId === localSessionId,
   );
   if (!session) {
     throw new Error(`Codex local session "${localSessionId}" was not found`);
   }
 
-  const duplicate = registryState.registry.sessions.some(
+  const duplicate = registry.sessions.some(
     (candidate) =>
       candidate.localSessionId !== localSessionId &&
       candidate.pendingAnalysis?.deliveryId === pending.deliveryId,
@@ -163,7 +142,7 @@ export function inspectCodexResultDeliverySession(
  * Executes the Codex provider boundary and returns result and delivery data for persistence.
  * @param options - Resolved provider settings, current request, provenance, and CLI overrides.
  * @returns A skip, busy state, or parsed result with a post-commit session completion callback.
- * @throws When the registry, Project, runtime, session, or turn cannot be validated.
+ * @throws When the session store, Project, runtime, session, or turn cannot be validated.
  */
 export async function executeCodexAnalysis(
   options: ExecuteCodexAnalysisOptions,
@@ -197,7 +176,7 @@ export async function executeCodexAnalysis(
   });
   const updateRegistry = async (
     update: (current: CodexThreadRegistryV1) => CodexThreadRegistryV1,
-  ): Promise<CodexThreadRegistryV1> => updateCodexThreadRegistry(options.username, update);
+  ): Promise<CodexThreadRegistryV1> => updateCodexSessionRegistry(options.username, update);
 
   try {
     const execution = await runCodexAnalysis({

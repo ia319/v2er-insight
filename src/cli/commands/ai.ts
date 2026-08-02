@@ -41,7 +41,7 @@ import {
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
 import { getRecoveryActions } from '../workflow/recovery';
-import type { StepRunResult } from '../workflow/types';
+import type { ReasonCode, StepRunResult } from '../workflow/types';
 import { extractErrorDetails } from '../utils/error';
 import { createDataFilesCleanedNotice } from '../workflow/data-retention-notices';
 import { executeCodexAnalysis, inspectCodexResultDeliverySession } from './ai/codex';
@@ -49,6 +49,13 @@ import { classifyCodexFailure } from './ai/codex-errors';
 import { executeGeminiAnalysis } from './ai/gemini';
 import { AiProviderOptionError, resolveAiProviderOptions } from './ai/provider-options';
 import packageJson from '../../../package.json';
+
+function classifyCodexSessionPersistenceFailure(error: unknown): ReasonCode {
+  const reasonCode = classifyCodexFailure(error);
+  return reasonCode === 'SESSION_MIGRATION_CONFLICT' || reasonCode === 'SESSION_MIGRATION_FAILED'
+    ? reasonCode
+    : 'AI_CODEX_SESSION_UPDATE_FAILED';
+}
 
 /**
  * Run the AI analysis command for one user.
@@ -318,17 +325,17 @@ async function runAiForProvider(
       } catch (error) {
         const { message, raw } = extractErrorDetails(error);
         const isCodex = recovered.metadata.provider === 'codex';
+        const reasonCode = isCodex
+          ? classifyCodexSessionPersistenceFailure(error)
+          : 'PROVENANCE_UPDATE_FAILED';
         logger.error(`协调已保存的 AI 结果状态失败: ${message}`);
         return {
           step: 'ai',
           status: 'failed',
-          reasonCode: isCodex ? 'AI_CODEX_SESSION_UPDATE_FAILED' : 'PROVENANCE_UPDATE_FAILED',
+          reasonCode,
           message: `AI 结果版本已恢复，但${isCodex ? ' Codex session' : ' provenance'} 状态更新失败: ${message}`,
           recoverable: true,
-          recoverActions: getRecoveryActions(
-            isCodex ? 'AI_CODEX_SESSION_UPDATE_FAILED' : 'PROVENANCE_UPDATE_FAILED',
-            { username },
-          ),
+          recoverActions: getRecoveryActions(reasonCode, { username }),
           meta: { rawError: raw, resultVersionId: recovered.metadata.versionId },
         };
       }
@@ -668,14 +675,15 @@ async function runAiForProvider(
       await completeCodexSession();
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
+      const reasonCode = classifyCodexSessionPersistenceFailure(error);
       logger.error(`更新 Codex session 状态失败: ${message}`);
       return {
         step: 'ai',
         status: 'failed',
-        reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
+        reasonCode,
         message: `AI 结果版本 ${metadata.versionId} 已保存，Codex session 状态更新失败: ${message}`,
         recoverable: true,
-        recoverActions: getRecoveryActions('AI_CODEX_SESSION_UPDATE_FAILED', { username }),
+        recoverActions: getRecoveryActions(reasonCode, { username }),
         meta: { rawError: raw, resultVersionId: metadata.versionId },
       };
     }

@@ -18,7 +18,12 @@ import {
   CodexAppServerTransportError,
   CodexTurnWaitTimeoutError,
 } from '@/infra/codex';
-import { CodexThreadRegistryCorruptError } from '@/infra/storage';
+import {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  AISessionStoreCorruptError,
+  CodexThreadRegistryCorruptError,
+} from '@/infra/storage';
 import type { ReasonCode } from '../../workflow/types';
 
 export type CodexFailureReasonCode = Extract<
@@ -36,6 +41,8 @@ export type CodexFailureReasonCode = Extract<
   | 'AI_CODEX_OUTPUT_INVALID'
   | 'AI_CODEX_TIMEOUT'
   | 'AI_CODEX_STATE_INVALID'
+  | 'SESSION_MIGRATION_CONFLICT'
+  | 'SESSION_MIGRATION_FAILED'
   | 'AI_CODEX_BUSY'
   | 'AI_PROVIDER_FAILED'
 >;
@@ -67,6 +74,7 @@ function isStateIntegrityError(error: unknown): boolean {
     error instanceof CodexPromptTurnError ||
     error instanceof CodexThreadCreationError ||
     error instanceof CodexThreadRegistryError ||
+    error instanceof AISessionStoreCorruptError ||
     error instanceof CodexThreadRegistryCorruptError
   );
 }
@@ -77,6 +85,8 @@ function isStateIntegrityError(error: unknown): boolean {
  * @returns The narrowest reason code supported by concrete error evidence.
  */
 export function classifyCodexFailure(error: unknown): CodexFailureReasonCode {
+  if (error instanceof AISessionMigrationConflictError) return 'SESSION_MIGRATION_CONFLICT';
+  if (error instanceof AISessionMigrationFailedError) return 'SESSION_MIGRATION_FAILED';
   if (error instanceof CodexRuntimeSelectionError) return classifyRuntimeSelection(error);
   if (error instanceof CodexProjectPathError) return 'AI_CODEX_PROJECT_UNAVAILABLE';
   if (

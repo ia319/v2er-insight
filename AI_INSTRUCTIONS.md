@@ -729,7 +729,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 ├── analyzed.json   # Analyzer output
 ├── result.json     # AI analysis results
 ├── analysis-state.json # Durable provenance and provider delivery state
-├── codex-sessions.json # Validated Codex thread registry
+├── codex-sessions.json # Read-only legacy Codex migration source
 ├── results/
 │   ├── index.json # Ordered result version metadata
 │   ├── versions/ # Immutable vNNNNNN.json result envelopes
@@ -775,8 +775,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `writeDataFile(username, type, data, options?)` → Same-directory `0600` temporary write and atomic target replacement
 - `readAnalysisState(username)` → Missing/invalid/valid distinctions with validated v1-to-v2 in-memory migration
 - `updateAnalysisState(username, updater)` → Validated v2 update and atomic persistence; migrated v1 state writes only on update
-- `readCodexThreadRegistry(username)` → Validated `codex-sessions.json` with missing/invalid/valid distinctions
-- `updateCodexThreadRegistry(username, updater)` → Corruption-protected registry update with validation and atomic persistence
+- `readCodexThreadRegistry(username)` → Read-only legacy `codex-sessions.json` with missing/invalid/valid distinctions
 - `readCodexExecutionLock(username)` → Missing, invalid, or validated owner state for the per-user Codex lock
 - `withCodexExecutionLock(username, operation)` → `wx`-acquired `0600` cross-process lock with token-checked release
 - `cleanExpiredData(username)` → Cleanup enablement, retention, deleted files, and typed skip diagnostics
@@ -786,6 +785,8 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `data.keepRaw = true` → Permanent raw/analyzed retention (default)
 - `data.keepRaw = false` → Age-based cleanup after `data.rawRetention` days (default retention: 1)
 - `result.json`, `analysis-state.json`, `codex-sessions.json`, `results/`, and `sessions/` → Permanent retention
+- Codex writes target `sessions/`; a valid legacy registry migrates provider files before index publication and remains unchanged
+- New and legacy stores require a matching migration source hash; missing or mismatched markers stop model execution
 - `.codex-execution.lock` → Transaction-scoped lock; abnormal termination retains owner metadata for diagnosis
 - Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
 - `docs/data-lifecycle.md` documents user-facing retention effects and recovery commands.

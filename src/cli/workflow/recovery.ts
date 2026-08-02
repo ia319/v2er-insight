@@ -301,13 +301,37 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   AI_CODEX_STATE_INVALID: [
     {
       type: 'instruction',
-      content: '保留 codex-sessions.json，并检查 registry 与外部 thread 的身份差异',
+      content: '保留 sessions/ 和 codex-sessions.json，并检查本地 session 与外部 thread 的身份差异',
       description: '本地 session 转移或恢复身份校验失败',
     },
     {
       type: 'command',
       content: 'v2er session check <username> --provider codex',
       description: '读取锁、registry、Project 和 thread 诊断',
+    },
+  ],
+  SESSION_MIGRATION_CONFLICT: [
+    {
+      type: 'instruction',
+      content: '保留 sessions/ 和 codex-sessions.json，不要手动合并或覆盖会话文件',
+      description: '新旧会话存储缺少一致的迁移标记或存在身份冲突',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '只读检查新旧会话存储状态',
+    },
+  ],
+  SESSION_MIGRATION_FAILED: [
+    {
+      type: 'instruction',
+      content: '保留 sessions/ 和 codex-sessions.json，并检查用户数据目录的可写权限与剩余空间',
+      description: '旧 Codex 会话未能完整写入新会话存储',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '修复存储条件后继续幂等迁移',
     },
   ],
   AI_CODEX_BUSY: [
@@ -337,7 +361,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   AI_CODEX_SESSION_UPDATE_FAILED: [
     {
       type: 'instruction',
-      content: '保留 result.json、analysis-state.json 和 codex-sessions.json 用于恢复',
+      content: '保留 result.json、analysis-state.json 和 sessions/ 用于恢复',
       description: '结果与 provenance 已保存，Codex session 完成状态仍待更新',
     },
     {

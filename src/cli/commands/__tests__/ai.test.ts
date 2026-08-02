@@ -92,7 +92,11 @@ vi.mock('@/infra/logger', () => ({
 
 import { runAi } from '../ai';
 import { CodexProjectPathError } from '@/core/ai/providers/codex';
-import { CodexExecutionLockBusyError } from '@/infra/storage';
+import {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  CodexExecutionLockBusyError,
+} from '@/infra/storage';
 import packageJson from '../../../../package.json';
 
 const SOURCE_HASH = 'a'.repeat(64);
@@ -1109,45 +1113,64 @@ describe('runAi', () => {
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
   });
 
-  it('should preserve a committed Codex result when session completion fails', async () => {
-    const input = mockInput();
-    const analyzedState = input.getState().analyzed;
-    if (!analyzedState) throw new Error('Expected analyzed provenance');
-    mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
-    mockedExecuteCodexAnalysis.mockResolvedValue({
-      status: 'result',
-      model: 'gpt-current',
-      reasoningEffort: 'high',
-      providerKey: CODEX_PROVIDER_KEY,
-      localSessionId: 'local-1',
-      threadId: 'thread-1',
-      threadName: 'testuser-insight',
-      result: createAiResult('Codex result'),
-      delivery: {
-        deliveryId: DELIVERY_ID,
-        providerKey: CODEX_PROVIDER_KEY,
-        analysisFingerprint: analyzedState.analysisFingerprint,
-        payloadHash: analyzedState.payloadHash,
-        basedOnPartial: false,
-        deliveryMode: 'change',
-      },
-      complete: vi.fn().mockRejectedValue(new Error('registry unavailable')),
-    });
-
-    const output = await runAi('testuser', { provider: 'codex' });
-
-    expect(output).toMatchObject({
-      status: 'failed',
+  it.each([
+    {
+      name: 'session update failure',
+      error: new Error('session unavailable'),
       reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
-      meta: { resultVersionId: 'v000001' },
-    });
-    expect(mockedSaveResultVersion).toHaveBeenCalledOnce();
-    expect(input.getState().pendingResultDelivery).toMatchObject({
-      deliveryId: DELIVERY_ID,
-      resultVersionId: 'v000001',
-    });
-    expect(mockedCleanExpiredData).not.toHaveBeenCalled();
-  });
+    },
+    {
+      name: 'migration conflict',
+      error: new AISessionMigrationConflictError('sessions/index.json'),
+      reasonCode: 'SESSION_MIGRATION_CONFLICT',
+    },
+    {
+      name: 'migration write failure',
+      error: new AISessionMigrationFailedError(new Error('write failed')),
+      reasonCode: 'SESSION_MIGRATION_FAILED',
+    },
+  ] as const)(
+    'should preserve a committed Codex result after a $name',
+    async ({ error, reasonCode }) => {
+      const input = mockInput();
+      const analyzedState = input.getState().analyzed;
+      if (!analyzedState) throw new Error('Expected analyzed provenance');
+      mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+      mockedExecuteCodexAnalysis.mockResolvedValue({
+        status: 'result',
+        model: 'gpt-current',
+        reasoningEffort: 'high',
+        providerKey: CODEX_PROVIDER_KEY,
+        localSessionId: 'local-1',
+        threadId: 'thread-1',
+        threadName: 'testuser-insight',
+        result: createAiResult('Codex result'),
+        delivery: {
+          deliveryId: DELIVERY_ID,
+          providerKey: CODEX_PROVIDER_KEY,
+          analysisFingerprint: analyzedState.analysisFingerprint,
+          payloadHash: analyzedState.payloadHash,
+          basedOnPartial: false,
+          deliveryMode: 'change',
+        },
+        complete: vi.fn().mockRejectedValue(error),
+      });
+
+      const output = await runAi('testuser', { provider: 'codex' });
+
+      expect(output).toMatchObject({
+        status: 'failed',
+        reasonCode,
+        meta: { resultVersionId: 'v000001' },
+      });
+      expect(mockedSaveResultVersion).toHaveBeenCalledOnce();
+      expect(input.getState().pendingResultDelivery).toMatchObject({
+        deliveryId: DELIVERY_ID,
+        resultVersionId: 'v000001',
+      });
+      expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+    },
+  );
 
   it('should reuse a saved Codex result while completing its accepted turn', async () => {
     const result = createAiResult('Recovered Codex result');

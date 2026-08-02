@@ -11,6 +11,8 @@
 | `result.json`         | 当前 AI 分析结果                               | 永久保留 |
 | `results/`            | 不可变结果版本和有序版本 metadata              | 永久保留 |
 | `analysis-state.json` | 数据指纹、当前结果版本、pending 和 provider 态 | 永久保留 |
+| `sessions/`           | AI 会话索引和 provider 会话状态                | 永久保留 |
+| `codex-sessions.json` | 旧版 Codex 会话的只读迁移来源                  | 永久保留 |
 
 `data.keepRaw=true` 是默认配置，对应源数据永久保留。`v2er config reset data` 恢复该配置。
 
@@ -30,6 +32,7 @@ v2er config set data.rawRetention 7
 ## 对重发与外部会话的影响
 
 - 已有完整数据历史的外部会话独立保留其上下文。
+- Codex 会话写入 `sessions/`；旧版 `codex-sessions.json` 迁移后保持只读且不自动删除。
 - `--resend` 的数据来源：可读取且 provenance 匹配的 `analyzed.json`。
 - 分析上下文重建的数据来源：`analyzed.json`。
 - `raw.json` 与 `analyzed.json` 提供完整 AnalyzerOutput 的重建数据；`result.json`、`results/` 与 `analysis-state.json` 保存当前结果、不可变版本和投递状态。
