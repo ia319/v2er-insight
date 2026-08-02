@@ -57,6 +57,20 @@ interface LoadedCodexSessionStore {
   registry: CodexThreadRegistryV1;
 }
 
+export type CodexSessionStorageStatus = 'missing' | 'invalid' | 'valid';
+export type CodexSessionMigrationStatus = 'not_required' | 'pending' | 'complete' | 'conflict';
+export type CodexSessionRegistryProjectionResult =
+  | { status: 'missing' }
+  | { status: 'invalid' }
+  | { status: 'valid'; registry: CodexThreadRegistryV1 };
+
+export interface CodexSessionStorageInspection {
+  sessions: CodexSessionStorageStatus;
+  legacy: CodexSessionStorageStatus;
+  migration: CodexSessionMigrationStatus;
+  registry: CodexSessionRegistryProjectionResult;
+}
+
 function maxTimestamp(...timestamps: string[]): string {
   return timestamps.reduce((latest, timestamp) => (timestamp > latest ? timestamp : latest));
 }
@@ -126,6 +140,63 @@ function loadCodexSessionStore(username: string): LoadedCodexSessionStore | null
     (session): session is CodexSessionStateV1 => session.provider === 'codex',
   );
   return { index: result.index, sessions, registry: toRegistry(result.index, sessions) };
+}
+
+/**
+ * Inspects new and legacy Codex session storage without writing or migrating either source.
+ * @param username - Owner of the Codex session data.
+ * @returns Storage states, migration status, and an unambiguous registry projection when available.
+ */
+export function inspectCodexSessionStorage(username: string): CodexSessionStorageInspection {
+  const store = readAISessionStore(username);
+  const legacy = readCodexThreadRegistry(username);
+
+  if (store.status === 'invalid') {
+    return {
+      sessions: 'invalid',
+      legacy: legacy.status,
+      migration: 'conflict',
+      registry: { status: 'invalid' },
+    };
+  }
+  if (store.status === 'missing') {
+    return {
+      sessions: 'missing',
+      legacy: legacy.status,
+      migration:
+        legacy.status === 'valid'
+          ? 'pending'
+          : legacy.status === 'invalid'
+            ? 'conflict'
+            : 'not_required',
+      registry: legacy,
+    };
+  }
+
+  const registry = toRegistry(
+    store.index,
+    store.sessions.filter(
+      (session): session is CodexSessionStateV1 => session.provider === 'codex',
+    ),
+  );
+  if (legacy.status === 'valid') {
+    const marker = store.index.migration;
+    if (!marker || marker.sourceHash !== hashCanonicalJson(legacy.registry)) {
+      return {
+        sessions: 'valid',
+        legacy: 'valid',
+        migration: 'conflict',
+        registry: { status: 'invalid' },
+      };
+    }
+  }
+
+  return {
+    sessions: 'valid',
+    legacy: legacy.status,
+    migration: store.index.migration ? 'complete' : 'not_required',
+    registry: { status: 'valid', registry },
+  };
 }
 
 interface LegacyAnalysisReference {

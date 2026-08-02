@@ -31,6 +31,7 @@ import {
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
   ensureCodexSessionRegistry,
+  inspectCodexSessionStorage,
   updateCodexSessionRegistry,
 } from '../codex-registry';
 
@@ -115,6 +116,35 @@ describe('Codex provider session storage', () => {
     mocks.readStoredResultVersion.mockReturnValue({ status: 'missing' });
     mocks.readAISessionState.mockReturnValue({ status: 'missing' });
     mocks.readCodexThreadRegistry.mockReturnValue({ status: 'missing' });
+  });
+
+  it('inspects a pending legacy migration without writing either store', () => {
+    const registry = createLegacyRegistry();
+    mocks.readAISessionStore.mockReturnValue({ status: 'missing' });
+    mocks.readCodexThreadRegistry.mockReturnValue({ status: 'valid', registry });
+
+    expect(inspectCodexSessionStorage('alice')).toEqual({
+      sessions: 'missing',
+      legacy: 'valid',
+      migration: 'pending',
+      registry: { status: 'valid', registry },
+    });
+    expect(mocks.writeAISessionState).not.toHaveBeenCalled();
+    expect(mocks.writeAISessionIndex).not.toHaveBeenCalled();
+  });
+
+  it('reports an unmarked new and legacy store as a conflict', () => {
+    const registry = createLegacyRegistry();
+    const { index, session } = createPersistedStore();
+    mocks.readAISessionStore.mockReturnValue({ status: 'valid', index, sessions: [session] });
+    mocks.readCodexThreadRegistry.mockReturnValue({ status: 'valid', registry });
+
+    expect(inspectCodexSessionStorage('alice')).toEqual({
+      sessions: 'valid',
+      legacy: 'valid',
+      migration: 'conflict',
+      registry: { status: 'invalid' },
+    });
   });
 
   it('creates an empty index when no legacy registry exists', () => {

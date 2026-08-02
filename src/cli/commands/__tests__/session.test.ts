@@ -75,6 +75,12 @@ function createCodexReport(): CodexSessionCheckReport {
         },
       ],
     },
+    storage: {
+      status: 'inspected' as const,
+      sessions: 'missing' as const,
+      legacy: 'missing' as const,
+      migration: 'not_required' as const,
+    },
     registry: { status: 'missing' as const },
     lock: { status: 'missing' as const },
     thread: null,
@@ -110,7 +116,7 @@ describe('runSessionCheck', () => {
   it('should render the selected Codex runtime and visible models', async () => {
     mockedGetConfig.mockReturnValue({
       proxy: 'http://config-proxy.example',
-      ai: { provider: 'codex', codex: {} },
+      ai: { provider: 'codex', codex: { reasoningEffort: 'model-default' } },
     });
     mockedCheckCodexSession.mockResolvedValue(createCodexReport());
 
@@ -123,6 +129,7 @@ describe('runSessionCheck', () => {
       { proxyUrl: 'http://config-proxy.example' },
     );
     expect(mockedLogger.detail).toHaveBeenCalledWith('当前选择: gpt-current / high');
+    expect(mockedLogger.detail).toHaveBeenCalledWith('会话存储: missing');
     expect(mockedLogger.detail).toHaveBeenCalledWith(
       '- gpt-current [默认]; 默认 effort=high; 可选=medium | high',
     );

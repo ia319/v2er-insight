@@ -95,6 +95,11 @@ function renderRuntime(report: CodexSessionCheckReport): void {
 
 function renderLocalState(report: CodexSessionCheckReport): void {
   logger.section('本地 Session');
+  if (report.storage.status === 'inspected') {
+    logger.detail(`会话存储: ${report.storage.sessions}`);
+    logger.detail(`旧 Codex 注册表: ${report.storage.legacy}`);
+    logger.detail(`迁移状态: ${report.storage.migration}`);
+  }
   if (report.registry.status === 'not_requested') {
     logger.detail('用户: 未指定');
   } else if (report.registry.status === 'valid') {
@@ -141,7 +146,7 @@ function renderIssues(report: CodexSessionCheckReport): void {
 
 /**
  * Runs a read-only provider session check and renders its structured result.
- * @param username - Optional V2EX user for Codex registry and thread inspection.
+ * @param username - Optional V2EX user for Codex session storage and thread inspection.
  * @param options - Optional provider override.
  * @returns Success when the selected provider has no diagnostic errors.
  */

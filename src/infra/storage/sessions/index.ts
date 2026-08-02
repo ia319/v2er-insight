@@ -14,7 +14,14 @@ export {
   AISessionMigrationFailedError,
   AISessionStoreCorruptError,
   ensureCodexSessionRegistry,
+  inspectCodexSessionStorage,
   updateCodexSessionRegistry,
+} from './codex-registry';
+export type {
+  CodexSessionMigrationStatus,
+  CodexSessionRegistryProjectionResult,
+  CodexSessionStorageInspection,
+  CodexSessionStorageStatus,
 } from './codex-registry';
 export {
   readAISessionIndex,

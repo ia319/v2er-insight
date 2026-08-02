@@ -76,12 +76,17 @@ export type {
   AISessionIndexReadResult,
   AISessionStateReadResult,
   AISessionStoreReadResult,
+  CodexSessionMigrationStatus,
+  CodexSessionRegistryProjectionResult,
+  CodexSessionStorageInspection,
+  CodexSessionStorageStatus,
 } from './sessions';
 export {
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
   AISessionStoreCorruptError,
   ensureCodexSessionRegistry,
+  inspectCodexSessionStorage,
   readAISessionIndex,
   readAISessionState,
   readAISessionStore,
