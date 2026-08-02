@@ -197,13 +197,13 @@ Codex provider 使用以下运行边界：
 
 ## 10. 并发和幂等
 
-同一用户的 Codex 分析由跨进程锁串行化。锁范围覆盖 runtime 与 turn、结果版本写入、pending 版本关联、session 完成、provider 发送态更新及数据清理，与该用户共享的状态文件一致。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。
+同一用户的 AI 分析由跨进程锁串行化。Codex 的锁范围覆盖 runtime 与 turn、结果版本写入、pending 版本关联、session 完成、provider 发送态更新及数据清理；Gemini 使用同一锁保护共享 session index、结果关联和历史发布。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。锁文件继续使用 `.codex-execution.lock` 路径。
 
 桌面 App 已有活动回合时返回 busy 状态，并保留用户当前回合。
 
 每次分析数据投递具有本地唯一 delivery ID。外部 turn ID 存在时，pending delivery 保留该关联并在后续命令中核验；无法关联持久 turn 时返回 `AI_CODEX_TURN_STATUS_UNKNOWN`。
 
-不同用户可以并行运行，各自拥有独立 App Server 子进程与 Codex 执行锁。无待完成 Codex delivery 的 Gemini 分支独立执行；存在待完成 Codex delivery 时，同一把锁覆盖恢复与阻断判断。
+不同用户可以并行运行。相同用户的 Gemini 与 Codex 分析串行执行；Codex 命令使用独立 App Server 子进程。同一把锁覆盖待完成 delivery 的恢复与阻断判断。
 
 ## 11. 本地状态
 

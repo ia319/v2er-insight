@@ -151,7 +151,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       type: 'instruction',
       content: '将 --provider 或 ai.provider 设置为 gemini | codex，并使用对应的专属选项',
       description:
-        'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort、--new-thread 和 --codex-project',
+        'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort 和 --codex-project；两个 provider 均支持 --new-thread',
     },
   ],
   AI_CODEX_EXECUTABLE_NOT_FOUND: [
@@ -332,6 +332,25 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       type: 'command',
       content: 'v2er ai <username> --provider codex',
       description: '修复存储条件后继续幂等迁移',
+    },
+  ],
+  SESSION_BUSY: [
+    {
+      type: 'instruction',
+      content: '等待同一用户的活动 AI 分析结束后重试',
+      description: '同一用户的持久会话正在更新',
+    },
+  ],
+  SESSION_PERSIST_FAILED: [
+    {
+      type: 'instruction',
+      content: '保留 sessions/、results/ 和 analysis-state.json，并检查用户数据目录权限与剩余空间',
+      description: '结果版本可能已经保存，会话状态仍需恢复',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '重新读取 pending 结果并补全会话状态',
     },
   ],
   AI_CODEX_BUSY: [

@@ -18,8 +18,14 @@ import {
   type PendingResultDeliveryState,
   type ResultDeliveryTarget,
 } from '@/core/provenance';
+import type { ResultVersionMetadata } from '@/core/result-version';
 import { THINKING_LEVELS, type ResolvedGeminiConfig, type ThinkingLevel } from '@/config';
 import { logger } from '@/infra/logger';
+import {
+  completeGeminiAnalysisSession,
+  ensureCodexSessionRegistry,
+  prepareGeminiAnalysisSession,
+} from '@/infra/storage';
 
 const GEMINI_LOGICAL_SESSION_KEY = 'default';
 type ValidAnalyzedProvenance = Extract<AnalyzedProvenanceCheck, { status: 'valid' }>;
@@ -33,6 +39,7 @@ export interface ExecuteGeminiAnalysisOptions {
   savedResult: unknown;
   model?: string;
   thinkingLevel?: string;
+  newThread?: boolean;
   resend?: boolean;
   prepareDelivery: (target: ResultDeliveryTarget) => PendingResultDeliveryState;
 }
@@ -51,7 +58,9 @@ export type GeminiCommandExecution =
       result: AIAnalysisResult;
       warnings: ValidationResult['warnings'];
       thinkingLevel: ThinkingLevel;
+      localSessionId: string;
       delivery: PendingResultDeliveryState;
+      complete: (metadata: ResultVersionMetadata) => void;
     });
 
 function isThinkingLevel(value: string): value is ThinkingLevel {
@@ -83,7 +92,21 @@ export async function executeGeminiAnalysis(
     thinkingLevel,
     sessionKey: GEMINI_LOGICAL_SESSION_KEY,
   });
+  ensureCodexSessionRegistry(options.username);
+  const preparedSession = prepareGeminiAnalysisSession({
+    username: options.username,
+    model,
+    promptHash: options.request.promptHash,
+    systemInstruction: options.request.systemPrompt,
+    thinkingLevel,
+    forceNew: options.newThread,
+  });
   const canReuseResult =
+    options.newThread !== true &&
+    !preparedSession.isNew &&
+    preparedSession.session.lastAnalysisFingerprint === options.provenance.analysisFingerprint &&
+    preparedSession.session.lastResultVersionId ===
+      options.analysisState.currentResult?.resultVersionId &&
     options.resend !== true &&
     hasProviderReceivedAnalysis(
       options.analysisState,
@@ -130,6 +153,7 @@ export async function executeGeminiAnalysis(
   await provider.createSession(options.request.systemPrompt, {
     thinkingLevel,
     timeout: options.config.timeout,
+    history: preparedSession.session.history,
   });
   logger.section('发送完整分析数据至 AI...');
   const rawResponse = await withRetry(
@@ -144,6 +168,17 @@ export async function executeGeminiAnalysis(
     result: parsed.data,
     warnings: parsed.warnings,
     thinkingLevel,
+    localSessionId: preparedSession.session.localSessionId,
     delivery,
+    complete: (metadata) => {
+      completeGeminiAnalysisSession({
+        username: options.username,
+        prepared: preparedSession,
+        metadata,
+        requestPayload: options.request.payload,
+        result: parsed.data,
+        thinkingLevel,
+      });
+    },
   };
 }

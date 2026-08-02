@@ -39,9 +39,7 @@ export function resolveAiProviderOptions(
 
   if (
     provider === 'gemini' &&
-    (options.reasoningEffort !== undefined ||
-      options.newThread === true ||
-      options.codexProject !== undefined)
+    (options.reasoningEffort !== undefined || options.codexProject !== undefined)
   ) {
     throw new AiProviderOptionError(
       'option_not_supported',

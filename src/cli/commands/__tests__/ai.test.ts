@@ -26,6 +26,10 @@ const mockedExecuteCodexAnalysis = vi.hoisted(() => vi.fn());
 const mockedInspectCodexResultDeliverySession = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedWithCodexExecutionLock = vi.hoisted(() => vi.fn());
+const mockedEnsureCodexSessionRegistry = vi.hoisted(() => vi.fn());
+const mockedPrepareGeminiAnalysisSession = vi.hoisted(() => vi.fn());
+const mockedCompleteGeminiAnalysisSession = vi.hoisted(() => vi.fn());
+const mockedRecoverGeminiAnalysisSession = vi.hoisted(() => vi.fn());
 
 const mockCreateSession = vi.hoisted(() => vi.fn());
 const mockSendMessage = vi.hoisted(() => vi.fn());
@@ -58,6 +62,10 @@ vi.mock('@/infra/storage', async (importOriginal) => {
     saveResultVersion: mockedSaveResultVersion,
     updateAnalysisState: mockedUpdateAnalysisState,
     withCodexExecutionLock: mockedWithCodexExecutionLock,
+    ensureCodexSessionRegistry: mockedEnsureCodexSessionRegistry,
+    prepareGeminiAnalysisSession: mockedPrepareGeminiAnalysisSession,
+    completeGeminiAnalysisSession: mockedCompleteGeminiAnalysisSession,
+    recoverGeminiAnalysisSession: mockedRecoverGeminiAnalysisSession,
   };
 });
 
@@ -102,6 +110,7 @@ import packageJson from '../../../../package.json';
 const SOURCE_HASH = 'a'.repeat(64);
 const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CODEX_PROVIDER_KEY = `codex:${'d'.repeat(64)}`;
+const GEMINI_SESSION_ID = '6d8eea46-7e52-47ca-a740-34a0b01bb810';
 const defaultRequest = {
   systemPrompt: 'You are an analyst',
   promptHash: 'c'.repeat(64),
@@ -113,6 +122,48 @@ const noCleanupResult = {
   deleted: [],
   skipped: [],
 };
+
+function createPreparedGeminiSession(
+  overrides: {
+    isNew?: boolean;
+    lastAnalysisFingerprint?: string | null;
+    lastResultVersionId?: string | null;
+  } = {},
+) {
+  const timestamp = '2026-07-26T07:00:00.000Z';
+  const isNew = overrides.isNew ?? true;
+  const session = {
+    schemaVersion: 1 as const,
+    localSessionId: GEMINI_SESSION_ID,
+    username: 'testuser',
+    provider: 'gemini' as const,
+    generation: 1,
+    promptHash: defaultRequest.promptHash,
+    model: 'gemini-3.1-pro-preview',
+    createdAt: timestamp,
+    lastUsedAt: timestamp,
+    lastSuccessfulAnalysisAt:
+      overrides.lastResultVersionId === undefined || overrides.lastResultVersionId === null
+        ? null
+        : timestamp,
+    lastResultVersionId: overrides.lastResultVersionId ?? null,
+    lastAnalysisFingerprint: overrides.lastAnalysisFingerprint ?? null,
+    systemInstruction: defaultRequest.systemPrompt,
+    thinkingLevel: 'high',
+    history: [],
+  };
+  return {
+    index: {
+      schemaVersion: 1 as const,
+      lastSuccessfulAnalysisProvider: null,
+      activeByProvider: isNew ? {} : { gemini: GEMINI_SESSION_ID },
+      sessions: [],
+      updatedAt: timestamp,
+    },
+    session,
+    isNew,
+  };
+}
 
 function createAnalyzedData(partial = false): AnalyzerOutput {
   return {
@@ -242,8 +293,15 @@ function markDelivered(state: AnalysisState): void {
     stale: false,
     basedOnPartial: false,
     deliveryMode: 'change',
-    resultVersionId: null,
+    resultVersionId: 'v000001',
   };
+  mockedPrepareGeminiAnalysisSession.mockReturnValue(
+    createPreparedGeminiSession({
+      isNew: false,
+      lastAnalysisFingerprint: state.analyzed.analysisFingerprint,
+      lastResultVersionId: 'v000001',
+    }),
+  );
 }
 
 function setPendingGeminiDelivery(
@@ -337,6 +395,17 @@ describe('runAi', () => {
     );
     mockedInspectCodexResultDeliverySession.mockReturnValue('completed');
     mockedRecoverResultVersionDelivery.mockReturnValue({ status: 'missing' });
+    mockedPrepareGeminiAnalysisSession.mockReturnValue(createPreparedGeminiSession());
+    mockedCompleteGeminiAnalysisSession.mockReturnValue(undefined);
+    mockedRecoverGeminiAnalysisSession.mockImplementation(({ metadata }) => {
+      mockedPrepareGeminiAnalysisSession.mockReturnValue(
+        createPreparedGeminiSession({
+          isNew: false,
+          lastAnalysisFingerprint: metadata.analysisFingerprint,
+          lastResultVersionId: metadata.versionId,
+        }),
+      );
+    });
     mockedSaveResultVersion.mockImplementation(
       (_username: string, _result: AIAnalysisResult, source: ResultVersionSource) =>
         createSavedMetadata(source),
@@ -434,7 +503,7 @@ describe('runAi', () => {
       provider: 'gemini',
       model: 'gemini-3.1-pro-preview',
       reasoningLevel: 'high',
-      localSessionId: null,
+      localSessionId: GEMINI_SESSION_ID,
       externalThreadId: null,
       threadName: null,
       promptHash: defaultRequest.promptHash,
@@ -454,6 +523,14 @@ describe('runAi', () => {
 
     expect(result.status).toBe('skipped');
     expect(mockedRecoverResultVersionDelivery).toHaveBeenCalledWith('testuser', pending);
+    expect(mockedRecoverGeminiAnalysisSession).toHaveBeenCalledWith({
+      username: 'testuser',
+      metadata,
+      requestPayload: defaultRequest.payload,
+      systemInstruction: defaultRequest.systemPrompt,
+      result: recoveredResult,
+      thinkingLevel: 'high',
+    });
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
     expect(MockGeminiProvider).not.toHaveBeenCalled();
     expect(context.getState().pendingResultDelivery).toBeUndefined();
@@ -595,6 +672,7 @@ describe('runAi', () => {
     expect(mockCreateSession).toHaveBeenCalledWith(request.systemPrompt, {
       thinkingLevel: 'high',
       timeout: 60_000,
+      history: [],
     });
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
     expect(mockSendMessage).toHaveBeenCalledWith(request.payload);
@@ -628,6 +706,7 @@ describe('runAi', () => {
         provider: 'gemini',
         model: 'gemini-3.1-pro-preview',
         reasoningLevel: 'high',
+        localSessionId: GEMINI_SESSION_ID,
         promptHash: request.promptHash,
         dataQuality: 'complete',
         warningCount: 0,
@@ -635,24 +714,39 @@ describe('runAi', () => {
       }),
     );
     expect(mockedUpdateAnalysisState).toHaveBeenCalledTimes(3);
+    expect(mockedCompleteGeminiAnalysisSession).toHaveBeenCalledWith({
+      username: 'testuser',
+      prepared: createPreparedGeminiSession(),
+      metadata: expect.objectContaining({
+        versionId: 'v000001',
+        provider: 'gemini',
+        localSessionId: GEMINI_SESSION_ID,
+      }),
+      requestPayload: request.payload,
+      result: aiResult,
+      thinkingLevel: 'high',
+    });
     expect(context.getState().currentResult?.deliveryMode).toBe('change');
     expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
     expect(context.getState().pendingResultDelivery).toBeUndefined();
     const [prepareOrder, savedStateOrder, completedStateOrder] =
       mockedUpdateAnalysisState.mock.invocationCallOrder;
     const [saveOrder] = mockedSaveResultVersion.mock.invocationCallOrder;
+    const [sessionCompletionOrder] = mockedCompleteGeminiAnalysisSession.mock.invocationCallOrder;
     if (
       prepareOrder === undefined ||
       savedStateOrder === undefined ||
       completedStateOrder === undefined ||
-      saveOrder === undefined
+      saveOrder === undefined ||
+      sessionCompletionOrder === undefined
     ) {
       throw new Error('Expected prepared delivery, result version, and provenance writes');
     }
     expect(prepareOrder).toBeLessThan(createSessionOrder);
     expect(sendMessageOrder).toBeLessThan(saveOrder);
     expect(saveOrder).toBeLessThan(savedStateOrder);
-    expect(savedStateOrder).toBeLessThan(completedStateOrder);
+    expect(savedStateOrder).toBeLessThan(sessionCompletionOrder);
+    expect(sessionCompletionOrder).toBeLessThan(completedStateOrder);
     expect(mockedCleanExpiredData).toHaveBeenCalledWith('testuser');
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
     expect(result).toMatchObject({
@@ -772,6 +866,7 @@ describe('runAi', () => {
     expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
       thinkingLevel: 'low',
       timeout: 60_000,
+      history: [],
     });
   });
 
@@ -794,6 +889,7 @@ describe('runAi', () => {
     expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
       thinkingLevel: 'high',
       timeout: 60_000,
+      history: [],
     });
   });
 
