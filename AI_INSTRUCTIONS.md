@@ -203,6 +203,7 @@ root
 │       │   ├── result-version-files.ts # Validated index and immutable version files
 │       │   ├── result-version-lock.ts # Per-user result version write serialization
 │       │   ├── save-result-version.ts # Idempotent result save and recovery
+│       │   ├── sessions/        # AI session paths and validated atomic files
 │       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
 │           ├── index.ts      # Public API exports
@@ -733,6 +734,10 @@ Codex thread config disables web search and stable execution, browser, app, plug
 │   ├── index.json # Ordered result version metadata
 │   ├── versions/ # Immutable vNNNNNN.json result envelopes
 │   └── .write.lock # Per-user result version writer
+├── sessions/
+│   ├── index.json # Provider activity and session summaries
+│   ├── codex/ # Provider-specific Codex session files
+│   └── gemini/ # Provider-specific Gemini session files
 └── .codex-execution.lock # Per-user Codex transaction owner
 ```
 
@@ -755,6 +760,12 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `withResultVersionLock(username, operation)` → Synchronous per-user write serialization with token-checked release
 - `saveResultVersion(username, result, source)` → Idempotent result version save with current-result protection and candidate recovery
 - `recoverResultVersionDelivery(username, pending)` → Pending-delivery recovery with result/current/index repair or an explicit missing state
+- `getAISessionIndexPath(username)` → Per-user AI session index path
+- `getAISessionFilePath(username, provider, localSessionId)` → Validated provider-session file path
+- `readAISessionIndex(username)` → Missing, invalid, or validated AI session index
+- `readAISessionState(username, provider, localSessionId)` → Missing, invalid, or identity-checked provider session
+- `writeAISessionIndex(username, index)` → Validated atomic session-index replacement
+- `writeAISessionState(username, session)` → Validated atomic provider-session replacement
 - `readDataFile<T>(username, type)` → Read a registered data-file type (returns `null` on missing/invalid)
 - `readDataFileResult(username, type)` → Single-read states where `ENOENT` is `missing` and parse or other read failures are `invalid`
 - `writeDataFile(username, type, data, options?)` → Same-directory `0600` temporary write and atomic target replacement
@@ -770,7 +781,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 
 - `data.keepRaw = true` → Permanent raw/analyzed retention (default)
 - `data.keepRaw = false` → Age-based cleanup after `data.rawRetention` days (default retention: 1)
-- `result.json`, `analysis-state.json`, `codex-sessions.json`, and `results/` → Permanent retention
+- `result.json`, `analysis-state.json`, `codex-sessions.json`, `results/`, and `sessions/` → Permanent retention
 - `.codex-execution.lock` → Transaction-scoped lock; abnormal termination retains owner metadata for diagnosis
 - Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
 - `docs/data-lifecycle.md` documents user-facing retention effects and recovery commands.

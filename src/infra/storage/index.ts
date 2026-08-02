@@ -66,3 +66,16 @@ export {
   readCodexExecutionLock,
   withCodexExecutionLock,
 } from './codex-execution-lock';
+export {
+  getAISessionFilePath,
+  getAISessionIndexPath,
+  getAISessionProviderDir,
+  getAISessionsRootDir,
+} from './sessions';
+export type { AISessionIndexReadResult, AISessionStateReadResult } from './sessions';
+export {
+  readAISessionIndex,
+  readAISessionState,
+  writeAISessionIndex,
+  writeAISessionState,
+} from './sessions';
