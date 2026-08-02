@@ -12,11 +12,16 @@ export type {
 export {
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
-  AISessionStoreCorruptError,
   ensureCodexSessionRegistry,
   inspectCodexSessionStorage,
   updateCodexSessionRegistry,
 } from './codex-registry';
+export { AISessionPersistError, AISessionStoreCorruptError } from './errors';
+export type {
+  PreparedGeminiAnalysisSession,
+  PrepareGeminiAnalysisSessionOptions,
+} from './gemini-selection';
+export { prepareGeminiAnalysisSession } from './gemini-selection';
 export type {
   CodexSessionMigrationStatus,
   CodexSessionRegistryProjectionResult,

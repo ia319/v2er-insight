@@ -612,6 +612,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `BaseAISessionState` stores the local session identity, provider, generation, prompt and model identity, usage time, and nullable analysis-result association.
 - `CodexSessionStateV1` preserves the complete recoverable Codex thread state and requires `externalThreadId` to match its thread ID.
 - `GeminiSessionStateV1` stores one fixed system instruction and paired provider-neutral text history.
+- `prepareGeminiAnalysisSession()` selects a compatible active session or an unpersisted next generation.
 - `isLocalSessionId(value)` accepts canonical UUID strings before file-path construction.
 - Session validators require exact persisted keys, canonical timestamps and hashes, unique index identities, valid active-session references, paired Gemini roles, and all-or-null result association fields.
 
@@ -768,6 +769,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `readAISessionStore(username)` → Validated index plus provider files with exact summary projection checks
 - `writeAISessionIndex(username, index)` → Validated atomic session-index replacement
 - `writeAISessionState(username, session)` → Validated atomic provider-session replacement
+- `prepareGeminiAnalysisSession(options)` → Compatible active Gemini session or unpersisted next generation
 - `ensureCodexSessionRegistry(username)` → Writable Codex registry projection with locked, idempotent legacy migration
 - `inspectCodexSessionStorage(username)` → Read-only new/legacy state and migration status with an unambiguous registry projection
 - `updateCodexSessionRegistry(username, updater)` → Codex provider-file updates followed by session-index publication

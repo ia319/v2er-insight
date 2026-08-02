@@ -76,13 +76,17 @@ export type {
   CodexSessionRegistryProjectionResult,
   CodexSessionStorageInspection,
   CodexSessionStorageStatus,
+  PreparedGeminiAnalysisSession,
+  PrepareGeminiAnalysisSessionOptions,
 } from './sessions';
 export {
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
+  AISessionPersistError,
   AISessionStoreCorruptError,
   ensureCodexSessionRegistry,
   inspectCodexSessionStorage,
+  prepareGeminiAnalysisSession,
   readAISessionIndex,
   readAISessionState,
   readAISessionStore,

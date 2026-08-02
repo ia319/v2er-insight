@@ -17,20 +17,13 @@ import { hashCanonicalJson } from '@/core/provenance/canonical-json';
 import { readAnalysisState } from '../analysis-state';
 import { CodexThreadRegistryCorruptError, readCodexThreadRegistry } from '../codex-thread-registry';
 import { readStoredResultVersion } from '../result-version-files';
+import { AISessionStoreCorruptError } from './errors';
 import {
   readAISessionState,
   readAISessionStore,
   writeAISessionIndex,
   writeAISessionState,
 } from './repository';
-
-/** Reports an unreadable index or an inconsistent indexed provider file. */
-export class AISessionStoreCorruptError extends Error {
-  constructor() {
-    super('sessions/index.json or an indexed provider session is invalid or unreadable');
-    this.name = 'AISessionStoreCorruptError';
-  }
-}
 
 /** Reports new and legacy session data that cannot be reconciled automatically. */
 export class AISessionMigrationConflictError extends Error {
