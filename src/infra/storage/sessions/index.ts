@@ -10,6 +10,13 @@ export type {
   AISessionStoreReadResult,
 } from './repository';
 export {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  AISessionStoreCorruptError,
+  ensureCodexSessionRegistry,
+  updateCodexSessionRegistry,
+} from './codex-registry';
+export {
   readAISessionIndex,
   readAISessionState,
   readAISessionStore,

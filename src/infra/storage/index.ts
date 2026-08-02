@@ -78,9 +78,14 @@ export type {
   AISessionStoreReadResult,
 } from './sessions';
 export {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  AISessionStoreCorruptError,
+  ensureCodexSessionRegistry,
   readAISessionIndex,
   readAISessionState,
   readAISessionStore,
+  updateCodexSessionRegistry,
   writeAISessionIndex,
   writeAISessionState,
 } from './sessions';

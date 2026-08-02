@@ -767,6 +767,8 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `readAISessionStore(username)` → Validated index plus provider files with exact summary projection checks
 - `writeAISessionIndex(username, index)` → Validated atomic session-index replacement
 - `writeAISessionState(username, session)` → Validated atomic provider-session replacement
+- `ensureCodexSessionRegistry(username)` → Writable Codex registry projection with locked, idempotent legacy migration
+- `updateCodexSessionRegistry(username, updater)` → Codex provider-file updates followed by session-index publication
 - `readDataFile<T>(username, type)` → Read a registered data-file type (returns `null` on missing/invalid)
 - `readDataFileResult(username, type)` → Single-read states where `ENOENT` is `missing` and parse or other read failures are `invalid`
 - `writeDataFile(username, type, data, options?)` → Same-directory `0600` temporary write and atomic target replacement
