@@ -562,7 +562,8 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - **Providers** (`providers/`):
   - `GeminiProvider` → Google Gemini API adapter with multi-turn chat support.
   - `GeminiProvider.createSession(systemPrompt, options?)` supports
-    `SessionOptions` (`thinkingLevel?: ThinkingLevel`).
+    `SessionOptions` (`thinkingLevel`, `timeout`, and completed provider-neutral `history`).
+  - Gemini history is supplied once through `chats.create()`; only the new turn uses `sendMessage()`.
 - **Parser** (`parser/`):
   - `parseResponse(text)` → Extracts JSON from AI response (prioritizes ```json blocks).
   - `validateResponse(data)` → Lenient validator with deep merge, score clamping (0-100), and warnings.

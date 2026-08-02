@@ -3,6 +3,7 @@
  */
 
 import type { ThinkingLevel } from '@/config/types/ai';
+import type { ProviderNeutralMessage } from '../sessions/types';
 
 /** createSession 可选参数 */
 export interface SessionOptions {
@@ -10,6 +11,8 @@ export interface SessionOptions {
   thinkingLevel?: ThinkingLevel;
   /** 请求超时（毫秒） */
   timeout?: number;
+  /** Previously completed user/model turns supplied directly to the provider session. */
+  history?: readonly ProviderNeutralMessage[];
 }
 
 /** AI Provider 接口 */

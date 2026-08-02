@@ -2,8 +2,14 @@
  * Gemini Provider 实现 - 多轮对话
  */
 
-import { GoogleGenAI, Chat, ThinkingLevel as SdkThinkingLevel } from '@google/genai';
+import {
+  GoogleGenAI,
+  ThinkingLevel as SdkThinkingLevel,
+  type Chat,
+  type Content,
+} from '@google/genai';
 import type { ThinkingLevel } from '@/config/types/ai';
+import type { ProviderNeutralMessage } from '../sessions/types';
 import type { IAIProvider, SessionOptions } from '../types';
 
 export type { IAIProvider };
@@ -28,6 +34,13 @@ function toSdkThinkingLevel(level?: ThinkingLevel): SdkThinkingLevel | undefined
   return level ? THINKING_LEVEL_MAP[level] : undefined;
 }
 
+function toSdkHistory(history: readonly ProviderNeutralMessage[] | undefined): Content[] {
+  return (history ?? []).map((message) => ({
+    role: message.role,
+    parts: message.parts.map((part) => ({ text: part.text })),
+  }));
+}
+
 export class GeminiProvider implements IAIProvider {
   readonly name = 'gemini';
   private ai: GoogleGenAI;
@@ -43,11 +56,10 @@ export class GeminiProvider implements IAIProvider {
   }
 
   /**
-   * 创建带有系统提示词的新聊天会话
-   *
-   * @param systemPrompt 系统提示词，用于指导 AI 的角色和行为
-   * @param options.thinkingLevel 思考等级，传入项目小写值（如 'low'），
-   *   内部通过 {@link THINKING_LEVEL_MAP} 映射为 SDK 枚举后传入 thinkingConfig
+   * Creates a Gemini chat from one logical system instruction and completed local history.
+   * @param systemPrompt - Fixed instruction for the logical session.
+   * @param options - Thinking level, timeout, and validated provider-neutral history.
+   * @returns Nothing after the local SDK chat is ready.
    */
   createSession(systemPrompt: string, options?: SessionOptions): void {
     const sdkThinkingLevel = toSdkThinkingLevel(options?.thinkingLevel);
@@ -55,6 +67,7 @@ export class GeminiProvider implements IAIProvider {
 
     this.chat = this.ai.chats.create({
       model: this.model,
+      history: toSdkHistory(options?.history),
       config: {
         systemInstruction: systemPrompt,
         ...(typeof timeout === 'number' && {
