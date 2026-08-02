@@ -1,9 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
-import { createAISessionSummary } from '@/core/ai/sessions/summary';
+import { createAISessionSummary, sortAISessionSummaries } from '@/core/ai/sessions/summary';
 import {
   AI_SESSION_INDEX_SCHEMA_VERSION,
   type AISessionIndexV1,
-  type AISessionSummary,
   type CodexSessionStateV1,
 } from '@/core/ai/sessions/types';
 import { isCodexSessionStateV1 } from '@/core/ai/sessions/validator';
@@ -246,13 +245,6 @@ function migrateLegacySession(username: string, session: CodexThreadState): Code
   return migrated;
 }
 
-function sortSummaries(summaries: AISessionSummary[]): AISessionSummary[] {
-  return [...summaries].sort((left, right) => {
-    const providerOrder = left.provider.localeCompare(right.provider);
-    return providerOrder !== 0 ? providerOrder : left.generation - right.generation;
-  });
-}
-
 function migrateLegacyRegistry(
   username: string,
   registry: CodexThreadRegistryV1,
@@ -275,7 +267,7 @@ function migrateLegacyRegistry(
     writeAISessionState(username, session);
   }
 
-  const summaries = sortSummaries(sessions.map(createAISessionSummary));
+  const summaries = sortAISessionSummaries(sessions.map(createAISessionSummary));
   const hasReadyActiveSession = sessions.some(
     (session) =>
       session.localSessionId === registry.activeSessionId && session.bootstrapStatus === 'ready',
@@ -395,7 +387,10 @@ export function updateCodexSessionRegistry(
   }
 
   const otherSummaries = current.index.sessions.filter((summary) => summary.provider !== 'codex');
-  const summaries = sortSummaries([...otherSummaries, ...nextSessions.map(createAISessionSummary)]);
+  const summaries = sortAISessionSummaries([
+    ...otherSummaries,
+    ...nextSessions.map(createAISessionSummary),
+  ]);
   const activeByProvider = { ...current.index.activeByProvider };
   if (nextRegistry.activeSessionId === null) {
     delete activeByProvider.codex;

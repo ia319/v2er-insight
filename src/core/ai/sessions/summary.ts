@@ -18,3 +18,15 @@ export function createAISessionSummary(session: AISessionStateV1): AISessionSumm
     externalThreadId: session.provider === 'codex' ? session.externalThreadId : null,
   };
 }
+
+/**
+ * Orders session summaries by provider and generation for deterministic index files.
+ * @param summaries - Session summaries from one user index.
+ * @returns A sorted copy that leaves the input unchanged.
+ */
+export function sortAISessionSummaries(summaries: readonly AISessionSummary[]): AISessionSummary[] {
+  return [...summaries].sort((left, right) => {
+    const providerOrder = left.provider.localeCompare(right.provider);
+    return providerOrder !== 0 ? providerOrder : left.generation - right.generation;
+  });
+}

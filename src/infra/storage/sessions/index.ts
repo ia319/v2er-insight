@@ -18,6 +18,11 @@ export {
 } from './codex-registry';
 export { AISessionPersistError, AISessionStoreCorruptError } from './errors';
 export type {
+  CompleteGeminiAnalysisSessionOptions,
+  RecoverGeminiAnalysisSessionOptions,
+} from './gemini-analysis';
+export { completeGeminiAnalysisSession, recoverGeminiAnalysisSession } from './gemini-analysis';
+export type {
   PreparedGeminiAnalysisSession,
   PrepareGeminiAnalysisSessionOptions,
 } from './gemini-selection';
