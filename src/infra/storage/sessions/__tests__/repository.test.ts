@@ -10,6 +10,7 @@ vi.mock('../../writer', () => ({ writeJsonFileAtomically: mockedWriteJsonFileAto
 import {
   readAISessionIndex,
   readAISessionState,
+  readAISessionStore,
   writeAISessionIndex,
   writeAISessionState,
 } from '../repository';
@@ -66,6 +67,40 @@ describe('AI session repository', () => {
       data: { ...createSession(), username: 'bob' },
     });
     expect(readAISessionState('alice', 'gemini', SESSION_ID)).toEqual({ status: 'invalid' });
+  });
+
+  it('requires every indexed summary to match its provider file', () => {
+    const session = createSession();
+    const summary = {
+      localSessionId: SESSION_ID,
+      provider: 'gemini' as const,
+      generation: 1,
+      status: 'ready' as const,
+      model: session.model,
+      promptHash: HASH,
+      createdAt: session.createdAt,
+      lastUsedAt: session.lastUsedAt,
+      externalThreadId: null,
+    };
+    const index = {
+      schemaVersion: 1,
+      lastSuccessfulAnalysisProvider: null,
+      activeByProvider: {},
+      sessions: [summary],
+      updatedAt: session.lastUsedAt,
+    };
+    mockedReadJsonFileResult
+      .mockReturnValueOnce({ status: 'success', data: index })
+      .mockReturnValueOnce({ status: 'success', data: session });
+    expect(readAISessionStore('alice')).toEqual({ status: 'valid', index, sessions: [session] });
+
+    mockedReadJsonFileResult
+      .mockReturnValueOnce({ status: 'success', data: index })
+      .mockReturnValueOnce({
+        status: 'success',
+        data: { ...session, lastUsedAt: '2026-08-02T02:00:00.000Z' },
+      });
+    expect(readAISessionStore('alice')).toEqual({ status: 'invalid' });
   });
 
   it('validates session and index values before atomic writes', () => {

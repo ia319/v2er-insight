@@ -1,8 +1,10 @@
+import { isDeepStrictEqual } from 'node:util';
 import type {
   AISessionIndexV1,
   AISessionProvider,
   AISessionStateV1,
 } from '@/core/ai/sessions/types';
+import { createAISessionSummary } from '@/core/ai/sessions/summary';
 import { isAISessionIndexV1, isAISessionStateV1 } from '@/core/ai/sessions/validator';
 import { readJsonFileResult } from '../reader';
 import { writeJsonFileAtomically } from '../writer';
@@ -17,6 +19,11 @@ export type AISessionStateReadResult =
   | { status: 'missing' }
   | { status: 'invalid' }
   | { status: 'valid'; session: AISessionStateV1 };
+
+export type AISessionStoreReadResult =
+  | { status: 'missing' }
+  | { status: 'invalid' }
+  | { status: 'valid'; index: AISessionIndexV1; sessions: AISessionStateV1[] };
 
 /** Reads and validates one user's AI session index. */
 export function readAISessionIndex(username: string): AISessionIndexReadResult {
@@ -44,6 +51,29 @@ export function readAISessionState(
     return { status: 'invalid' };
   }
   return { status: 'valid', session: result.data };
+}
+
+/**
+ * Reads every indexed session and verifies that each summary matches its file.
+ * @param username - Owner of the session store.
+ * @returns The validated store or its missing/invalid state.
+ */
+export function readAISessionStore(username: string): AISessionStoreReadResult {
+  const indexResult = readAISessionIndex(username);
+  if (indexResult.status !== 'valid') return indexResult;
+
+  const sessions: AISessionStateV1[] = [];
+  for (const summary of indexResult.index.sessions) {
+    const sessionResult = readAISessionState(username, summary.provider, summary.localSessionId);
+    if (
+      sessionResult.status !== 'valid' ||
+      !isDeepStrictEqual(createAISessionSummary(sessionResult.session), summary)
+    ) {
+      return { status: 'invalid' };
+    }
+    sessions.push(sessionResult.session);
+  }
+  return { status: 'valid', index: indexResult.index, sessions };
 }
 
 /** Validates and atomically writes one provider-specific AI session. */

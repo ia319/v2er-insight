@@ -764,6 +764,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `getAISessionFilePath(username, provider, localSessionId)` → Validated provider-session file path
 - `readAISessionIndex(username)` → Missing, invalid, or validated AI session index
 - `readAISessionState(username, provider, localSessionId)` → Missing, invalid, or identity-checked provider session
+- `readAISessionStore(username)` → Validated index plus provider files with exact summary projection checks
 - `writeAISessionIndex(username, index)` → Validated atomic session-index replacement
 - `writeAISessionState(username, session)` → Validated atomic provider-session replacement
 - `readDataFile<T>(username, type)` → Read a registered data-file type (returns `null` on missing/invalid)

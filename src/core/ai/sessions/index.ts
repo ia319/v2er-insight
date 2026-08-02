@@ -1,4 +1,5 @@
 export { isLocalSessionId } from './identifiers';
+export { createAISessionSummary } from './summary';
 export type {
   AISessionIndexV1,
   AISessionProvider,

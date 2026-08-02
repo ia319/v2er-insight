@@ -4,10 +4,15 @@ export {
   getAISessionProviderDir,
   getAISessionsRootDir,
 } from './paths';
-export type { AISessionIndexReadResult, AISessionStateReadResult } from './repository';
+export type {
+  AISessionIndexReadResult,
+  AISessionStateReadResult,
+  AISessionStoreReadResult,
+} from './repository';
 export {
   readAISessionIndex,
   readAISessionState,
+  readAISessionStore,
   writeAISessionIndex,
   writeAISessionState,
 } from './repository';

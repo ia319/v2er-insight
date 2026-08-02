@@ -72,10 +72,15 @@ export {
   getAISessionProviderDir,
   getAISessionsRootDir,
 } from './sessions';
-export type { AISessionIndexReadResult, AISessionStateReadResult } from './sessions';
+export type {
+  AISessionIndexReadResult,
+  AISessionStateReadResult,
+  AISessionStoreReadResult,
+} from './sessions';
 export {
   readAISessionIndex,
   readAISessionState,
+  readAISessionStore,
   writeAISessionIndex,
   writeAISessionState,
 } from './sessions';
