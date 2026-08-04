@@ -540,6 +540,53 @@ describe('runAi', () => {
     expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
   });
 
+  it('should preserve a migration conflict while recovering a saved Gemini delivery', async () => {
+    const recoveredResult = createAiResult('Recovered result');
+    const context = mockInput();
+    const state = context.getState();
+    setPendingGeminiDelivery(state);
+    const pending = state.pendingResultDelivery;
+    if (!pending) throw new Error('Expected pending Gemini delivery');
+    const metadata = createSavedMetadata({
+      deliveryId: pending.deliveryId,
+      origin: 'analysis',
+      createdAt: '2026-07-26T07:59:00.000Z',
+      provider: 'gemini',
+      model: 'gemini-3.1-pro-preview',
+      reasoningLevel: 'high',
+      localSessionId: GEMINI_SESSION_ID,
+      externalThreadId: null,
+      threadName: null,
+      promptHash: defaultRequest.promptHash,
+      analysisFingerprint: pending.analysisFingerprint,
+      payloadHash: pending.payloadHash,
+      dataQuality: 'complete',
+      warningCount: 0,
+      appVersion: '1.2.0',
+    });
+    mockedRecoverResultVersionDelivery.mockReturnValue({
+      status: 'recovered',
+      metadata,
+      result: recoveredResult,
+    });
+    mockedRecoverGeminiAnalysisSession.mockImplementationOnce(() => {
+      throw new AISessionMigrationConflictError('sessions/index.json');
+    });
+
+    const output = await runAi('testuser', {});
+
+    expect(output).toMatchObject({
+      status: 'failed',
+      reasonCode: 'SESSION_MIGRATION_CONFLICT',
+      meta: { resultVersionId: 'v000001' },
+    });
+    expect(context.getState().pendingResultDelivery).toMatchObject({
+      deliveryId: DELIVERY_ID,
+      resultVersionId: 'v000001',
+    });
+    expect(mockedResolveApiKey).not.toHaveBeenCalled();
+  });
+
   it('should block Gemini while an accepted Codex delivery remains incomplete', async () => {
     const context = mockInput();
     setPendingCodexDelivery(context.getState());
@@ -1241,6 +1288,48 @@ describe('runAi', () => {
     );
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      name: 'session update failure',
+      error: new Error('session unavailable'),
+      reasonCode: 'SESSION_PERSIST_FAILED',
+    },
+    {
+      name: 'migration write failure',
+      error: new AISessionMigrationFailedError(new Error('write failed')),
+      reasonCode: 'SESSION_MIGRATION_FAILED',
+    },
+  ] as const)(
+    'should preserve a committed Gemini result after a $name',
+    async ({ error, reasonCode }) => {
+      const input = mockInput();
+      mockedResolveApiKey.mockReturnValue('test-api-key');
+      mockedWithRetry.mockImplementation((operation: () => unknown) => operation());
+      mockCreateSession.mockResolvedValue(undefined);
+      mockSendMessage.mockResolvedValue('response');
+      mockedParseResponse.mockReturnValue({
+        data: createAiResult('Gemini result'),
+        warnings: [],
+      });
+      mockedCompleteGeminiAnalysisSession.mockImplementationOnce(() => {
+        throw error;
+      });
+
+      const output = await runAi('testuser', { provider: 'gemini' });
+
+      expect(output).toMatchObject({
+        status: 'failed',
+        reasonCode,
+        meta: { resultVersionId: 'v000001' },
+      });
+      expect(mockedSaveResultVersion).toHaveBeenCalledOnce();
+      expect(input.getState().pendingResultDelivery).toMatchObject({
+        resultVersionId: 'v000001',
+      });
+      expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     {

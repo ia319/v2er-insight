@@ -62,13 +62,16 @@ function classifyCodexSessionPersistenceFailure(error: unknown): ReasonCode {
     : 'AI_CODEX_SESSION_UPDATE_FAILED';
 }
 
-function classifyGeminiSessionFailure(error: unknown): ReasonCode {
+function classifyGeminiSessionFailure(
+  error: unknown,
+  fallback: ReasonCode = 'AI_PROVIDER_FAILED',
+): ReasonCode {
   if (error instanceof AISessionMigrationConflictError) return 'SESSION_MIGRATION_CONFLICT';
   if (error instanceof AISessionMigrationFailedError) return 'SESSION_MIGRATION_FAILED';
   if (error instanceof AISessionPersistError || error instanceof AISessionStoreCorruptError) {
     return 'SESSION_PERSIST_FAILED';
   }
-  return 'AI_PROVIDER_FAILED';
+  return fallback;
 }
 
 /**
@@ -351,7 +354,7 @@ async function runAiForProvider(
         const reasonCode = isCodex
           ? classifyCodexSessionPersistenceFailure(error)
           : provider === 'gemini'
-            ? 'SESSION_PERSIST_FAILED'
+            ? classifyGeminiSessionFailure(error, 'SESSION_PERSIST_FAILED')
             : 'PROVENANCE_UPDATE_FAILED';
         logger.error(`协调已保存的 AI 结果状态失败: ${message}`);
         return {
@@ -707,7 +710,9 @@ async function runAiForProvider(
       const reasonCode =
         provider === 'codex'
           ? classifyCodexSessionPersistenceFailure(error)
-          : 'SESSION_PERSIST_FAILED';
+          : provider === 'gemini'
+            ? classifyGeminiSessionFailure(error, 'SESSION_PERSIST_FAILED')
+            : 'SESSION_PERSIST_FAILED';
       logger.error(`更新 AI session 状态失败: ${message}`);
       return {
         step: 'ai',
