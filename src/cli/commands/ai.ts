@@ -40,7 +40,6 @@ import {
   readAnalysisState,
   readDataFile,
   saveResultVersion,
-  type AnalysisStateReadResult,
   updateAnalysisState,
   withCodexExecutionLock,
 } from '@/infra/storage';
@@ -131,14 +130,7 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     };
   }
 
-  let execute: () => Promise<StepRunResult>;
-  if (selectedProvider === 'gemini') {
-    const initialAnalysisState = readAnalysisState(username);
-    execute = () =>
-      runAiForProvider(username, options, analyzed, config, selectedProvider, initialAnalysisState);
-  } else {
-    execute = () => runAiForProvider(username, options, analyzed, config, selectedProvider);
-  }
+  const execute = () => runAiForProvider(username, options, analyzed, config, selectedProvider);
 
   try {
     return await withCodexExecutionLock(username, execute);
@@ -185,9 +177,8 @@ async function runAiForProvider(
   analyzed: AnalyzerOutput,
   config: V2erConfig,
   selectedProvider: AIProviderId,
-  initialAnalysisState?: AnalysisStateReadResult,
 ): Promise<StepRunResult> {
-  const analysisState = initialAnalysisState ?? readAnalysisState(username);
+  const analysisState = readAnalysisState(username);
   if (analysisState.status === 'invalid') {
     logger.error(`${username} 的 analysis-state.json 无效或不可读`);
     return {

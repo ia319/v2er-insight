@@ -1058,6 +1058,30 @@ describe('runAi', () => {
     expect(mockLogger.detail).not.toHaveBeenCalledWith(expect.stringContaining('已清理中间数据'));
   });
 
+  it('should read Gemini analysis state after acquiring the execution lock', async () => {
+    let lockHeld = false;
+    mockedWithCodexExecutionLock.mockImplementation(
+      async (_username: string, operation: () => Promise<unknown>) => {
+        lockHeld = true;
+        try {
+          return await operation();
+        } finally {
+          lockHeld = false;
+        }
+      },
+    );
+    mockedReadAnalysisState.mockImplementation(() => {
+      expect(lockHeld).toBe(true);
+      return { status: 'invalid' };
+    });
+
+    const output = await runAi('testuser', { provider: 'gemini' });
+
+    expect(output).toMatchObject({ status: 'failed', reasonCode: 'PROVENANCE_STATE_INVALID' });
+    expect(mockedReadAnalysisState).toHaveBeenCalledOnce();
+    expect(lockHeld).toBe(false);
+  });
+
   it('should commit a Codex result before completing its session state', async () => {
     const input = mockInput();
     const analyzedState = input.getState().analyzed;
