@@ -357,6 +357,7 @@ function mergeCodexState(
     lastResultVersionId: previous?.lastResultVersionId ?? null,
     lastAnalysisFingerprint: previous?.lastAnalysisFingerprint ?? null,
   };
+  if (state.pendingAnalysis === undefined) delete next.pendingAnalysis;
   if (!isCodexSessionStateV1(next)) {
     throw new TypeError('Codex session update produced invalid persisted state');
   }

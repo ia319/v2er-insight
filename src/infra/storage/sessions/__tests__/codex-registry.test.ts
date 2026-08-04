@@ -317,4 +317,39 @@ describe('Codex provider session storage', () => {
       updatedAt: NOW.toISOString(),
     });
   });
+
+  it('removes a completed pending analysis from persisted Codex state', () => {
+    const { index, session } = createPersistedStore();
+    const pendingSession: CodexSessionStateV1 = {
+      ...session,
+      pendingAnalysis: {
+        deliveryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        providerKey: `codex:${HASH}`,
+        analysisFingerprint: HASH,
+        payloadHash: HASH,
+        basedOnPartial: false,
+        deliveryMode: 'change',
+        reasoningEffort: 'high',
+        turnId: 'analysis-turn',
+      },
+    };
+    mocks.readAISessionStore.mockReturnValue({
+      status: 'valid',
+      index,
+      sessions: [pendingSession],
+    });
+
+    updateCodexSessionRegistry('alice', (registry) => {
+      const completed = { ...registry.sessions[0]! };
+      delete completed.pendingAnalysis;
+      return { ...registry, sessions: [completed] };
+    });
+
+    const persisted = mocks.writeAISessionState.mock.calls[0]?.[1] as CodexSessionStateV1;
+    expect(persisted).not.toHaveProperty('pendingAnalysis');
+    expect(persisted).toMatchObject({
+      localSessionId: SESSION_ID,
+      lastTurnId: 'analysis-turn',
+    });
+  });
 });
