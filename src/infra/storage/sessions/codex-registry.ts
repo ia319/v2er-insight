@@ -405,8 +405,10 @@ export function updateCodexSessionRegistry(
     ...nextSessions.map(createAISessionSummary),
   ]);
   const activeByProvider = { ...current.index.activeByProvider };
+  let lastSuccessfulAnalysisProvider = current.index.lastSuccessfulAnalysisProvider;
   if (nextRegistry.activeSessionId === null) {
     delete activeByProvider.codex;
+    if (lastSuccessfulAnalysisProvider === 'codex') lastSuccessfulAnalysisProvider = null;
   } else {
     activeByProvider.codex = nextRegistry.activeSessionId;
   }
@@ -417,6 +419,7 @@ export function updateCodexSessionRegistry(
   );
   const index: AISessionIndexV1 = {
     ...current.index,
+    lastSuccessfulAnalysisProvider,
     activeByProvider,
     sessions: summaries,
     updatedAt,

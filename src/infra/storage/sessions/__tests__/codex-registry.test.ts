@@ -352,4 +352,25 @@ describe('Codex provider session storage', () => {
       lastTurnId: 'analysis-turn',
     });
   });
+
+  it('clears the last successful provider with the active Codex session', () => {
+    const { index, session } = createPersistedStore();
+    mocks.readAISessionStore.mockReturnValue({ status: 'valid', index, sessions: [session] });
+
+    const registry = updateCodexSessionRegistry('alice', (current) => ({
+      ...current,
+      activeSessionId: null,
+      sessions: [],
+    }));
+
+    expect(registry.activeSessionId).toBeNull();
+    expect(mocks.writeAISessionState).not.toHaveBeenCalled();
+    expect(mocks.writeAISessionIndex).toHaveBeenCalledWith(
+      'alice',
+      expect.objectContaining({
+        lastSuccessfulAnalysisProvider: null,
+        activeByProvider: {},
+      }),
+    );
+  });
 });
