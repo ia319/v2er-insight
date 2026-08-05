@@ -35,8 +35,8 @@ v2er config set data.rawRetention 7
 - Codex 会话写入 `sessions/`；旧版 `codex-sessions.json` 迁移后保持只读且不自动删除。
 - Gemini 会话在 `sessions/gemini/` 保存完整成功历史，包括 AnalyzerOutput 和模型结果。
 - `data.keepRaw=false` 和 `data.rawRetention` 不清除 Gemini 历史中的副本。
-- `--resend` 的数据来源：可读取且 provenance 匹配的 `analyzed.json`。
-- 分析上下文重建的数据来源：`analyzed.json`。
+- `--resend` 的新分析输入：从可读取且 provenance 匹配的 `analyzed.json` 重建。
+- Gemini 会话上下文：从 `sessions/gemini/` 保存的完整成功历史恢复。
 - `raw.json` 与 `analyzed.json` 提供完整 AnalyzerOutput 的重建数据；`result.json`、`results/` 与 `analysis-state.json` 保存当前结果、不可变版本和投递状态。
 
 Provider 会话的存储与恢复规则见 [AI 会话](ai-conversations.md)。
