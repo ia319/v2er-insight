@@ -261,4 +261,58 @@ describe('Gemini analysis session storage', () => {
     expect(mocks.writeAISessionState).not.toHaveBeenCalled();
     expect(mocks.writeAISessionIndex).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    { field: 'model', metadataOverride: { model: 'gemini-other' } },
+    { field: 'prompt hash', metadataOverride: { promptHash: 'e'.repeat(64) } },
+    { field: 'external thread', metadataOverride: { externalThreadId: 'thread-1' } },
+  ] as const)('rejects recovered metadata with a mismatched $field', ({ metadataOverride }) => {
+    const session = createSession();
+    const index = createIndex(session);
+    mocks.readAISessionIndex.mockReturnValue({ status: 'valid', index });
+    mocks.readAISessionState.mockReturnValue({ status: 'valid', session });
+
+    expect(() =>
+      recoverGeminiAnalysisSession({
+        username: 'alice',
+        metadata: { ...createMetadata(), ...metadataOverride },
+        requestPayload: REQUEST_PAYLOAD,
+        systemInstruction: session.systemInstruction,
+        result: RESULT,
+        thinkingLevel: 'high',
+      }),
+    ).toThrow(AISessionPersistError);
+    expect(mocks.writeAISessionState).not.toHaveBeenCalled();
+    expect(mocks.writeAISessionIndex).not.toHaveBeenCalled();
+  });
+
+  it('rejects an inconsistent repeated result association', () => {
+    const metadata = createMetadata();
+    const session = createSession({
+      lastUsedAt: metadata.createdAt!,
+      lastSuccessfulAnalysisAt: metadata.createdAt,
+      lastResultVersionId: metadata.versionId,
+      lastAnalysisFingerprint: 'e'.repeat(64),
+      history: [
+        { role: 'user', parts: [{ text: REQUEST_PAYLOAD }] },
+        { role: 'model', parts: [{ text: canonicalJsonStringify(RESULT) }] },
+      ],
+    });
+    const index = createIndex(session);
+    mocks.readAISessionIndex.mockReturnValue({ status: 'valid', index });
+    mocks.readAISessionState.mockReturnValue({ status: 'valid', session });
+
+    expect(() =>
+      recoverGeminiAnalysisSession({
+        username: 'alice',
+        metadata,
+        requestPayload: REQUEST_PAYLOAD,
+        systemInstruction: session.systemInstruction,
+        result: RESULT,
+        thinkingLevel: 'high',
+      }),
+    ).toThrow(AISessionPersistError);
+    expect(mocks.writeAISessionState).not.toHaveBeenCalled();
+    expect(mocks.writeAISessionIndex).not.toHaveBeenCalled();
+  });
 });
