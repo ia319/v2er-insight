@@ -90,6 +90,40 @@ describe('Gemini analysis session selection', () => {
     });
   });
 
+  it.each([
+    { field: 'model', override: { model: 'gemini-next' } },
+    { field: 'prompt hash', override: { promptHash: 'b'.repeat(64) } },
+    { field: 'system instruction', override: { systemInstruction: 'Analyze cautiously.' } },
+  ] as const)('creates the next generation when the $field changes', ({ override }) => {
+    const session = createSession();
+    const index = createIndex(session);
+    mocks.readAISessionStore.mockReturnValue({ status: 'valid', index, sessions: [session] });
+
+    const next = prepareGeminiAnalysisSession(
+      {
+        username: 'alice',
+        model: session.model,
+        promptHash: session.promptHash,
+        systemInstruction: session.systemInstruction,
+        thinkingLevel: 'high',
+        ...override,
+      },
+      () => NOW,
+      () => NEW_SESSION_ID,
+    );
+
+    expect(next).toMatchObject({
+      index,
+      isNew: true,
+      session: {
+        localSessionId: NEW_SESSION_ID,
+        generation: 2,
+        history: [],
+        ...override,
+      },
+    });
+  });
+
   it('rejects a missing or invalid shared session store', () => {
     mocks.readAISessionStore.mockReturnValue({ status: 'missing' });
 
