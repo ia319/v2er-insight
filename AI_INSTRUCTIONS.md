@@ -414,7 +414,7 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 - Unchanged delivery reuse requires the same target fingerprint and a fresh `result.json` that satisfies the complete `AIAnalysisResult` contract.
 - `--resend` bypasses reuse and records `currentResult.deliveryMode = 'resend'`.
 - Partial-capture analysis produces a warning for provider delivery and unchanged-result reuse.
-- Gemini validates or migrates the shared session store before credential access, then persists or reuses one pending delivery before provider session creation or message delivery.
+- Gemini calls `ensureCodexSessionRegistry()` before credential access; the call validates an existing shared store, migrates a valid legacy `codex-sessions.json` into Codex provider files and the shared index, or creates an empty shared index.
 - Gemini provider and parse failures retain the uncommitted pending delivery; a retry to the same target reuses its delivery ID.
 - Analyzed provenance is revalidated immediately before Gemini result-version persistence.
 - Successful Gemini output enters `saveResultVersion()` with actual model, thinking level, prompt hash, capture quality, warning count, and application version.

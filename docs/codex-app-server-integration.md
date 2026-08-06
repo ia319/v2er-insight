@@ -209,7 +209,7 @@ Codex provider 使用以下运行边界：
 
 `sessions/index.json` 保存 provider 活动指针、会话摘要和迁移标记。`sessions/codex/<localSessionId>.json` 保存恢复所需的 session 身份、Project、模型、提示词哈希、初始化阶段、turn ID、pending delivery identity、可执行文件路径与版本、App Server instruction sources、时间戳和最近结果关联。Local session ID 使用规范 UUID；local session ID、thread ID、generation 和显示名保持唯一，活动 ID 只引用 ready session。
 
-旧安装的 `codex-sessions.json` 仅作为只读迁移来源。首次 Codex 写操作在同一用户执行锁内校验旧注册表，把各 session 文件写入后再发布索引；相同内容的既有 session 文件支持中断后继续。新旧存储同时存在时，索引必须包含与旧注册表内容哈希一致的迁移标记，否则返回 `SESSION_MIGRATION_CONFLICT`，不发送模型消息。迁移写入失败返回 `SESSION_MIGRATION_FAILED`。迁移完成后只写 `sessions/`，不修改或删除旧文件。
+旧安装的 `codex-sessions.json` 仅作为只读迁移来源。Gemini 与 Codex 分析在 provider 访问前初始化共享会话存储；初始化在同一用户执行锁内校验旧注册表，把各 Codex session 文件写入后再发布索引。相同内容的既有 session 文件支持中断后继续。新旧存储同时存在时，索引必须包含与旧注册表内容哈希一致的迁移标记，否则返回 `SESSION_MIGRATION_CONFLICT`，不发送模型消息。迁移写入失败返回 `SESSION_MIGRATION_FAILED`。迁移完成后只写 `sessions/`，不修改或删除旧文件。
 
 Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Session turn 完成后，provider 文件和 index 关联该结果版本；随后 provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
 
@@ -244,7 +244,7 @@ Pending delivery identity 在外部请求前持久化，App Server 接受后关�
 | Turn 状态未知          | App thread 状态核对与显式重发决策                           |
 | 最终回复缺失或结果无效 | 旧画像和 delivery 状态保持不变                              |
 | Session 迁移冲突       | 保留新旧存储并通过只读诊断核对迁移标记与 session 身份       |
-| Session 迁移失败       | 修复目录权限或空间后，再次执行同一 Codex 命令               |
+| Session 迁移失败       | 修复目录权限或空间后，再次执行同一 AI 命令                  |
 | Session 完成失败       | 再次执行同一 Codex 命令，恢复已保存版本、原 turn 和结果关联 |
 
 CLI 原因码覆盖可执行文件缺失或不兼容、账户不可用、协议错误、模型或 effort 不可用、Project 不可用、thread 身份丢失、turn 失败或状态未知、输出无效、超时、本地状态无效、执行占用、锁失败、session 迁移和 session 完成失败。恢复动作由原因码集中映射，Codex 已分类故障使用 Codex session 检查、App 状态核对、配置修正或显式新 generation。
