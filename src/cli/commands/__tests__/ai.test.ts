@@ -1296,6 +1296,11 @@ describe('runAi', () => {
       reasonCode: 'SESSION_PERSIST_FAILED',
     },
     {
+      name: 'migration conflict',
+      error: new AISessionMigrationConflictError('sessions/index.json'),
+      reasonCode: 'SESSION_MIGRATION_CONFLICT',
+    },
+    {
       name: 'migration write failure',
       error: new AISessionMigrationFailedError(new Error('write failed')),
       reasonCode: 'SESSION_MIGRATION_FAILED',
