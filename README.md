@@ -68,17 +68,17 @@ v2er <username>
 v2er <username>
 ```
 
-| 选项                          | 说明                                        |
-| ----------------------------- | ------------------------------------------- |
-| `--force`                     | 强制重新抓取（忽略本地缓存）                |
-| `--provider <provider>`       | 本次使用 `gemini` 或 `codex`                |
-| `--model [name]`              | 指定当前 provider 的模型                    |
-| `--thinking-level [level]`    | Gemini 思考等级                             |
-| `--reasoning-effort <effort>` | Codex 思考深度；可用值由当前模型目录决定    |
-| `--new-thread`                | 为所选 provider 创建新的 session generation |
-| `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径         |
-| `--resend`                    | 强制重新发送完整分析数据                    |
-| `-v, --verbose`               | 显示调试输出                                |
+| 选项                          | 说明                                     |
+| ----------------------------- | ---------------------------------------- |
+| `--force`                     | 强制重新抓取（忽略本地缓存）             |
+| `--provider <provider>`       | 本次使用 `gemini` 或 `codex`             |
+| `--model [name]`              | 指定当前 provider 的模型                 |
+| `--thinking-level [level]`    | Gemini 思考等级                          |
+| `--reasoning-effort <effort>` | Codex 思考深度；可用值由当前模型目录决定 |
+| `--new-thread`                | 为所选 provider 创建新一代会话           |
+| `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径      |
+| `--resend`                    | 强制重新发送完整分析数据                 |
+| `-v, --verbose`               | 显示调试输出                             |
 
 一键命令根据本地 `raw.json`、`analyzed.json` 和 `result.json` 选择执行起点。`analysis-state.json` 提供 analyze 与 AI 步骤的 provenance 校验状态。`--force` 从抓取步骤重新执行。
 
@@ -121,19 +121,26 @@ v2er analyze <username>
 v2er ai <username> [选项]
 ```
 
-| 选项                          | 说明                                 |
-| ----------------------------- | ------------------------------------ |
-| `--provider <provider>`       | 本次使用 `gemini` 或 `codex`         |
-| `--model [name]`              | 指定当前 provider 的模型             |
-| `--thinking-level [level]`    | 指定 Gemini 思考等级                 |
-| `--reasoning-effort <effort>` | 指定 Codex 思考深度                  |
-| `--new-thread`                | 创建新的 provider session generation |
-| `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径  |
-| `--resend`                    | 强制重新发送完整分析数据             |
+| 选项                          | 说明                                |
+| ----------------------------- | ----------------------------------- |
+| `--provider <provider>`       | 本次使用 `gemini` 或 `codex`        |
+| `--model [name]`              | 指定当前 provider 的模型            |
+| `--thinking-level [level]`    | 指定 Gemini 思考等级                |
+| `--reasoning-effort <effort>` | 指定 Codex 思考深度                 |
+| `--new-thread`                | 为所选 provider 创建新一代会话      |
+| `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径 |
+| `--resend`                    | 强制重新发送完整分析数据            |
 
 AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。每次成功分析保存当前 `result.json` 和一个不可变结果版本；命令结果的 `meta.resultVersionId` 标识对应版本。
 
-每次成功分析同时更新该 provider 的活动 session。Codex 按 thread ID 恢复远端历史；Gemini 从永久本地历史重建 SDK Chat。`--new-thread` 为所选 provider 创建新的 generation。存储、恢复和 Gemini 上下文成本见 [AI 会话](docs/ai-conversations.md)。
+AI 会话行为：
+
+- 成功分析更新所选 provider 的活动 session。
+- Codex 按 thread ID 恢复远端历史。
+- Gemini 从永久保留的本地历史重建 SDK Chat。
+- `--new-thread` 为所选 provider 创建新一代会话。
+
+存储、恢复和 Gemini 上下文成本见 [AI 会话](docs/ai-conversations.md)。
 
 默认 provider 为 `gemini`。
 

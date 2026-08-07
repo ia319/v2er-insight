@@ -90,7 +90,7 @@ Windows 发现通过只读进程路径查询取得正在运行的 `codex.exe`；
 - 恢复键：App Server 返回的 thread ID。
 - Project 归组键：通过统一优先级解析并规范化的绝对路径，由 `thread/start.cwd` 传入。
 
-新 generation 从会话索引中的最大 generation 递增。生成的显示名与本地 session 记录冲突时继续递增，保持 generation 和显示名唯一。
+新 generation 的编号取会话索引中的最大 generation 值加一。生成的显示名与本地 session 记录冲突时继续递增，保持 generation 和显示名唯一。
 
 日常分析更新复用活动 thread。提示词版本变化、实际模型与活动 session 不一致或用户显式新建请求产生新的 generation；思考深度变化作用于下一轮。
 
@@ -207,11 +207,11 @@ Codex provider 使用以下运行边界：
 
 ## 11. 本地状态
 
-`sessions/index.json` 保存 provider 活动指针、会话摘要和迁移标记。`sessions/codex/<localSessionId>.json` 保存恢复所需的 session 身份、Project、模型、提示词哈希、初始化阶段、turn ID、pending delivery identity、可执行文件路径与版本、App Server instruction sources、时间戳和最近结果关联。Local session ID 使用规范 UUID；local session ID、thread ID、generation 和显示名保持唯一，活动 ID 只引用 ready session。
+`sessions/index.json` 保存 provider 活动指针、会话摘要和迁移标记。`sessions/codex/<localSessionId>.json` 保存恢复所需的 session 身份、Project、模型、提示词哈希、初始化阶段、turn ID、pending delivery identity、可执行文件路径与版本、App Server instruction sources、时间戳和最近结果关联。local session ID 使用规范 UUID；local session ID、thread ID、generation 和显示名保持唯一，活动 ID 只引用 ready session。
 
-旧安装的 `codex-sessions.json` 仅作为只读迁移来源。Gemini 与 Codex 分析在 provider 访问前初始化共享会话存储；初始化在同一用户执行锁内校验旧注册表，把各 Codex session 文件写入后再发布索引。相同内容的既有 session 文件支持中断后继续。新旧存储同时存在时，索引必须包含与旧注册表内容哈希一致的迁移标记，否则返回 `SESSION_MIGRATION_CONFLICT`，不发送模型消息。迁移写入失败返回 `SESSION_MIGRATION_FAILED`。迁移完成后只写 `sessions/`，不修改或删除旧文件。
+旧安装的 `codex-sessions.json` 仅作为只读迁移来源。Gemini 与 Codex 分析在 provider 访问前初始化共享会话存储；初始化在该用户的执行锁内校验旧注册表，把各 Codex session 文件写入后再发布索引。相同内容的既有 session 文件支持中断后继续。新旧存储同时存在时，索引必须包含与旧注册表内容哈希一致的迁移标记，否则返回 `SESSION_MIGRATION_CONFLICT`，不发送模型消息。迁移写入失败返回 `SESSION_MIGRATION_FAILED`。迁移完成后只写 `sessions/`，不修改或删除旧文件。
 
-Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Session turn 完成后，provider 文件和 index 关联该结果版本；随后 provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
+Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Codex turn 完成后，provider 文件和会话索引关联该结果版本；随后 provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
 
 完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史。解析后的画像结果保存于 `results/versions/vNNNNNN.json` 不可变 envelope、`results/index.json` 和当前 `result.json`；版本 metadata 保存 model、reasoning effort、local session ID、thread ID、thread name 和分析来源哈希。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
 

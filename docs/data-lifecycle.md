@@ -29,7 +29,7 @@ v2er config set data.rawRetention 7
 
 配置启用或调整清理策略时显示 `DATA_RETENTION_ENABLED`。实际删除文件时显示 `DATA_FILES_CLEANED`，并列出保留期、删除文件和恢复命令。stderr 承载 notice 摘要、影响、恢复步骤和文档路径；stdout 保留主要结果。
 
-## 对重发与外部会话的影响
+## 对重发与 AI 会话的影响
 
 - 已有完整数据历史的外部会话独立保留其上下文。
 - Codex 会话写入 `sessions/`；旧版 `codex-sessions.json` 迁移后保持只读且不自动删除。
