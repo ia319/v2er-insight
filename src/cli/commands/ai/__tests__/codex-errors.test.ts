@@ -14,7 +14,12 @@ import {
   CodexAppServerRequestTimeoutError,
   type CodexExecutableCandidate,
 } from '@/infra/codex';
-import { CodexThreadRegistryCorruptError } from '@/infra/storage';
+import {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  AISessionStoreCorruptError,
+  CodexThreadRegistryCorruptError,
+} from '@/infra/storage';
 import { classifyCodexFailure, type CodexFailureReasonCode } from '../codex-errors';
 
 const CANDIDATE: CodexExecutableCandidate = {
@@ -124,6 +129,21 @@ const CASES: readonly {
     name: 'corrupt registry',
     error: new CodexThreadRegistryCorruptError(),
     expected: 'AI_CODEX_STATE_INVALID',
+  },
+  {
+    name: 'corrupt session store',
+    error: new AISessionStoreCorruptError(),
+    expected: 'AI_CODEX_STATE_INVALID',
+  },
+  {
+    name: 'session migration conflict',
+    error: new AISessionMigrationConflictError('sessions/index.json'),
+    expected: 'SESSION_MIGRATION_CONFLICT',
+  },
+  {
+    name: 'session migration failure',
+    error: new AISessionMigrationFailedError(new Error('write failed')),
+    expected: 'SESSION_MIGRATION_FAILED',
   },
   {
     name: 'protocol failure',

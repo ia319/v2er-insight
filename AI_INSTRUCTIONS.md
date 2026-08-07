@@ -42,6 +42,7 @@ root
 ├── docs/                     # Documentation & Specifications
 │   ├── prompt.md             # AI system prompt template (copy)
 │   ├── data-lifecycle.md     # Source-data retention, cleanup, and recovery
+│   ├── ai-conversations.md   # Provider session persistence and history behavior
 │   ├── codex-app-server-integration.md # Codex local-provider architecture
 │   ├── analyzer-output/      # [Analyzer -> AI] Input data schema
 │   │   ├── output-schema.md      # Field-level specification
@@ -165,6 +166,13 @@ root
 │   │       │   ├── index.ts         # Re-exports providers
 │   │       │   ├── gemini.ts        # Google Gemini provider
 │   │       │   └── codex/           # Codex model resolution and provider components
+│   │       ├── sessions/        # Durable provider-session contracts
+│   │       │   ├── __tests__/       # Session identifier, summary, and validator tests
+│   │       │   ├── identifiers.ts   # Canonical local session ID validation
+│   │       │   ├── index.ts         # Public session contract exports
+│   │       │   ├── summary.ts       # Provider state to index summary projection
+│   │       │   ├── types.ts         # Session index and provider state types
+│   │       │   └── validator.ts     # Cross-session and history validation
 │   │       ├── parser/          # Response parsing & validation
 │   │       │   ├── index.ts         # parseResponse()
 │   │       │   └── validator.ts     # Lenient response validator
@@ -199,6 +207,7 @@ root
 │       │   ├── result-version-files.ts # Validated index and immutable version files
 │       │   ├── result-version-lock.ts # Per-user result version write serialization
 │       │   ├── save-result-version.ts # Idempotent result save and recovery
+│       │   ├── sessions/        # AI session paths and validated atomic files
 │       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
 │           ├── index.ts      # Public API exports
@@ -363,7 +372,7 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `--model [name]` → Specify the selected provider model (optional value)
 - `--thinking-level [level]` → Specify Gemini thinking level (optional value)
 - `--reasoning-effort <effort>` → Specify Codex reasoning effort
-- `--new-thread` → Create a new Codex thread generation
+- `--new-thread` → Create a new session generation for the selected provider
 - `--codex-project <path>` → Specify the Project path for a new Codex thread
 - `--resend` → Force resend complete analyzed data
 - `-v, --verbose` → Show debug output
@@ -408,15 +417,17 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 - Unchanged delivery reuse requires the same target fingerprint and a fresh `result.json` that satisfies the complete `AIAnalysisResult` contract.
 - `--resend` bypasses reuse and records `currentResult.deliveryMode = 'resend'`.
 - Partial-capture analysis produces a warning for provider delivery and unchanged-result reuse.
-- Gemini persists or reuses one pending delivery after API-key validation and before provider session creation or message delivery.
+- Gemini calls `ensureCodexSessionRegistry()` while `runAi()` holds the per-user execution lock and before session selection, result reuse, credential access, or provider access.
+- Shared session-store initialization validates an existing store, migrates a valid legacy `codex-sessions.json` into Codex provider files and the shared index, or creates an empty shared index.
+- After credential resolution, Gemini persists pending delivery before SDK Chat creation and AnalyzerOutput delivery.
 - Gemini provider and parse failures retain the uncommitted pending delivery; a retry to the same target reuses its delivery ID.
 - Analyzed provenance is revalidated immediately before Gemini result-version persistence.
 - Successful Gemini output enters `saveResultVersion()` with actual model, thinking level, prompt hash, capture quality, warning count, and application version.
-- Gemini records the saved version on pending/current state before provider hashes advance and pending state clears.
-- Gemini result-write failures preserve the uncommitted pending delivery; post-save state failures preserve the immutable version for delivery-ID recovery without another provider request.
+- Gemini records the saved version on pending/current state, appends the successful input/result pair to its provider session, publishes the session index, then advances provider hashes and clears pending state.
+- Gemini result-write failures preserve the uncommitted pending delivery; post-save state or session failures preserve the immutable version for delivery-ID recovery without another provider request.
 - Codex mirrors the App Server delivery ID into `analysis-state.json` after a parsed result and before result-version persistence.
 - Successful Codex output enters `saveResultVersion()` with actual model, reasoning effort, local session ID, external thread ID, thread name, prompt hash, capture quality, and application version.
-- Codex records the saved version on pending/current state, completes the accepted session turn, then advances provider hashes and clears pending state.
+- Codex records the saved version on pending/current state, completes the accepted session turn, associates the version and analysis fingerprint with the provider file, publishes the shared index, then advances provider hashes and clears pending state.
 - Saved Codex delivery recovery compares the pending identity with the owning session. A matching accepted turn reuses the saved result; a completed session advances provider provenance without another model request.
 - An unresolved Codex delivery blocks Gemini execution and remains under the per-user Codex lock until session reconciliation.
 - `runShow()` accepts complete `AIAnalysisResult` values and derives stale and partial notices from valid current-result provenance.
@@ -481,7 +492,7 @@ Provider and Gemini thinking enums use the exported runtime allowlists. Legacy a
 
 Main and `ai` commands forward provider, model, Gemini thinking level, Codex reasoning effort, new-thread request, Codex Project override, and resend intent through the workflow boundary.
 
-Provider option resolution validates the configured or CLI provider against `AI_PROVIDERS` before provider access. Gemini rejects Codex Project, reasoning-effort, and new-thread options; Codex rejects Gemini thinking-level options.
+Provider option resolution validates the configured or CLI provider against `AI_PROVIDERS` before provider access. Gemini rejects Codex Project and reasoning-effort options; Codex rejects Gemini thinking-level options. Both providers accept `--new-thread`.
 
 `v2er session check [username] [--provider gemini|codex]` uses the provider diagnostic RPC surface. Gemini output contains resolved model, thinking level, and API-key availability. Codex follows runtime priority for sequential candidate probing and retains candidate source, executable trust, version state, selected runtime/account metadata, the live visible model catalog, Project resolution, execution lock, registry summary, and one target thread summary when a user is supplied. Unvisited candidates retain a `not_checked` version state; model-configuration fallback reuses recorded version probes. Credential-store access remains inside the owned App Server.
 
@@ -557,7 +568,8 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - **Providers** (`providers/`):
   - `GeminiProvider` → Google Gemini API adapter with multi-turn chat support.
   - `GeminiProvider.createSession(systemPrompt, options?)` supports
-    `SessionOptions` (`thinkingLevel?: ThinkingLevel`).
+    `SessionOptions` (`thinkingLevel`, `timeout`, and completed provider-neutral `history`).
+  - Gemini history is supplied once through `chats.create()`; only the new turn uses `sendMessage()`.
 - **Parser** (`parser/`):
   - `parseResponse(text)` → Extracts JSON from AI response (prioritizes ```json blocks).
   - `validateResponse(data)` → Lenient validator with deep merge, score clamping (0-100), and warnings.
@@ -600,6 +612,18 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - A repeated matching delivery ID returns its existing version; a missing current file is restored from that envelope.
 - One valid unindexed candidate resumes only when its previous latest/current identities match; ambiguous, conflicting, corrupt, or divergent states remain unchanged.
 
+**AI Session Contract** (`src/core/ai/sessions/`):
+
+- `AISessionIndexV1` stores provider activity, session summaries, migration identity, and index update time.
+- `BaseAISessionState` stores the local session identity, provider, generation, prompt and model identity, usage time, and nullable analysis-result association.
+- `CodexSessionStateV1` preserves the complete recoverable Codex thread state and requires `externalThreadId` to match its thread ID.
+- `GeminiSessionStateV1` stores one fixed system instruction and provider-neutral history containing paired user and model text messages.
+- `prepareGeminiAnalysisSession()` selects a compatible active session or an unpersisted next generation.
+- `completeGeminiAnalysisSession()` appends one deterministic user/model pair after result-version commit and publishes the active index last.
+- `recoverGeminiAnalysisSession()` reconstructs or republishes session state from committed Gemini result metadata without another provider request.
+- `isLocalSessionId(value)` accepts canonical UUID strings before file-path construction.
+- Session validators require exact persisted keys, canonical timestamps and hashes, unique index identities, valid active-session references, paired Gemini roles, and all-or-null result association fields.
+
 **Defaults** (from `config/defaults.ts`):
 
 - Provider: `gemini`
@@ -620,11 +644,16 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - Gemini execution resolves reuse, API credentials, durable pre-request delivery preparation, retry policy, response parsing, and delivery provenance in `cli/commands/ai/gemini.ts`.
 - Codex execution states from `cli/commands/ai/codex.ts`: skipped, busy, or parsed result with delivery ID, local session ID, external thread ID, and thread name; no Gemini API key dependency.
 - `inspectCodexResultDeliverySession()` → Exact pending-delivery comparison against the owning Codex session and `pending` or `completed` recovery status.
+- `recoverCodexAnalysisSession()` → Pending-turn classification or idempotent Codex result association with provider-file-first index repair.
 - Gemini and Codex save every successful result through `saveResultVersion()` and return `resultVersionId` in successful command metadata.
-- Codex session completion follows immutable version, `result.json`, index, and pending-version association writes.
+- Gemini recreates each SDK Chat from one fixed system instruction and the complete successful provider-neutral history; only the current AnalyzerOutput uses `sendMessage()`.
+- Gemini session completion occurs after the immutable result version, current result, result index, and pending-version association are persisted. Recovery repairs a missing session or index publication from the committed version.
+- Codex session completion occurs after the immutable version, `result.json`, result index, and pending-version association are persisted.
 - Codex session completion failures preserve the saved version ID on pending analysis state for retry without another model request.
-- Codex analysis holds one per-user cross-process lock across runtime execution, result/provenance persistence, session completion, and cleanup.
-- Concurrent Codex commands return `AI_CODEX_BUSY` with validated owner PID and acquisition time when available. Filesystem or ownership failures return `AI_CODEX_LOCK_FAILED`.
+- Gemini and Codex analysis hold one per-user cross-process lock across session-store migration, provider execution, result/provenance persistence, session completion, and cleanup.
+- Concurrent Codex commands return `AI_CODEX_BUSY`; concurrent Gemini commands return `SESSION_BUSY`.
+- Gemini execution-lock, session persistence, and session-store corruption failures return `SESSION_PERSIST_FAILED`. Gemini legacy migration conflicts and migration-write failures return `SESSION_MIGRATION_CONFLICT` and `SESSION_MIGRATION_FAILED`.
+- Codex session recovery or completion failures return `AI_CODEX_SESSION_UPDATE_FAILED`, except migration conflicts and migration-write failures retain `SESSION_MIGRATION_CONFLICT` and `SESSION_MIGRATION_FAILED`. Codex lock filesystem or ownership failures retain `AI_CODEX_LOCK_FAILED`.
 - Typed Codex runtime, Project, protocol, timeout, thread, turn, output, and registry failures map to provider-specific reason codes and recovery actions at the CLI boundary. Unclassified errors retain the shared provider failure fallback.
 
 ### 9. Retry Module (Complete)
@@ -715,12 +744,16 @@ Codex thread config disables web search and stable execution, browser, app, plug
 ├── analyzed.json   # Analyzer output
 ├── result.json     # AI analysis results
 ├── analysis-state.json # Durable provenance and provider delivery state
-├── codex-sessions.json # Validated Codex thread registry
+├── codex-sessions.json # Read-only legacy Codex migration source
 ├── results/
 │   ├── index.json # Ordered result version metadata
 │   ├── versions/ # Immutable vNNNNNN.json result envelopes
 │   └── .write.lock # Per-user result version writer
-└── .codex-execution.lock # Per-user Codex transaction owner
+├── sessions/
+│   ├── index.json # Provider activity and session summaries
+│   ├── codex/ # Provider-specific Codex session files
+│   └── gemini/ # Provider-specific Gemini session files
+└── .codex-execution.lock # Per-user AI analysis transaction owner
 ```
 
 **Public API** (valid username pattern: `/^[a-zA-Z0-9_-]+$/`; other values throw Error):
@@ -742,13 +775,26 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `withResultVersionLock(username, operation)` → Synchronous per-user write serialization with token-checked release
 - `saveResultVersion(username, result, source)` → Idempotent result version save with current-result protection and candidate recovery
 - `recoverResultVersionDelivery(username, pending)` → Pending-delivery recovery with result/current/index repair or an explicit missing state
+- `getAISessionIndexPath(username)` → Per-user AI session index path
+- `getAISessionFilePath(username, provider, localSessionId)` → Validated provider-session file path
+- `readAISessionIndex(username)` → Missing, invalid, or validated AI session index
+- `readAISessionState(username, provider, localSessionId)` → Missing, invalid, or identity-checked provider session
+- `readAISessionStore(username)` → Validated index plus provider files with exact summary projection checks
+- `writeAISessionIndex(username, index)` → Validated atomic session-index replacement
+- `writeAISessionState(username, session)` → Validated atomic provider-session replacement
+- `prepareGeminiAnalysisSession(options)` → Compatible active Gemini session or unpersisted next generation
+- `completeGeminiAnalysisSession(options)` → Result-associated history append with provider-file-first publication
+- `recoverGeminiAnalysisSession(options)` → Idempotent repair after result-version commit
+- `recoverCodexAnalysisSession(options)` → Accepted-turn status and idempotent result association repair
+- `ensureCodexSessionRegistry(username)` → Writable Codex registry projection with idempotent legacy migration; requires the caller to hold the per-user Codex execution lock
+- `inspectCodexSessionStorage(username)` → Read-only new/legacy state and migration status with an unambiguous registry projection
+- `updateCodexSessionRegistry(username, updater)` → Codex provider-file updates followed by session-index publication
 - `readDataFile<T>(username, type)` → Read a registered data-file type (returns `null` on missing/invalid)
 - `readDataFileResult(username, type)` → Single-read states where `ENOENT` is `missing` and parse or other read failures are `invalid`
 - `writeDataFile(username, type, data, options?)` → Same-directory `0600` temporary write and atomic target replacement
 - `readAnalysisState(username)` → Missing/invalid/valid distinctions with validated v1-to-v2 in-memory migration
 - `updateAnalysisState(username, updater)` → Validated v2 update and atomic persistence; migrated v1 state writes only on update
-- `readCodexThreadRegistry(username)` → Validated `codex-sessions.json` with missing/invalid/valid distinctions
-- `updateCodexThreadRegistry(username, updater)` → Corruption-protected registry update with validation and atomic persistence
+- `readCodexThreadRegistry(username)` → Read-only legacy `codex-sessions.json` with missing/invalid/valid distinctions
 - `readCodexExecutionLock(username)` → Missing, invalid, or validated owner state for the per-user Codex lock
 - `withCodexExecutionLock(username, operation)` → `wx`-acquired `0600` cross-process lock with token-checked release
 - `cleanExpiredData(username)` → Cleanup enablement, retention, deleted files, and typed skip diagnostics
@@ -757,8 +803,10 @@ Codex thread config disables web search and stable execution, browser, app, plug
 
 - `data.keepRaw = true` → Permanent raw/analyzed retention (default)
 - `data.keepRaw = false` → Age-based cleanup after `data.rawRetention` days (default retention: 1)
-- `result.json`, `analysis-state.json`, `codex-sessions.json`, and `results/` → Permanent retention
-- `.codex-execution.lock` → Transaction-scoped lock; abnormal termination retains owner metadata for diagnosis
+- `result.json`, `analysis-state.json`, `codex-sessions.json`, `results/`, and `sessions/` → Permanent retention
+- Codex writes to `sessions/`; a valid legacy registry migrates provider files before index publication and remains unchanged
+- New and legacy stores require a matching migration source hash; missing or mismatched markers stop model execution
+- `.codex-execution.lock` → AI analysis transaction lock shared by Gemini and Codex; abnormal termination retains owner metadata for diagnosis
 - Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
 - `docs/data-lifecycle.md` documents user-facing retention effects and recovery commands.
 

@@ -38,7 +38,7 @@ describe('getRecoveryActions', () => {
         type: 'instruction',
         content: '将 --provider 或 ai.provider 设置为 gemini | codex，并使用对应的专属选项',
         description:
-          'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort、--new-thread 和 --codex-project',
+          'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort 和 --codex-project；两个 provider 均支持 --new-thread',
       },
     ]);
   });

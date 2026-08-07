@@ -75,7 +75,7 @@ v2er <username>
 | `--model [name]`              | 指定当前 provider 的模型                 |
 | `--thinking-level [level]`    | Gemini 思考等级                          |
 | `--reasoning-effort <effort>` | Codex 思考深度；可用值由当前模型目录决定 |
-| `--new-thread`                | 为 Codex 创建新的 thread generation      |
+| `--new-thread`                | 为所选 provider 创建新一代会话           |
 | `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径      |
 | `--resend`                    | 强制重新发送完整分析数据                 |
 | `-v, --verbose`               | 显示调试输出                             |
@@ -127,11 +127,20 @@ v2er ai <username> [选项]
 | `--model [name]`              | 指定当前 provider 的模型            |
 | `--thinking-level [level]`    | 指定 Gemini 思考等级                |
 | `--reasoning-effort <effort>` | 指定 Codex 思考深度                 |
-| `--new-thread`                | 创建新的 Codex thread generation    |
+| `--new-thread`                | 为所选 provider 创建新一代会话      |
 | `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径 |
 | `--resend`                    | 强制重新发送完整分析数据            |
 
 AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。每次成功分析保存当前 `result.json` 和一个不可变结果版本；命令结果的 `meta.resultVersionId` 标识对应版本。
+
+AI 会话行为：
+
+- 成功分析更新所选 provider 的活动 session。
+- Codex 按 thread ID 恢复远端历史。
+- Gemini 从永久保留的本地历史重建 SDK Chat。
+- `--new-thread` 为所选 provider 创建新一代会话。
+
+存储、恢复和 Gemini 上下文成本见 [AI 会话](docs/ai-conversations.md)。
 
 默认 provider 为 `gemini`。
 
@@ -270,7 +279,7 @@ Codex App Server 继承 v2er-insight 进程白名单中的 `HTTP_PROXY`、`HTTPS
   - **AI / Gemini**：`undici` `ProxyAgent` + `setGlobalDispatcher`（原生 `fetch()` 代理）
   - **AI / Codex**：App Server 子进程的受限代理环境
 - **AI / Codex**：发现兼容 Codex CLI，自动候选优先来自本机 App，独立短生命周期 App Server 使用已登录的 Codex home 创建或恢复 thread。
-- 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下；`results/versions/` 保存不可变结果版本，`results/index.json` 保存版本顺序和 metadata。
+- 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下；`results/versions/` 保存不可变结果版本，`results/index.json` 保存版本顺序和 metadata，`sessions/` 保存活动 provider 和会话状态。
 - 环境要求：Node.js >= 20.18.1（undici 7.x 要求）。
 
 ---

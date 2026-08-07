@@ -9,6 +9,7 @@ import type {
   CodexExecutableTrust,
   CodexThreadInfo,
 } from '@/infra/codex';
+import type { CodexSessionMigrationStatus, CodexSessionStorageStatus } from '@/infra/storage';
 
 export type CodexDiagnosticSeverity = 'warning' | 'error';
 
@@ -86,6 +87,15 @@ export type CodexRegistryDiagnostic =
       sessions: CodexRegistrySessionDiagnostic[];
     };
 
+export type CodexSessionStorageDiagnostic =
+  | { status: 'not_requested' }
+  | {
+      status: 'inspected';
+      sessions: CodexSessionStorageStatus;
+      legacy: CodexSessionStorageStatus;
+      migration: CodexSessionMigrationStatus;
+    };
+
 export type CodexLockDiagnostic =
   | { status: 'not_requested' | 'missing' | 'invalid' }
   | { status: 'locked'; pid: number; acquiredAt: string };
@@ -106,6 +116,7 @@ export interface CodexSessionCheckReport {
   candidates: CodexCandidateDiagnostic[];
   project: CodexProjectDiagnostic;
   runtime: CodexRuntimeDiagnostic | null;
+  storage: CodexSessionStorageDiagnostic;
   registry: CodexRegistryDiagnostic;
   lock: CodexLockDiagnostic;
   thread: CodexThreadDiagnostic | null;

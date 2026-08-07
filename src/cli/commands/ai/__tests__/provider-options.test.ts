@@ -22,6 +22,10 @@ describe('resolveAiProviderOptions', () => {
     );
   });
 
+  it('should allow a new Gemini session generation', () => {
+    expect(resolveAiProviderOptions('gemini', { newThread: true })).toBe('gemini');
+  });
+
   it('should reject Gemini thinking level for Codex', () => {
     expect(() => resolveAiProviderOptions('codex', { thinkingLevel: 'high' })).toThrowError(
       /cannot be used/u,

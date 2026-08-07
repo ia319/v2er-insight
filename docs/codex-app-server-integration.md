@@ -90,7 +90,7 @@ Windows 发现通过只读进程路径查询取得正在运行的 `codex.exe`；
 - 恢复键：App Server 返回的 thread ID。
 - Project 归组键：通过统一优先级解析并规范化的绝对路径，由 `thread/start.cwd` 传入。
 
-新 generation 从注册表中的最大 generation 递增。生成的显示名与本地 registry 记录冲突时继续递增，保持 generation 和显示名唯一。
+新 generation 的编号取会话索引中的最大 generation 值加一。生成的显示名与本地 session 记录冲突时继续递增，保持 generation 和显示名唯一。
 
 日常分析更新复用活动 thread。提示词版本变化、实际模型与活动 session 不一致或用户显式新建请求产生新的 generation；思考深度变化作用于下一轮。
 
@@ -98,7 +98,7 @@ Session 选择顺序为显式新建、最高 generation 的兼容 pending sessio
 
 未完成 session 的恢复与结算先于结果复用判断。每次状态推进最多启动一个外部 turn；活动回合返回 busy，已完成回合按持久 ID 恢复结果。
 
-Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和回合恢复。自有 App Server 在成功、跳过、busy 和异常路径均进入关闭流程。不可变结果版本、当前 `result.json`、结果索引和 pending 版本关联持久化后，session 才进入完成状态；provider 发送态在 session 完成后更新。
+Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和回合恢复。自有 App Server 在成功、跳过、busy 和异常路径均进入关闭流程。不可变结果版本、当前 `result.json`、结果索引和 pending 版本关联持久化后，session 才进入完成状态；随后 provider 文件关联 version ID、分析指纹和成功时间，session index 发布最近成功 provider，最后更新 provider 发送态。
 
 用户在 App 中修改显示名后，v2er 继续按 thread ID 恢复，不覆盖用户名称。
 
@@ -197,23 +197,25 @@ Codex provider 使用以下运行边界：
 
 ## 10. 并发和幂等
 
-同一用户的 Codex 分析由跨进程锁串行化。锁范围覆盖 runtime 与 turn、结果版本写入、pending 版本关联、session 完成、provider 发送态更新及数据清理，与该用户共享的状态文件一致。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。
+同一用户的 AI 分析由跨进程锁串行化。Codex 的锁范围覆盖 runtime 与 turn、结果版本写入、pending 版本关联、session 完成、provider 发送态更新及数据清理；Gemini 使用同一锁保护共享 session index、结果关联和历史发布。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。锁文件继续使用 `.codex-execution.lock` 路径。
 
 桌面 App 已有活动回合时返回 busy 状态，并保留用户当前回合。
 
 每次分析数据投递具有本地唯一 delivery ID。外部 turn ID 存在时，pending delivery 保留该关联并在后续命令中核验；无法关联持久 turn 时返回 `AI_CODEX_TURN_STATUS_UNKNOWN`。
 
-不同用户可以并行运行，各自拥有独立 App Server 子进程与 Codex 执行锁。无待完成 Codex delivery 的 Gemini 分支独立执行；存在待完成 Codex delivery 时，同一把锁覆盖恢复与阻断判断。
+不同用户可以并行运行。相同用户的 Gemini 与 Codex 分析串行执行；Codex 命令使用独立 App Server 子进程。同一把锁覆盖待完成 delivery 的恢复与阻断判断。
 
 ## 11. 本地状态
 
-`codex-sessions.json` 保存恢复所需的 session 身份、Project、模型、提示词哈希、初始化阶段、turn ID、pending delivery identity、可执行文件路径与版本、App Server instruction sources 和时间戳。Local session ID、thread ID、generation 和显示名在文件内唯一，活动 ID 只引用 ready session。
+`sessions/index.json` 保存 provider 活动指针、会话摘要和迁移标记。`sessions/codex/<localSessionId>.json` 保存恢复所需的 session 身份、Project、模型、提示词哈希、初始化阶段、turn ID、pending delivery identity、可执行文件路径与版本、App Server instruction sources、时间戳和最近结果关联。local session ID 使用规范 UUID；local session ID、thread ID、generation 和显示名保持唯一，活动 ID 只引用 ready session。
 
-Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Session 完成后，provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
+旧安装的 `codex-sessions.json` 仅作为只读迁移来源。Gemini 与 Codex 分析在 provider 访问前初始化共享会话存储；初始化在该用户的执行锁内校验旧注册表，把各 Codex session 文件写入后再发布索引。相同内容的既有 session 文件支持中断后继续。新旧存储同时存在时，索引必须包含与旧注册表内容哈希一致的迁移标记，否则返回 `SESSION_MIGRATION_CONFLICT`，不发送模型消息。迁移写入失败返回 `SESSION_MIGRATION_FAILED`。迁移完成后只写 `sessions/`，不修改或删除旧文件。
+
+Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Codex turn 完成后，provider 文件和会话索引关联该结果版本；随后 provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
 
 完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史。解析后的画像结果保存于 `results/versions/vNNNNNN.json` 不可变 envelope、`results/index.json` 和当前 `result.json`；版本 metadata 保存 model、reasoning effort、local session ID、thread ID、thread name 和分析来源哈希。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
 
-注册表读取结果分为 missing、invalid 和 valid。Invalid 文件保持原内容；有效更新使用 UTF-8 无 BOM、同目录临时文件和原子替换。目标文件的创建模式为 `0o600`；Windows 的实际访问范围由现有 ACL 决定。注册表采用永久保留策略。
+会话索引和 provider 文件读取结果分为 missing、invalid 和 valid；索引摘要必须与对应 provider 文件一致。Invalid 文件保持原内容；有效更新先写 provider 文件，再发布索引。每个文件使用 UTF-8 无 BOM、同目录临时文件和原子替换。目标文件的创建模式为 `0o600`；Windows 的实际访问范围由现有 ACL 决定。新旧会话存储均采用永久保留策略。
 
 ## 12. 诊断与恢复
 
@@ -224,26 +226,28 @@ Pending delivery identity 在外部请求前持久化，App Server 接受后关�
 - 当前账户可用状态和账户类型。
 - 当前可见模型、默认模型、各模型默认 effort 与支持列表。
 - 最终 Project 路径、路径来源、目录状态和 App Project 注册提示。
-- 指定用户的执行锁 owner 摘要、registry sessions、活动 session、thread 可读性、初始化阶段和最后 turn 状态。
+- 指定用户的执行锁 owner 摘要、`sessions/` 与旧 `codex-sessions.json` 状态、迁移状态、可用 session 投影、活动 session、thread 可读性、初始化阶段和最后 turn 状态。
 
-诊断访问范围为账户类型与鉴权可用状态、CLI 与模型元数据、Project、registry、thread、turn 和 lock owner 摘要。指定用户时，`thread/read(includeTurns: true)` 的解码结果包含 agent message 文本，诊断报告仅保留状态和身份元数据。凭据存储访问仍由独立 App Server 承担。
+诊断访问范围为账户类型与鉴权可用状态、CLI 与模型元数据、Project、新旧会话存储、thread、turn 和 lock owner 摘要。会话检查不写入索引、provider 文件或旧注册表；迁移 pending 和 conflict 均保持原文件。指定用户时，`thread/read(includeTurns: true)` 的解码结果包含 agent message 文本，诊断报告仅保留状态和身份元数据。凭据存储访问仍由独立 App Server 承担。
 
 `v2er session check --provider gemini` 展示解析后的 Gemini 模型、思考等级和 API Key 可用状态，API Key 内容保持隐藏。
 
 恢复行为按状态区分：
 
-| 状态                   | 恢复条件或结果                                          |
-| ---------------------- | ------------------------------------------------------- |
-| App 或兼容 CLI 不可用  | App runtime 可用，或 `ai.codex.executable` 指向兼容 CLI |
-| 账户不可用             | 解析后的 `CODEX_HOME` 包含有效登录状态                  |
-| 模型或 effort 不可用   | 配置值属于当前 `model/list` 目录                        |
-| Thread busy            | 当前 App 回合结束                                       |
-| Thread 丢失            | 显式新 generation                                       |
-| Turn 状态未知          | App thread 状态核对与显式重发决策                       |
-| 最终回复缺失或结果无效 | 旧画像和 delivery 状态保持不变                          |
-| Session 完成失败       | 再次执行同一 Codex 命令，恢复已保存版本并完成原 turn    |
+| 状态                   | 恢复条件或结果                                              |
+| ---------------------- | ----------------------------------------------------------- |
+| App 或兼容 CLI 不可用  | App runtime 可用，或 `ai.codex.executable` 指向兼容 CLI     |
+| 账户不可用             | 解析后的 `CODEX_HOME` 包含有效登录状态                      |
+| 模型或 effort 不可用   | 配置值属于当前 `model/list` 目录                            |
+| Thread busy            | 当前 App 回合结束                                           |
+| Thread 丢失            | 显式新 generation                                           |
+| Turn 状态未知          | App thread 状态核对与显式重发决策                           |
+| 最终回复缺失或结果无效 | 旧画像和 delivery 状态保持不变                              |
+| Session 迁移冲突       | 保留新旧存储并通过只读诊断核对迁移标记与 session 身份       |
+| Session 迁移失败       | 修复目录权限或空间后，再次执行同一 AI 命令                  |
+| Session 完成失败       | 再次执行同一 Codex 命令，恢复已保存版本、原 turn 和结果关联 |
 
-CLI 原因码覆盖可执行文件缺失或不兼容、账户不可用、协议错误、模型或 effort 不可用、Project 不可用、thread 身份丢失、turn 失败或状态未知、输出无效、超时、本地状态无效、执行占用、锁失败和 session 完成失败。恢复动作由原因码集中映射，Codex 已分类故障使用 Codex session 检查、App 状态核对、配置修正或显式新 generation。
+CLI 原因码覆盖可执行文件缺失或不兼容、账户不可用、协议错误、模型或 effort 不可用、Project 不可用、thread 身份丢失、turn 失败或状态未知、输出无效、超时、本地状态无效、执行占用、锁失败、session 迁移和 session 完成失败。恢复动作由原因码集中映射，Codex 已分类故障使用 Codex session 检查、App 状态核对、配置修正或显式新 generation。
 
 ## 13. 兼容性验证范围
 

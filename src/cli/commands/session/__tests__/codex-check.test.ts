@@ -183,7 +183,12 @@ function createDependencies(
       }
       throw new CodexRuntimeSelectionError([attempt]);
     }),
-    readRegistry: vi.fn(() => ({ status: 'valid' as const, registry })),
+    inspectStorage: vi.fn(() => ({
+      sessions: 'valid' as const,
+      legacy: 'missing' as const,
+      migration: 'not_required' as const,
+      registry: { status: 'valid' as const, registry },
+    })),
     readLock: vi.fn(() => ({ status: 'missing' as const })),
     resolveProject: vi.fn(() => ({ path: 'D:\\data', source: 'storage' as const })),
     assertProject: vi.fn(),
@@ -224,6 +229,12 @@ describe('checkCodexSession', () => {
         },
       ],
     });
+    expect(report.storage).toEqual({
+      status: 'inspected',
+      sessions: 'valid',
+      legacy: 'missing',
+      migration: 'not_required',
+    });
     expect(report.thread).toMatchObject({
       threadId: 'thread-1',
       lastTurnId: 'turn-analysis',
@@ -245,7 +256,12 @@ describe('checkCodexSession', () => {
       selectRuntime: vi.fn(async () => {
         throw new CodexRuntimeSelectionError([attempt]);
       }),
-      readRegistry: vi.fn(() => ({ status: 'invalid' as const })),
+      inspectStorage: vi.fn(() => ({
+        sessions: 'invalid' as const,
+        legacy: 'invalid' as const,
+        migration: 'conflict' as const,
+        registry: { status: 'invalid' as const },
+      })),
       readLock: vi.fn(() => ({ status: 'invalid' as const })),
       assertProject: vi.fn(() => {
         throw new Error('project unavailable');
@@ -256,11 +272,19 @@ describe('checkCodexSession', () => {
 
     expect(report.runtime).toBeNull();
     expect(report.registry).toEqual({ status: 'invalid' });
+    expect(report.storage).toEqual({
+      status: 'inspected',
+      sessions: 'invalid',
+      legacy: 'invalid',
+      migration: 'conflict',
+    });
     expect(report.lock).toEqual({ status: 'invalid' });
     expect(report.project).toMatchObject({ status: 'unavailable', code: 'unavailable' });
     expect(report.issues.map((issue) => issue.code)).toEqual([
       'project_unavailable',
-      'registry_invalid',
+      'session_store_invalid',
+      'legacy_registry_invalid',
+      'session_migration_conflict',
       'lock_invalid',
       'runtime_unavailable',
     ]);

@@ -26,6 +26,11 @@ const mockedExecuteCodexAnalysis = vi.hoisted(() => vi.fn());
 const mockedInspectCodexResultDeliverySession = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedWithCodexExecutionLock = vi.hoisted(() => vi.fn());
+const mockedEnsureCodexSessionRegistry = vi.hoisted(() => vi.fn());
+const mockedPrepareGeminiAnalysisSession = vi.hoisted(() => vi.fn());
+const mockedCompleteGeminiAnalysisSession = vi.hoisted(() => vi.fn());
+const mockedRecoverCodexAnalysisSession = vi.hoisted(() => vi.fn());
+const mockedRecoverGeminiAnalysisSession = vi.hoisted(() => vi.fn());
 
 const mockCreateSession = vi.hoisted(() => vi.fn());
 const mockSendMessage = vi.hoisted(() => vi.fn());
@@ -58,6 +63,11 @@ vi.mock('@/infra/storage', async (importOriginal) => {
     saveResultVersion: mockedSaveResultVersion,
     updateAnalysisState: mockedUpdateAnalysisState,
     withCodexExecutionLock: mockedWithCodexExecutionLock,
+    ensureCodexSessionRegistry: mockedEnsureCodexSessionRegistry,
+    prepareGeminiAnalysisSession: mockedPrepareGeminiAnalysisSession,
+    completeGeminiAnalysisSession: mockedCompleteGeminiAnalysisSession,
+    recoverCodexAnalysisSession: mockedRecoverCodexAnalysisSession,
+    recoverGeminiAnalysisSession: mockedRecoverGeminiAnalysisSession,
   };
 });
 
@@ -92,12 +102,17 @@ vi.mock('@/infra/logger', () => ({
 
 import { runAi } from '../ai';
 import { CodexProjectPathError } from '@/core/ai/providers/codex';
-import { CodexExecutionLockBusyError } from '@/infra/storage';
+import {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  CodexExecutionLockBusyError,
+} from '@/infra/storage';
 import packageJson from '../../../../package.json';
 
 const SOURCE_HASH = 'a'.repeat(64);
 const DELIVERY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CODEX_PROVIDER_KEY = `codex:${'d'.repeat(64)}`;
+const GEMINI_SESSION_ID = '6d8eea46-7e52-47ca-a740-34a0b01bb810';
 const defaultRequest = {
   systemPrompt: 'You are an analyst',
   promptHash: 'c'.repeat(64),
@@ -109,6 +124,48 @@ const noCleanupResult = {
   deleted: [],
   skipped: [],
 };
+
+function createPreparedGeminiSession(
+  overrides: {
+    isNew?: boolean;
+    lastAnalysisFingerprint?: string | null;
+    lastResultVersionId?: string | null;
+  } = {},
+) {
+  const timestamp = '2026-07-26T07:00:00.000Z';
+  const isNew = overrides.isNew ?? true;
+  const session = {
+    schemaVersion: 1 as const,
+    localSessionId: GEMINI_SESSION_ID,
+    username: 'testuser',
+    provider: 'gemini' as const,
+    generation: 1,
+    promptHash: defaultRequest.promptHash,
+    model: 'gemini-3.1-pro-preview',
+    createdAt: timestamp,
+    lastUsedAt: timestamp,
+    lastSuccessfulAnalysisAt:
+      overrides.lastResultVersionId === undefined || overrides.lastResultVersionId === null
+        ? null
+        : timestamp,
+    lastResultVersionId: overrides.lastResultVersionId ?? null,
+    lastAnalysisFingerprint: overrides.lastAnalysisFingerprint ?? null,
+    systemInstruction: defaultRequest.systemPrompt,
+    thinkingLevel: 'high',
+    history: [],
+  };
+  return {
+    index: {
+      schemaVersion: 1 as const,
+      lastSuccessfulAnalysisProvider: null,
+      activeByProvider: isNew ? {} : { gemini: GEMINI_SESSION_ID },
+      sessions: [],
+      updatedAt: timestamp,
+    },
+    session,
+    isNew,
+  };
+}
 
 function createAnalyzedData(partial = false): AnalyzerOutput {
   return {
@@ -238,8 +295,15 @@ function markDelivered(state: AnalysisState): void {
     stale: false,
     basedOnPartial: false,
     deliveryMode: 'change',
-    resultVersionId: null,
+    resultVersionId: 'v000001',
   };
+  mockedPrepareGeminiAnalysisSession.mockReturnValue(
+    createPreparedGeminiSession({
+      isNew: false,
+      lastAnalysisFingerprint: state.analyzed.analysisFingerprint,
+      lastResultVersionId: 'v000001',
+    }),
+  );
 }
 
 function setPendingGeminiDelivery(
@@ -333,6 +397,18 @@ describe('runAi', () => {
     );
     mockedInspectCodexResultDeliverySession.mockReturnValue('completed');
     mockedRecoverResultVersionDelivery.mockReturnValue({ status: 'missing' });
+    mockedPrepareGeminiAnalysisSession.mockReturnValue(createPreparedGeminiSession());
+    mockedCompleteGeminiAnalysisSession.mockReturnValue(undefined);
+    mockedRecoverCodexAnalysisSession.mockReturnValue({ status: 'completed' });
+    mockedRecoverGeminiAnalysisSession.mockImplementation(({ metadata }) => {
+      mockedPrepareGeminiAnalysisSession.mockReturnValue(
+        createPreparedGeminiSession({
+          isNew: false,
+          lastAnalysisFingerprint: metadata.analysisFingerprint,
+          lastResultVersionId: metadata.versionId,
+        }),
+      );
+    });
     mockedSaveResultVersion.mockImplementation(
       (_username: string, _result: AIAnalysisResult, source: ResultVersionSource) =>
         createSavedMetadata(source),
@@ -430,7 +506,7 @@ describe('runAi', () => {
       provider: 'gemini',
       model: 'gemini-3.1-pro-preview',
       reasoningLevel: 'high',
-      localSessionId: null,
+      localSessionId: GEMINI_SESSION_ID,
       externalThreadId: null,
       threadName: null,
       promptHash: defaultRequest.promptHash,
@@ -450,10 +526,65 @@ describe('runAi', () => {
 
     expect(result.status).toBe('skipped');
     expect(mockedRecoverResultVersionDelivery).toHaveBeenCalledWith('testuser', pending);
+    expect(mockedRecoverGeminiAnalysisSession).toHaveBeenCalledWith({
+      username: 'testuser',
+      metadata,
+      requestPayload: defaultRequest.payload,
+      systemInstruction: defaultRequest.systemPrompt,
+      result: recoveredResult,
+      thinkingLevel: 'high',
+    });
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
     expect(MockGeminiProvider).not.toHaveBeenCalled();
     expect(context.getState().pendingResultDelivery).toBeUndefined();
     expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
+  });
+
+  it('should preserve a migration conflict while recovering a saved Gemini delivery', async () => {
+    const recoveredResult = createAiResult('Recovered result');
+    const context = mockInput();
+    const state = context.getState();
+    setPendingGeminiDelivery(state);
+    const pending = state.pendingResultDelivery;
+    if (!pending) throw new Error('Expected pending Gemini delivery');
+    const metadata = createSavedMetadata({
+      deliveryId: pending.deliveryId,
+      origin: 'analysis',
+      createdAt: '2026-07-26T07:59:00.000Z',
+      provider: 'gemini',
+      model: 'gemini-3.1-pro-preview',
+      reasoningLevel: 'high',
+      localSessionId: GEMINI_SESSION_ID,
+      externalThreadId: null,
+      threadName: null,
+      promptHash: defaultRequest.promptHash,
+      analysisFingerprint: pending.analysisFingerprint,
+      payloadHash: pending.payloadHash,
+      dataQuality: 'complete',
+      warningCount: 0,
+      appVersion: '1.2.0',
+    });
+    mockedRecoverResultVersionDelivery.mockReturnValue({
+      status: 'recovered',
+      metadata,
+      result: recoveredResult,
+    });
+    mockedRecoverGeminiAnalysisSession.mockImplementationOnce(() => {
+      throw new AISessionMigrationConflictError('sessions/index.json');
+    });
+
+    const output = await runAi('testuser', {});
+
+    expect(output).toMatchObject({
+      status: 'failed',
+      reasonCode: 'SESSION_MIGRATION_CONFLICT',
+      meta: { resultVersionId: 'v000001' },
+    });
+    expect(context.getState().pendingResultDelivery).toMatchObject({
+      deliveryId: DELIVERY_ID,
+      resultVersionId: 'v000001',
+    });
+    expect(mockedResolveApiKey).not.toHaveBeenCalled();
   });
 
   it('should block Gemini while an accepted Codex delivery remains incomplete', async () => {
@@ -591,6 +722,7 @@ describe('runAi', () => {
     expect(mockCreateSession).toHaveBeenCalledWith(request.systemPrompt, {
       thinkingLevel: 'high',
       timeout: 60_000,
+      history: [],
     });
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
     expect(mockSendMessage).toHaveBeenCalledWith(request.payload);
@@ -624,6 +756,7 @@ describe('runAi', () => {
         provider: 'gemini',
         model: 'gemini-3.1-pro-preview',
         reasoningLevel: 'high',
+        localSessionId: GEMINI_SESSION_ID,
         promptHash: request.promptHash,
         dataQuality: 'complete',
         warningCount: 0,
@@ -631,24 +764,39 @@ describe('runAi', () => {
       }),
     );
     expect(mockedUpdateAnalysisState).toHaveBeenCalledTimes(3);
+    expect(mockedCompleteGeminiAnalysisSession).toHaveBeenCalledWith({
+      username: 'testuser',
+      prepared: createPreparedGeminiSession(),
+      metadata: expect.objectContaining({
+        versionId: 'v000001',
+        provider: 'gemini',
+        localSessionId: GEMINI_SESSION_ID,
+      }),
+      requestPayload: request.payload,
+      result: aiResult,
+      thinkingLevel: 'high',
+    });
     expect(context.getState().currentResult?.deliveryMode).toBe('change');
     expect(context.getState().currentResult?.resultVersionId).toBe('v000001');
     expect(context.getState().pendingResultDelivery).toBeUndefined();
     const [prepareOrder, savedStateOrder, completedStateOrder] =
       mockedUpdateAnalysisState.mock.invocationCallOrder;
     const [saveOrder] = mockedSaveResultVersion.mock.invocationCallOrder;
+    const [sessionCompletionOrder] = mockedCompleteGeminiAnalysisSession.mock.invocationCallOrder;
     if (
       prepareOrder === undefined ||
       savedStateOrder === undefined ||
       completedStateOrder === undefined ||
-      saveOrder === undefined
+      saveOrder === undefined ||
+      sessionCompletionOrder === undefined
     ) {
       throw new Error('Expected prepared delivery, result version, and provenance writes');
     }
     expect(prepareOrder).toBeLessThan(createSessionOrder);
     expect(sendMessageOrder).toBeLessThan(saveOrder);
     expect(saveOrder).toBeLessThan(savedStateOrder);
-    expect(savedStateOrder).toBeLessThan(completedStateOrder);
+    expect(savedStateOrder).toBeLessThan(sessionCompletionOrder);
+    expect(sessionCompletionOrder).toBeLessThan(completedStateOrder);
     expect(mockedCleanExpiredData).toHaveBeenCalledWith('testuser');
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
     expect(result).toMatchObject({
@@ -768,6 +916,7 @@ describe('runAi', () => {
     expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
       thinkingLevel: 'low',
       timeout: 60_000,
+      history: [],
     });
   });
 
@@ -790,6 +939,7 @@ describe('runAi', () => {
     expect(mockCreateSession).toHaveBeenCalledWith('prompt', {
       thinkingLevel: 'high',
       timeout: 60_000,
+      history: [],
     });
   });
 
@@ -955,6 +1105,30 @@ describe('runAi', () => {
     expect(mockLogger.detail).not.toHaveBeenCalledWith(expect.stringContaining('已清理中间数据'));
   });
 
+  it('should read Gemini analysis state after acquiring the execution lock', async () => {
+    let lockHeld = false;
+    mockedWithCodexExecutionLock.mockImplementation(
+      async (_username: string, operation: () => Promise<unknown>) => {
+        lockHeld = true;
+        try {
+          return await operation();
+        } finally {
+          lockHeld = false;
+        }
+      },
+    );
+    mockedReadAnalysisState.mockImplementation(() => {
+      expect(lockHeld).toBe(true);
+      return { status: 'invalid' };
+    });
+
+    const output = await runAi('testuser', { provider: 'gemini' });
+
+    expect(output).toMatchObject({ status: 'failed', reasonCode: 'PROVENANCE_STATE_INVALID' });
+    expect(mockedReadAnalysisState).toHaveBeenCalledOnce();
+    expect(lockHeld).toBe(false);
+  });
+
   it('should commit a Codex result before completing its session state', async () => {
     const input = mockInput();
     const analyzedState = input.getState().analyzed;
@@ -1027,7 +1201,13 @@ describe('runAi', () => {
         threadName: 'testuser-insight',
       }),
     );
-    expect(complete).toHaveBeenCalledOnce();
+    expect(complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        versionId: 'v000001',
+        provider: 'codex',
+        localSessionId: 'local-1',
+      }),
+    );
     expect(lockHeld).toBe(false);
     expect(mockedSaveResultVersion.mock.invocationCallOrder[0]).toBeLessThan(
       complete.mock.invocationCallOrder[0]!,
@@ -1109,44 +1289,165 @@ describe('runAi', () => {
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
   });
 
-  it('should preserve a committed Codex result when session completion fails', async () => {
-    const input = mockInput();
-    const analyzedState = input.getState().analyzed;
+  it.each([
+    {
+      name: 'session update failure',
+      error: new Error('session unavailable'),
+      reasonCode: 'SESSION_PERSIST_FAILED',
+    },
+    {
+      name: 'migration conflict',
+      error: new AISessionMigrationConflictError('sessions/index.json'),
+      reasonCode: 'SESSION_MIGRATION_CONFLICT',
+    },
+    {
+      name: 'migration write failure',
+      error: new AISessionMigrationFailedError(new Error('write failed')),
+      reasonCode: 'SESSION_MIGRATION_FAILED',
+    },
+  ] as const)(
+    'should preserve a committed Gemini result after a $name',
+    async ({ error, reasonCode }) => {
+      const input = mockInput();
+      mockedResolveApiKey.mockReturnValue('test-api-key');
+      mockedWithRetry.mockImplementation((operation: () => unknown) => operation());
+      mockCreateSession.mockResolvedValue(undefined);
+      mockSendMessage.mockResolvedValue('response');
+      mockedParseResponse.mockReturnValue({
+        data: createAiResult('Gemini result'),
+        warnings: [],
+      });
+      mockedCompleteGeminiAnalysisSession.mockImplementationOnce(() => {
+        throw error;
+      });
+
+      const output = await runAi('testuser', { provider: 'gemini' });
+
+      expect(output).toMatchObject({
+        status: 'failed',
+        reasonCode,
+        meta: { resultVersionId: 'v000001' },
+      });
+      expect(mockedSaveResultVersion).toHaveBeenCalledOnce();
+      expect(input.getState().pendingResultDelivery).toMatchObject({
+        resultVersionId: 'v000001',
+      });
+      expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {
+      name: 'session update failure',
+      error: new Error('session unavailable'),
+      reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
+    },
+    {
+      name: 'migration conflict',
+      error: new AISessionMigrationConflictError('sessions/index.json'),
+      reasonCode: 'SESSION_MIGRATION_CONFLICT',
+    },
+    {
+      name: 'migration write failure',
+      error: new AISessionMigrationFailedError(new Error('write failed')),
+      reasonCode: 'SESSION_MIGRATION_FAILED',
+    },
+  ] as const)(
+    'should preserve a committed Codex result after a $name',
+    async ({ error, reasonCode }) => {
+      const input = mockInput();
+      const analyzedState = input.getState().analyzed;
+      if (!analyzedState) throw new Error('Expected analyzed provenance');
+      mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
+      mockedExecuteCodexAnalysis.mockResolvedValue({
+        status: 'result',
+        model: 'gpt-current',
+        reasoningEffort: 'high',
+        providerKey: CODEX_PROVIDER_KEY,
+        localSessionId: 'local-1',
+        threadId: 'thread-1',
+        threadName: 'testuser-insight',
+        result: createAiResult('Codex result'),
+        delivery: {
+          deliveryId: DELIVERY_ID,
+          providerKey: CODEX_PROVIDER_KEY,
+          analysisFingerprint: analyzedState.analysisFingerprint,
+          payloadHash: analyzedState.payloadHash,
+          basedOnPartial: false,
+          deliveryMode: 'change',
+        },
+        complete: vi.fn().mockRejectedValue(error),
+      });
+
+      const output = await runAi('testuser', { provider: 'codex' });
+
+      expect(output).toMatchObject({
+        status: 'failed',
+        reasonCode,
+        meta: { resultVersionId: 'v000001' },
+      });
+      expect(mockedSaveResultVersion).toHaveBeenCalledOnce();
+      expect(input.getState().pendingResultDelivery).toMatchObject({
+        deliveryId: DELIVERY_ID,
+        resultVersionId: 'v000001',
+      });
+      expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+    },
+  );
+
+  it('should repair a completed Codex result association before clearing its delivery', async () => {
+    const result = createAiResult('Recovered Codex result');
+    const input = mockInput(createAnalyzedData(), result);
+    const state = input.getState();
+    const analyzedState = state.analyzed;
     if (!analyzedState) throw new Error('Expected analyzed provenance');
+    setPendingCodexDelivery(state, 'v000001');
+    const metadata = createSavedMetadata(
+      {
+        deliveryId: DELIVERY_ID,
+        origin: 'analysis',
+        createdAt: '2026-07-26T07:00:00.000Z',
+        provider: 'codex',
+        model: 'gpt-current',
+        reasoningLevel: 'high',
+        localSessionId: 'local-1',
+        externalThreadId: 'thread-1',
+        threadName: 'testuser-insight',
+        promptHash: defaultRequest.promptHash,
+        analysisFingerprint: analyzedState.analysisFingerprint,
+        payloadHash: analyzedState.payloadHash,
+        dataQuality: 'complete',
+        warningCount: 0,
+        appVersion: '0.0.0',
+      },
+      { resultHash: hashCanonicalJson(result) },
+    );
+    mockedRecoverResultVersionDelivery.mockReturnValue({
+      status: 'recovered',
+      metadata,
+      result,
+    });
     mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });
     mockedExecuteCodexAnalysis.mockResolvedValue({
-      status: 'result',
+      status: 'skipped',
       model: 'gpt-current',
       reasoningEffort: 'high',
       providerKey: CODEX_PROVIDER_KEY,
       localSessionId: 'local-1',
       threadId: 'thread-1',
       threadName: 'testuser-insight',
-      result: createAiResult('Codex result'),
-      delivery: {
-        deliveryId: DELIVERY_ID,
-        providerKey: CODEX_PROVIDER_KEY,
-        analysisFingerprint: analyzedState.analysisFingerprint,
-        payloadHash: analyzedState.payloadHash,
-        basedOnPartial: false,
-        deliveryMode: 'change',
-      },
-      complete: vi.fn().mockRejectedValue(new Error('registry unavailable')),
     });
 
     const output = await runAi('testuser', { provider: 'codex' });
 
-    expect(output).toMatchObject({
-      status: 'failed',
-      reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
-      meta: { resultVersionId: 'v000001' },
+    expect(output.status).toBe('skipped');
+    expect(mockedRecoverCodexAnalysisSession).toHaveBeenCalledWith({
+      username: 'testuser',
+      metadata,
     });
-    expect(mockedSaveResultVersion).toHaveBeenCalledOnce();
-    expect(input.getState().pendingResultDelivery).toMatchObject({
-      deliveryId: DELIVERY_ID,
-      resultVersionId: 'v000001',
-    });
-    expect(mockedCleanExpiredData).not.toHaveBeenCalled();
+    expect(mockedInspectCodexResultDeliverySession).not.toHaveBeenCalled();
+    expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+    expect(input.getState().pendingResultDelivery).toBeUndefined();
   });
 
   it('should reuse a saved Codex result while completing its accepted turn', async () => {
@@ -1181,6 +1482,7 @@ describe('runAi', () => {
       metadata,
       result,
     });
+    mockedRecoverCodexAnalysisSession.mockReturnValue({ status: 'pending' });
     mockedInspectCodexResultDeliverySession.mockReturnValue('pending');
     const complete = vi.fn().mockResolvedValue(undefined);
     mockedGetConfig.mockReturnValue({ ai: { provider: 'codex', codex: {} } });

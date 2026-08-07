@@ -25,8 +25,8 @@ import {
   type CodexModelInfo,
 } from '@/infra/codex';
 import {
+  inspectCodexSessionStorage,
   readCodexExecutionLock,
-  readCodexThreadRegistry,
   type CodexExecutionLockState,
 } from '@/infra/storage';
 import type {
@@ -39,6 +39,7 @@ import type {
   CodexRegistryDiagnostic,
   CodexRegistrySessionDiagnostic,
   CodexSessionCheckReport,
+  CodexSessionStorageDiagnostic,
   CodexThreadDiagnostic,
 } from './codex-types';
 
@@ -52,7 +53,7 @@ export interface CodexSessionCheckDependencies {
     options: CodexRuntimeSelectionOptions,
     probeVersion: VersionProbe,
   ): Promise<SelectedCodexRuntime>;
-  readRegistry: typeof readCodexThreadRegistry;
+  inspectStorage: typeof inspectCodexSessionStorage;
   readLock: typeof readCodexExecutionLock;
   resolveProject: typeof resolveCodexProjectPath;
   assertProject: typeof assertCodexProjectDirectory;
@@ -72,7 +73,7 @@ const DEFAULT_DEPENDENCIES: CodexSessionCheckDependencies = {
       probeVersion,
       connect: connectCodexAppServer,
     }),
-  readRegistry: readCodexThreadRegistry,
+  inspectStorage: inspectCodexSessionStorage,
   readLock: readCodexExecutionLock,
   resolveProject: (_cliPath, configPath) => resolveCodexProjectPath(undefined, configPath),
   assertProject: assertCodexProjectDirectory,
@@ -199,7 +200,7 @@ function mergeCandidateDiagnostics(
 }
 
 /**
- * Collects a read-only Codex runtime, Project, registry, lock, and thread diagnostic report.
+ * Collects a read-only Codex runtime, Project, session storage, lock, and thread diagnostic report.
  * @param username - Optional V2EX user whose local session and thread state are inspected.
  * @param config - Resolved Codex provider configuration.
  * @param options - Optional proxy and injectable local runtime boundaries.
@@ -215,7 +216,17 @@ export async function checkCodexSession(
   const projectResult = resolveProjectDiagnostic(config, dependencies);
   if (projectResult.issue) issues.push(projectResult.issue);
 
-  const registryRead = username ? dependencies.readRegistry(username) : null;
+  const storageRead = username ? dependencies.inspectStorage(username) : null;
+  const storage: CodexSessionStorageDiagnostic =
+    storageRead === null
+      ? { status: 'not_requested' }
+      : {
+          status: 'inspected',
+          sessions: storageRead.sessions,
+          legacy: storageRead.legacy,
+          migration: storageRead.migration,
+        };
+  const registryRead = storageRead?.registry ?? null;
   const registry: CodexRegistryDiagnostic =
     registryRead === null
       ? { status: 'not_requested' }
@@ -226,11 +237,31 @@ export async function checkCodexSession(
             sessions: registryRead.registry.sessions.map(mapRegistrySession),
           }
         : registryRead;
-  if (registry.status === 'invalid') {
+  if (storage.status === 'inspected' && storage.sessions === 'invalid') {
     issues.push({
-      code: 'registry_invalid',
+      code: 'session_store_invalid',
       severity: 'error',
+      message: 'sessions/index.json or an indexed provider session is invalid or unreadable',
+    });
+  }
+  if (storage.status === 'inspected' && storage.legacy === 'invalid') {
+    issues.push({
+      code: 'legacy_registry_invalid',
+      severity: storage.sessions === 'valid' ? 'warning' : 'error',
       message: 'codex-sessions.json is invalid or unreadable',
+    });
+  }
+  if (storage.status === 'inspected' && storage.migration === 'pending') {
+    issues.push({
+      code: 'session_migration_pending',
+      severity: 'warning',
+      message: 'A valid legacy Codex registry is waiting for migration',
+    });
+  } else if (storage.status === 'inspected' && storage.migration === 'conflict') {
+    issues.push({
+      code: 'session_migration_conflict',
+      severity: 'error',
+      message: 'New and legacy Codex session storage cannot be reconciled automatically',
     });
   }
 
@@ -388,6 +419,7 @@ export async function checkCodexSession(
             selectedReasoningEffort: selected.model.reasoningEffort,
             models: mapModels(selected.models),
           },
+    storage,
     registry,
     lock,
     thread,

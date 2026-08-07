@@ -53,11 +53,7 @@ export {
   updateAnalysisState,
 } from './analysis-state';
 export type { CodexThreadRegistryReadResult } from './codex-thread-registry';
-export {
-  CodexThreadRegistryCorruptError,
-  readCodexThreadRegistry,
-  updateCodexThreadRegistry,
-} from './codex-thread-registry';
+export { CodexThreadRegistryCorruptError, readCodexThreadRegistry } from './codex-thread-registry';
 export type { CodexExecutionLockOwner, CodexExecutionLockState } from './codex-execution-lock';
 export {
   CodexExecutionLockBusyError,
@@ -66,3 +62,42 @@ export {
   readCodexExecutionLock,
   withCodexExecutionLock,
 } from './codex-execution-lock';
+export {
+  getAISessionFilePath,
+  getAISessionIndexPath,
+  getAISessionProviderDir,
+  getAISessionsRootDir,
+} from './sessions';
+export type {
+  AISessionIndexReadResult,
+  AISessionStateReadResult,
+  AISessionStoreReadResult,
+  CodexSessionMigrationStatus,
+  CodexSessionRegistryProjectionResult,
+  CodexSessionStorageInspection,
+  CodexSessionStorageStatus,
+  CompleteGeminiAnalysisSessionOptions,
+  PreparedGeminiAnalysisSession,
+  PrepareGeminiAnalysisSessionOptions,
+  RecoverCodexAnalysisSessionOptions,
+  RecoverCodexAnalysisSessionResult,
+  RecoverGeminiAnalysisSessionOptions,
+} from './sessions';
+export {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  AISessionPersistError,
+  AISessionStoreCorruptError,
+  completeGeminiAnalysisSession,
+  ensureCodexSessionRegistry,
+  inspectCodexSessionStorage,
+  prepareGeminiAnalysisSession,
+  readAISessionIndex,
+  readAISessionState,
+  readAISessionStore,
+  recoverCodexAnalysisSession,
+  recoverGeminiAnalysisSession,
+  updateCodexSessionRegistry,
+  writeAISessionIndex,
+  writeAISessionState,
+} from './sessions';

@@ -30,3 +30,23 @@ export { AI_ANALYSIS_RESULT_JSON_SCHEMA, type AIResultJsonSchema } from './resul
 export { resolveApiKey, withRetry, type RetryOptions } from './utils';
 
 export { buildAnalysisRequest, type AnalysisRequest } from './prompt';
+
+export type {
+  AISessionIndexV1,
+  AISessionProvider,
+  AISessionStateV1,
+  AISessionStatus,
+  AISessionSummary,
+  CodexSessionStateV1,
+  GeminiSessionStateV1,
+  ProviderNeutralMessage,
+} from './sessions';
+export {
+  AI_SESSION_INDEX_SCHEMA_VERSION,
+  AI_SESSION_STATE_SCHEMA_VERSION,
+  isAISessionIndexV1,
+  isAISessionStateV1,
+  isCodexSessionStateV1,
+  isGeminiSessionStateV1,
+  isLocalSessionId,
+} from './sessions';

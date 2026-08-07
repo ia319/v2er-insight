@@ -28,20 +28,25 @@ import {
   type V2erConfig,
 } from '@/config';
 import {
+  AISessionMigrationConflictError,
+  AISessionMigrationFailedError,
+  AISessionPersistError,
+  AISessionStoreCorruptError,
   cleanExpiredData,
   CodexExecutionLockBusyError,
+  recoverCodexAnalysisSession,
+  recoverGeminiAnalysisSession,
   recoverResultVersionDelivery,
   readAnalysisState,
   readDataFile,
   saveResultVersion,
-  type AnalysisStateReadResult,
   updateAnalysisState,
   withCodexExecutionLock,
 } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import type { AiCommandOptions } from '../types';
 import { getRecoveryActions } from '../workflow/recovery';
-import type { StepRunResult } from '../workflow/types';
+import type { ReasonCode, StepRunResult } from '../workflow/types';
 import { extractErrorDetails } from '../utils/error';
 import { createDataFilesCleanedNotice } from '../workflow/data-retention-notices';
 import { executeCodexAnalysis, inspectCodexResultDeliverySession } from './ai/codex';
@@ -49,6 +54,25 @@ import { classifyCodexFailure } from './ai/codex-errors';
 import { executeGeminiAnalysis } from './ai/gemini';
 import { AiProviderOptionError, resolveAiProviderOptions } from './ai/provider-options';
 import packageJson from '../../../package.json';
+
+function classifyCodexSessionPersistenceFailure(error: unknown): ReasonCode {
+  const reasonCode = classifyCodexFailure(error);
+  return reasonCode === 'SESSION_MIGRATION_CONFLICT' || reasonCode === 'SESSION_MIGRATION_FAILED'
+    ? reasonCode
+    : 'AI_CODEX_SESSION_UPDATE_FAILED';
+}
+
+function classifyGeminiSessionFailure(
+  error: unknown,
+  fallback: ReasonCode = 'AI_PROVIDER_FAILED',
+): ReasonCode {
+  if (error instanceof AISessionMigrationConflictError) return 'SESSION_MIGRATION_CONFLICT';
+  if (error instanceof AISessionMigrationFailedError) return 'SESSION_MIGRATION_FAILED';
+  if (error instanceof AISessionPersistError || error instanceof AISessionStoreCorruptError) {
+    return 'SESSION_PERSIST_FAILED';
+  }
+  return fallback;
+}
 
 /**
  * Run the AI analysis command for one user.
@@ -109,40 +133,21 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     };
   }
 
-  let execute: () => Promise<StepRunResult>;
-  if (selectedProvider === 'gemini') {
-    const initialAnalysisState = readAnalysisState(username);
-    const hasPendingCodexDelivery =
-      initialAnalysisState.status === 'valid' &&
-      initialAnalysisState.state.pendingResultDelivery?.providerKey.startsWith('codex:');
-    if (!hasPendingCodexDelivery) {
-      return runAiForProvider(
-        username,
-        options,
-        analyzed,
-        config,
-        selectedProvider,
-        initialAnalysisState,
-      );
-    }
-    // Reconcile a Codex result and its session registry under the same per-user lock.
-    execute = () => runAiForProvider(username, options, analyzed, config, selectedProvider);
-  } else {
-    execute = () => runAiForProvider(username, options, analyzed, config, selectedProvider);
-  }
+  const execute = () => runAiForProvider(username, options, analyzed, config, selectedProvider);
 
   try {
     return await withCodexExecutionLock(username, execute);
   } catch (error) {
     if (error instanceof CodexExecutionLockBusyError) {
-      logger.warn(`${username} 的 Codex 分析正在由另一个进程处理`);
+      const reasonCode = selectedProvider === 'codex' ? 'AI_CODEX_BUSY' : 'SESSION_BUSY';
+      logger.warn(`${username} 的 AI 分析正在由另一个进程处理`);
       return {
         step: 'ai',
         status: 'failed',
-        reasonCode: 'AI_CODEX_BUSY',
-        message: '同一用户已有 Codex 分析正在执行',
+        reasonCode,
+        message: '同一用户已有 AI 分析正在执行',
         recoverable: true,
-        recoverActions: getRecoveryActions('AI_CODEX_BUSY', { username }),
+        recoverActions: getRecoveryActions(reasonCode, { username }),
         meta:
           error.state.status === 'locked'
             ? {
@@ -154,14 +159,16 @@ export async function runAi(username: string, options: AiCommandOptions): Promis
     }
 
     const { message, raw } = extractErrorDetails(error);
-    logger.error(`Codex 执行锁失败: ${message}`);
+    const reasonCode =
+      selectedProvider === 'codex' ? 'AI_CODEX_LOCK_FAILED' : 'SESSION_PERSIST_FAILED';
+    logger.error(`AI 执行锁失败: ${message}`);
     return {
       step: 'ai',
       status: 'failed',
-      reasonCode: 'AI_CODEX_LOCK_FAILED',
-      message: `Codex 执行锁失败: ${message}`,
+      reasonCode,
+      message: `AI 执行锁失败: ${message}`,
       recoverable: true,
-      recoverActions: getRecoveryActions('AI_CODEX_LOCK_FAILED', { username }),
+      recoverActions: getRecoveryActions(reasonCode, { username }),
       meta: { rawError: raw },
     };
   }
@@ -173,9 +180,8 @@ async function runAiForProvider(
   analyzed: AnalyzerOutput,
   config: V2erConfig,
   selectedProvider: AIProviderId,
-  initialAnalysisState?: AnalysisStateReadResult,
 ): Promise<StepRunResult> {
-  const analysisState = initialAnalysisState ?? readAnalysisState(username);
+  const analysisState = readAnalysisState(username);
   if (analysisState.status === 'invalid') {
     logger.error(`${username} 的 analysis-state.json 无效或不可读`);
     return {
@@ -263,7 +269,7 @@ async function runAiForProvider(
   let delivery: PendingResultDeliveryState;
   let resultVersionSource: ResultVersionSource | undefined;
   let recoveredResultMetadata: ResultVersionMetadata | undefined;
-  let completeCodexSession: (() => Promise<void>) | undefined;
+  let completeAnalysisSession: ((metadata: ResultVersionMetadata) => Promise<void>) | undefined;
   let warnings: ValidationResult['warnings'] = [];
 
   const pendingBeforeProvider = providerAnalysisState.pendingResultDelivery;
@@ -298,18 +304,44 @@ async function runAiForProvider(
           if (!localSessionId) {
             throw new Error('Saved Codex result does not identify its local session');
           }
-          const sessionStatus = inspectCodexResultDeliverySession(
+          const recovery = recoverCodexAnalysisSession({
             username,
-            pendingBeforeProvider,
-            localSessionId,
-          );
-          if (sessionStatus === 'completed') {
+            metadata: recovered.metadata,
+          });
+          if (recovery.status === 'completed') {
             providerAnalysisState = updateAnalysisState(username, (state) =>
               completeResultDelivery(state, pendingBeforeProvider.deliveryId),
             );
           } else {
+            const sessionStatus = inspectCodexResultDeliverySession(
+              username,
+              pendingBeforeProvider,
+              localSessionId,
+            );
+            if (sessionStatus !== 'pending') {
+              throw new Error('Saved Codex result has inconsistent session completion state');
+            }
             recoveredResultMetadata = recovered.metadata;
           }
+        } else if (recovered.metadata.provider === 'gemini') {
+          const reasoningLevel = recovered.metadata.reasoningLevel;
+          if (
+            recovered.metadata.promptHash !== request.promptHash ||
+            typeof reasoningLevel !== 'string'
+          ) {
+            throw new Error('Saved Gemini result does not match the current analysis prompt');
+          }
+          recoverGeminiAnalysisSession({
+            username,
+            metadata: recovered.metadata,
+            requestPayload: request.payload,
+            systemInstruction: request.systemPrompt,
+            result: recovered.result,
+            thinkingLevel: reasoningLevel,
+          });
+          providerAnalysisState = updateAnalysisState(username, (state) =>
+            completeResultDelivery(state, pendingBeforeProvider.deliveryId),
+          );
         } else {
           providerAnalysisState = updateAnalysisState(username, (state) =>
             completeResultDelivery(state, pendingBeforeProvider.deliveryId),
@@ -317,18 +349,21 @@ async function runAiForProvider(
         }
       } catch (error) {
         const { message, raw } = extractErrorDetails(error);
-        const isCodex = recovered.metadata.provider === 'codex';
+        const provider = recovered.metadata.provider;
+        const isCodex = provider === 'codex';
+        const reasonCode = isCodex
+          ? classifyCodexSessionPersistenceFailure(error)
+          : provider === 'gemini'
+            ? classifyGeminiSessionFailure(error, 'SESSION_PERSIST_FAILED')
+            : 'PROVENANCE_UPDATE_FAILED';
         logger.error(`协调已保存的 AI 结果状态失败: ${message}`);
         return {
           step: 'ai',
           status: 'failed',
-          reasonCode: isCodex ? 'AI_CODEX_SESSION_UPDATE_FAILED' : 'PROVENANCE_UPDATE_FAILED',
-          message: `AI 结果版本已恢复，但${isCodex ? ' Codex session' : ' provenance'} 状态更新失败: ${message}`,
+          reasonCode,
+          message: `AI 结果版本已恢复，但${provider === 'unknown' ? ' provenance' : ` ${provider} session`} 状态更新失败: ${message}`,
           recoverable: true,
-          recoverActions: getRecoveryActions(
-            isCodex ? 'AI_CODEX_SESSION_UPDATE_FAILED' : 'PROVENANCE_UPDATE_FAILED',
-            { username },
-          ),
+          recoverActions: getRecoveryActions(reasonCode, { username }),
           meta: { rawError: raw, resultVersionId: recovered.metadata.versionId },
         };
       }
@@ -441,7 +476,7 @@ async function runAiForProvider(
         warningCount: 0,
         appVersion: packageJson.version,
       };
-      completeCodexSession = execution.complete;
+      completeAnalysisSession = async (metadata) => execution.complete(metadata);
       logger.detail(`模型: ${execution.model}`);
       logger.detail(`思考深度: ${execution.reasoningEffort}`);
       logger.detail(`任务: ${execution.threadId}`);
@@ -480,6 +515,7 @@ async function runAiForProvider(
         savedResult,
         ...(configuredModel ? { model: configuredModel } : {}),
         ...(configuredThinkingLevel ? { thinkingLevel: configuredThinkingLevel } : {}),
+        newThread: options.newThread,
         resend: options.resend,
         prepareDelivery: (target) => {
           try {
@@ -515,13 +551,14 @@ async function runAiForProvider(
         logger.error(`AI 单次分析请求失败: ${message}`);
         logger.debug(raw);
       }
+      const reasonCode = classifyGeminiSessionFailure(error);
       return {
         step: 'ai',
         status: 'failed',
-        reasonCode: 'AI_PROVIDER_FAILED',
+        reasonCode,
         message: `AI 分析失败: ${message}`,
         recoverable: true,
-        recoverActions: getRecoveryActions('AI_PROVIDER_FAILED', { username }),
+        recoverActions: getRecoveryActions(reasonCode, { username }),
         meta: { rawError: raw },
       };
     }
@@ -570,7 +607,7 @@ async function runAiForProvider(
       provider: 'gemini',
       model,
       reasoningLevel: execution.thinkingLevel,
-      localSessionId: null,
+      localSessionId: execution.localSessionId,
       externalThreadId: null,
       threadName: null,
       promptHash: request.promptHash,
@@ -580,6 +617,7 @@ async function runAiForProvider(
       warningCount: warnings.length,
       appVersion: packageJson.version,
     };
+    completeAnalysisSession = async (metadata) => execution.complete(metadata);
   }
 
   if (warnings.length > 0) {
@@ -663,19 +701,26 @@ async function runAiForProvider(
     };
   }
 
-  if (completeCodexSession) {
+  if (completeAnalysisSession) {
     try {
-      await completeCodexSession();
+      await completeAnalysisSession(metadata);
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
-      logger.error(`更新 Codex session 状态失败: ${message}`);
+      const provider = resultVersionSource?.provider;
+      const reasonCode =
+        provider === 'codex'
+          ? classifyCodexSessionPersistenceFailure(error)
+          : provider === 'gemini'
+            ? classifyGeminiSessionFailure(error, 'SESSION_PERSIST_FAILED')
+            : 'SESSION_PERSIST_FAILED';
+      logger.error(`更新 AI session 状态失败: ${message}`);
       return {
         step: 'ai',
         status: 'failed',
-        reasonCode: 'AI_CODEX_SESSION_UPDATE_FAILED',
-        message: `AI 结果版本 ${metadata.versionId} 已保存，Codex session 状态更新失败: ${message}`,
+        reasonCode,
+        message: `AI 结果版本 ${metadata.versionId} 已保存，${provider ?? 'AI'} session 状态更新失败: ${message}`,
         recoverable: true,
-        recoverActions: getRecoveryActions('AI_CODEX_SESSION_UPDATE_FAILED', { username }),
+        recoverActions: getRecoveryActions(reasonCode, { username }),
         meta: { rawError: raw, resultVersionId: metadata.versionId },
       };
     }

@@ -151,7 +151,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       type: 'instruction',
       content: '将 --provider 或 ai.provider 设置为 gemini | codex，并使用对应的专属选项',
       description:
-        'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort、--new-thread 和 --codex-project',
+        'Gemini 使用 --thinking-level；Codex 使用 --reasoning-effort 和 --codex-project；两个 provider 均支持 --new-thread',
     },
   ],
   AI_CODEX_EXECUTABLE_NOT_FOUND: [
@@ -301,13 +301,56 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   AI_CODEX_STATE_INVALID: [
     {
       type: 'instruction',
-      content: '保留 codex-sessions.json，并检查 registry 与外部 thread 的身份差异',
+      content: '保留 sessions/ 和 codex-sessions.json，并检查本地 session 与外部 thread 的身份差异',
       description: '本地 session 转移或恢复身份校验失败',
     },
     {
       type: 'command',
       content: 'v2er session check <username> --provider codex',
       description: '读取锁、registry、Project 和 thread 诊断',
+    },
+  ],
+  SESSION_MIGRATION_CONFLICT: [
+    {
+      type: 'instruction',
+      content: '保留 sessions/ 和 codex-sessions.json，不要手动合并或覆盖会话文件',
+      description: '新旧会话存储缺少一致的迁移标记或存在身份冲突',
+    },
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '只读检查新旧会话存储状态',
+    },
+  ],
+  SESSION_MIGRATION_FAILED: [
+    {
+      type: 'instruction',
+      content: '保留 sessions/ 和 codex-sessions.json，并检查用户数据目录的可写权限与剩余空间',
+      description: '旧 Codex 会话未能完整写入新会话存储',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '修复存储条件后继续幂等迁移',
+    },
+  ],
+  SESSION_BUSY: [
+    {
+      type: 'instruction',
+      content: '等待同一用户的活动 AI 分析结束后重试',
+      description: '同一用户的持久会话正在更新',
+    },
+  ],
+  SESSION_PERSIST_FAILED: [
+    {
+      type: 'instruction',
+      content: '保留 sessions/、results/ 和 analysis-state.json，并检查用户数据目录权限与剩余空间',
+      description: '结果版本可能已经保存，会话状态仍需恢复',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '重新读取 pending 结果并补全会话状态',
     },
   ],
   AI_CODEX_BUSY: [
@@ -337,7 +380,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   AI_CODEX_SESSION_UPDATE_FAILED: [
     {
       type: 'instruction',
-      content: '保留 result.json、analysis-state.json 和 codex-sessions.json 用于恢复',
+      content: '保留 result.json、analysis-state.json 和 sessions/ 用于恢复',
       description: '结果与 provenance 已保存，Codex session 完成状态仍待更新',
     },
     {
