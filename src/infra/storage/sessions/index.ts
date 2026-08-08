@@ -31,10 +31,12 @@ export { ChatSessionMissingError, completeGeminiChatSession, selectChatSession }
 export type { ChatSessionSelection } from './chat';
 export { deleteAISession } from './clear';
 export {
+  AISessionIndexLockBusyError,
   AISessionLockBusyError,
   AISessionLockOwnershipError,
   AISessionLockReleaseError,
   readAISessionLock,
+  withAISessionIndexTransaction,
   withAISessionLock,
 } from './lock';
 export type { AISessionLockState } from './lock';

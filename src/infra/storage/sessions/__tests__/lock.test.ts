@@ -9,6 +9,7 @@ import {
   AISessionLockBusyError,
   AISessionLockOwnershipError,
   AISessionLockReleaseError,
+  withAISessionIndexTransaction,
   withAISessionLock,
 } from '../lock';
 
@@ -89,5 +90,20 @@ describe('AI session lock', () => {
       withAISessionLock('alice', 'gemini', '..\\escape', async () => undefined),
     ).rejects.toThrow(TypeError);
     expect(mockedFs.openSync).not.toHaveBeenCalled();
+  });
+
+  it('serializes reentrant shared-index transactions with one file lock', () => {
+    const result = withAISessionIndexTransaction('alice', () =>
+      withAISessionIndexTransaction('alice', () => 'published'),
+    );
+
+    expect(result).toBe('published');
+    expect(mockedFs.openSync).toHaveBeenCalledOnce();
+    expect(mockedFs.openSync).toHaveBeenCalledWith(
+      expect.stringMatching(/[\\/]\.locks[\\/]index\.lock$/),
+      'wx',
+      0o600,
+    );
+    expect(mockedFs.unlinkSync).toHaveBeenCalledOnce();
   });
 });

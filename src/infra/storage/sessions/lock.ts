@@ -6,6 +6,9 @@ import type { AISessionProvider } from '@/core/ai/sessions/types';
 import { getAISessionsRootDir } from './paths';
 
 const SESSION_LOCK_SCHEMA_VERSION = 1;
+const INDEX_LOCK_RETRY_MS = 10;
+const INDEX_LOCK_TIMEOUT_MS = 1_000;
+const INDEX_LOCK_WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
 
 interface AISessionLockOwner {
   schemaVersion: typeof SESSION_LOCK_SCHEMA_VERSION;
@@ -26,6 +29,17 @@ export class AISessionLockBusyError extends Error {
   constructor(state: Exclude<AISessionLockState, { status: 'missing' }>) {
     super('The selected AI session is already being updated');
     this.name = 'AISessionLockBusyError';
+    this.state = state;
+  }
+}
+
+/** Reports that the shared session index stayed busy past its short publication deadline. */
+export class AISessionIndexLockBusyError extends Error {
+  readonly state: Exclude<AISessionLockState, { status: 'missing' }>;
+
+  constructor(state: Exclude<AISessionLockState, { status: 'missing' }>) {
+    super('The shared AI session index is already being published');
+    this.name = 'AISessionIndexLockBusyError';
     this.state = state;
   }
 }
@@ -62,6 +76,10 @@ function getSessionLockPath(
   return path.join(getAISessionsRootDir(username), '.locks', provider, `${localSessionId}.lock`);
 }
 
+function getSessionIndexLockPath(username: string): string {
+  return path.join(getAISessionsRootDir(username), '.locks', 'index.lock');
+}
+
 function hasErrorCode(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code;
 }
@@ -88,28 +106,30 @@ function isLockOwner(value: unknown): value is AISessionLockOwner {
   );
 }
 
-/** Reads one session lock without changing it. */
-export function readAISessionLock(
-  username: string,
-  provider: AISessionProvider,
-  localSessionId: string,
-): AISessionLockState {
+function readLock(lockPath: string): AISessionLockState {
   try {
-    const value: unknown = JSON.parse(
-      fs.readFileSync(getSessionLockPath(username, provider, localSessionId), 'utf-8'),
-    );
+    const value: unknown = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
     return isLockOwner(value) ? { status: 'locked', owner: value } : { status: 'invalid' };
   } catch (error) {
     return hasErrorCode(error, 'ENOENT') ? { status: 'missing' } : { status: 'invalid' };
   }
 }
 
-function acquireAISessionLock(
+/** Reads one session lock without changing it. */
+export function readAISessionLock(
   username: string,
   provider: AISessionProvider,
   localSessionId: string,
+): AISessionLockState {
+  return readLock(getSessionLockPath(username, provider, localSessionId));
+}
+
+function acquireLock(
+  lockPath: string,
+  createBusyError: (
+    state: Exclude<AISessionLockState, { status: 'missing' }>,
+  ) => AISessionLockBusyError | AISessionIndexLockBusyError,
 ): () => void {
-  const lockPath = getSessionLockPath(username, provider, localSessionId);
   const owner: AISessionLockOwner = {
     schemaVersion: SESSION_LOCK_SCHEMA_VERSION,
     pid: process.pid,
@@ -123,8 +143,8 @@ function acquireAISessionLock(
     descriptor = fs.openSync(lockPath, 'wx', 0o600);
   } catch (error) {
     if (hasErrorCode(error, 'EEXIST')) {
-      const state = readAISessionLock(username, provider, localSessionId);
-      throw new AISessionLockBusyError(state.status === 'missing' ? { status: 'invalid' } : state);
+      const state = readLock(lockPath);
+      throw createBusyError(state.status === 'missing' ? { status: 'invalid' } : state);
     }
     throw error;
   }
@@ -147,13 +167,86 @@ function acquireAISessionLock(
   }
 
   return () => {
-    const current = readAISessionLock(username, provider, localSessionId);
+    const current = readLock(lockPath);
     if (current.status === 'missing') return;
     if (current.status !== 'locked' || current.owner.token !== owner.token) {
       throw new AISessionLockOwnershipError();
     }
     fs.unlinkSync(lockPath);
   };
+}
+
+function acquireAISessionLock(
+  username: string,
+  provider: AISessionProvider,
+  localSessionId: string,
+): () => void {
+  return acquireLock(
+    getSessionLockPath(username, provider, localSessionId),
+    (state) => new AISessionLockBusyError(state),
+  );
+}
+
+interface HeldIndexLock {
+  depth: number;
+  release: () => void;
+}
+
+const heldIndexLocks = new Map<string, HeldIndexLock>();
+
+function acquireAISessionIndexLock(lockPath: string): () => void {
+  const deadline = Date.now() + INDEX_LOCK_TIMEOUT_MS;
+  while (true) {
+    try {
+      return acquireLock(lockPath, (state) => new AISessionIndexLockBusyError(state));
+    } catch (error) {
+      if (!(error instanceof AISessionIndexLockBusyError) || Date.now() >= deadline) throw error;
+      Atomics.wait(INDEX_LOCK_WAIT_BUFFER, 0, 0, INDEX_LOCK_RETRY_MS);
+    }
+  }
+}
+
+/**
+ * Runs one synchronous read-modify-write publication under the shared per-user index lock.
+ * @param username - Owner of the shared session index.
+ * @param operation - Synchronous transaction that reads and publishes provider state.
+ * @returns The transaction result after verified lock release.
+ */
+export function withAISessionIndexTransaction<T>(username: string, operation: () => T): T {
+  const lockPath = getSessionIndexLockPath(username);
+  const held = heldIndexLocks.get(lockPath);
+  if (held) {
+    held.depth += 1;
+    try {
+      return operation();
+    } finally {
+      held.depth -= 1;
+    }
+  }
+
+  const release = acquireAISessionIndexLock(lockPath);
+  const owned: HeldIndexLock = { depth: 1, release };
+  heldIndexLocks.set(lockPath, owned);
+  const outcome = (() => {
+    try {
+      return { status: 'fulfilled' as const, value: operation() };
+    } catch (reason) {
+      return { status: 'rejected' as const, reason };
+    }
+  })();
+
+  heldIndexLocks.delete(lockPath);
+  try {
+    owned.release();
+  } catch (releaseError) {
+    throw new AISessionLockReleaseError(
+      releaseError,
+      outcome.status === 'rejected' ? outcome.reason : undefined,
+    );
+  }
+
+  if (outcome.status === 'rejected') throw outcome.reason;
+  return outcome.value;
 }
 
 /** Runs one operation under a non-blocking provider-session lock. */
