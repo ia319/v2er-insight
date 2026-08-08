@@ -93,6 +93,7 @@ export {
   completeGeminiAnalysisSession,
   completeGeminiChatSession,
   ChatSessionMissingError,
+  deleteAISession,
   ensureCodexSessionRegistry,
   inspectCodexSessionStorage,
   AISessionLockBusyError,
