@@ -8,7 +8,12 @@ import type {
   GeminiSessionStateV1,
 } from '@/core/ai/sessions/types';
 import { AISessionPersistError, AISessionStoreCorruptError } from './errors';
-import { readAISessionStore, writeAISessionIndex, writeAISessionState } from './repository';
+import {
+  readAISessionStore,
+  withAISessionIndexTransaction,
+  writeAISessionIndex,
+  writeAISessionState,
+} from './repository';
 
 export type ChatSessionSelection =
   | { provider: 'gemini'; index: AISessionIndexV1; session: GeminiSessionStateV1 }
@@ -27,6 +32,20 @@ export class ChatSessionMissingError extends Error {
 
 function maxTimestamp(...timestamps: string[]): string {
   return timestamps.reduce((latest, timestamp) => (timestamp > latest ? timestamp : latest));
+}
+
+function hasMatchingProviderIndex(
+  current: AISessionIndexV1,
+  expected: AISessionIndexV1,
+  provider: AISessionProvider,
+): boolean {
+  return (
+    current.activeByProvider[provider] === expected.activeByProvider[provider] &&
+    isDeepStrictEqual(
+      current.sessions.filter((summary) => summary.provider === provider),
+      expected.sessions.filter((summary) => summary.provider === provider),
+    )
+  );
 }
 
 /** Resolves a ready chat session without consulting the global provider configuration. */
@@ -62,7 +81,10 @@ function publishSessionUpdate(
   usedAt: string,
 ): void {
   const current = readAISessionStore(username);
-  if (current.status !== 'valid' || !isDeepStrictEqual(current.index, expectedIndex)) {
+  if (
+    current.status !== 'valid' ||
+    !hasMatchingProviderIndex(current.index, expectedIndex, expectedSession.provider)
+  ) {
     throw new AISessionPersistError('AI session index changed during the chat turn');
   }
   const currentSession = current.sessions.find(
@@ -73,18 +95,19 @@ function publishSessionUpdate(
   }
 
   const summaries = sortAISessionSummaries([
-    ...expectedIndex.sessions.filter(
+    ...current.index.sessions.filter(
       (summary) => summary.localSessionId !== updatedSession.localSessionId,
     ),
     createAISessionSummary(updatedSession),
   ]);
   const updatedIndex: AISessionIndexV1 = {
-    ...expectedIndex,
+    ...current.index,
     sessions: summaries,
     updatedAt: maxTimestamp(
-      expectedIndex.updatedAt,
+      current.index.updatedAt,
       usedAt,
       ...summaries.map((summary) => summary.lastUsedAt),
+      ...(current.index.migration ? [current.index.migration.completedAt] : []),
     ),
   };
   try {
@@ -117,16 +140,18 @@ export function completeGeminiChatSession(
   if (userText === '' || modelText === '') {
     throw new TypeError('Gemini chat history entries must not be empty');
   }
-  const usedAt = now().toISOString();
-  const session: GeminiSessionStateV1 = {
-    ...selection.session,
-    lastUsedAt: maxTimestamp(selection.session.lastUsedAt, usedAt),
-    history: [
-      ...selection.session.history,
-      { role: 'user', parts: [{ text: userText }] },
-      { role: 'model', parts: [{ text: modelText }] },
-    ],
-  };
-  publishSessionUpdate(username, selection.index, selection.session, session, usedAt);
-  return session;
+  return withAISessionIndexTransaction(username, () => {
+    const usedAt = now().toISOString();
+    const session: GeminiSessionStateV1 = {
+      ...selection.session,
+      lastUsedAt: maxTimestamp(selection.session.lastUsedAt, usedAt),
+      history: [
+        ...selection.session.history,
+        { role: 'user', parts: [{ text: userText }] },
+        { role: 'model', parts: [{ text: modelText }] },
+      ],
+    };
+    publishSessionUpdate(username, selection.index, selection.session, session, usedAt);
+    return session;
+  });
 }

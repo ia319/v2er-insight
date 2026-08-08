@@ -21,6 +21,7 @@ import { discoverCodexExecutables } from '@/infra/codex';
 import { logger } from '@/infra/logger';
 import {
   AISessionLockBusyError,
+  AISessionIndexLockBusyError,
   AISessionPersistError,
   AISessionStoreCorruptError,
   ChatSessionMissingError,
@@ -230,7 +231,11 @@ async function executeSelectedChat(
 
 function classifyChatFailure(error: unknown): ReasonCode {
   if (error instanceof ChatSessionMissingError) return 'CHAT_SESSION_MISSING';
-  if (error instanceof AISessionLockBusyError || error instanceof CodexExecutionLockBusyError) {
+  if (
+    error instanceof AISessionLockBusyError ||
+    error instanceof AISessionIndexLockBusyError ||
+    error instanceof CodexExecutionLockBusyError
+  ) {
     return 'SESSION_BUSY';
   }
   if (error instanceof ChatContextTooLongError) return 'CHAT_CONTEXT_TOO_LONG';

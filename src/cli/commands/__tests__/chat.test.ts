@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   ensureCodexSessionRegistry: vi.fn(),
   updateCodexSessionRegistry: vi.fn(),
   closeCodexRuntime: vi.fn(),
+  IndexLockBusyError: class extends Error {},
 }));
 
 vi.mock('@/config', () => ({
@@ -66,6 +67,7 @@ vi.mock('@/infra/logger', () => ({
   logger: { error: mocks.loggerError, diagnostic: mocks.loggerDiagnostic },
 }));
 vi.mock('@/infra/storage', () => ({
+  AISessionIndexLockBusyError: mocks.IndexLockBusyError,
   AISessionLockBusyError: class extends Error {},
   AISessionPersistError: class extends Error {},
   AISessionStoreCorruptError: class extends Error {},

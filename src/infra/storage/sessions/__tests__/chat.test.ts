@@ -8,6 +8,7 @@ const mockedWriteAISessionIndex = vi.hoisted(() => vi.fn());
 
 vi.mock('../repository', () => ({
   readAISessionStore: mockedReadAISessionStore,
+  withAISessionIndexTransaction: (_username: string, operation: () => unknown) => operation(),
   writeAISessionState: mockedWriteAISessionState,
   writeAISessionIndex: mockedWriteAISessionIndex,
 }));
@@ -118,7 +119,10 @@ describe('chat session storage', () => {
       .mockReturnValueOnce({ status: 'valid', index, sessions: [session] })
       .mockReturnValueOnce({
         status: 'valid',
-        index: { ...index, updatedAt: '2026-08-02T01:30:00.000Z' },
+        index: {
+          ...index,
+          activeByProvider: { gemini: '6d8eea46-7e52-47ca-a740-34a0b01bb811' },
+        },
         sessions: [session],
       });
     const selection = selectChatSession('alice');
@@ -128,6 +132,49 @@ describe('chat session storage', () => {
       AISessionPersistError,
     );
     expect(mockedWriteAISessionState).not.toHaveBeenCalled();
+  });
+
+  it('merges an unrelated Codex index update during the Gemini turn', () => {
+    const session = createSession();
+    const index = createIndex(session);
+    const codexSessionId = '6d8eea46-7e52-47ca-a740-34a0b01bb812';
+    const codexSummary = {
+      localSessionId: codexSessionId,
+      provider: 'codex' as const,
+      generation: 1,
+      status: 'ready' as const,
+      model: 'gpt-current',
+      promptHash: 'b'.repeat(64),
+      createdAt: '2026-08-02T01:30:00.000Z',
+      lastUsedAt: '2026-08-02T01:30:00.000Z',
+      externalThreadId: 'thread-1',
+    };
+    mockedReadAISessionStore
+      .mockReturnValueOnce({ status: 'valid', index, sessions: [session] })
+      .mockReturnValueOnce({
+        status: 'valid',
+        index: {
+          ...index,
+          lastSuccessfulAnalysisProvider: 'codex',
+          activeByProvider: { ...index.activeByProvider, codex: codexSessionId },
+          sessions: [codexSummary, ...index.sessions],
+          updatedAt: codexSummary.lastUsedAt,
+        },
+        sessions: [session],
+      });
+    const selection = selectChatSession('alice');
+    if (selection.provider !== 'gemini') throw new Error('Expected Gemini selection');
+
+    completeGeminiChatSession('alice', selection, 'question', 'answer');
+
+    expect(mockedWriteAISessionIndex).toHaveBeenCalledWith(
+      'alice',
+      expect.objectContaining({
+        lastSuccessfulAnalysisProvider: 'codex',
+        activeByProvider: { gemini: SESSION_ID, codex: codexSessionId },
+        sessions: expect.arrayContaining([codexSummary]),
+      }),
+    );
   });
 
   it('restores the previous history when index publication fails', () => {
