@@ -456,6 +456,35 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '检查 provider 运行条件和活动会话，不发送测试消息',
     },
   ],
+  SESSION_CONFIRMATION_REQUIRED: [
+    {
+      type: 'instruction',
+      content: '在交互式终端重新执行 session clear 并确认列出的永久删除范围',
+      description: '非交互终端不能代替用户确认永久清理',
+    },
+  ],
+  SESSION_CLEAR_CANCELLED: [],
+  SESSION_DELETE_UNSUPPORTED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '确认当前 Codex CLI 版本和 App Server 能力后再重试',
+    },
+  ],
+  SESSION_DELETE_FAILED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '确认外部 thread 与本地映射的当前状态，再决定是否重试',
+    },
+  ],
+  SESSION_CLEAR_FAILED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username>',
+      description: '确认外部 Codex thread 与本地映射仍然存在，再决定是否重试',
+    },
+  ],
   SHOW_RESULT_MISSING: [
     {
       type: 'command',
