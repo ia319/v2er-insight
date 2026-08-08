@@ -29,6 +29,17 @@ const THINKING_LEVEL_MAP = {
   high: SdkThinkingLevel.HIGH,
 } as const satisfies Record<ThinkingLevel, SdkThinkingLevel>;
 
+const CONTEXT_WARNING_RATIO = 0.9;
+const FALLBACK_CONTEXT_BYTE_LIMIT = 500_000;
+
+export interface GeminiContextInspection {
+  source: 'sdk' | 'fallback';
+  used: number;
+  limit: number;
+  nearLimit: boolean;
+  tooLong: boolean;
+}
+
 /** 将项目 ThinkingLevel 转为 SDK 枚举值 */
 function toSdkThinkingLevel(level?: ThinkingLevel): SdkThinkingLevel | undefined {
   return level ? THINKING_LEVEL_MAP[level] : undefined;
@@ -39,6 +50,28 @@ function toSdkHistory(history: readonly ProviderNeutralMessage[] | undefined): C
     role: message.role,
     parts: message.parts.map((part) => ({ text: part.text })),
   }));
+}
+
+function inspectUsage(source: GeminiContextInspection['source'], used: number, limit: number) {
+  const ratio = used / limit;
+  return {
+    source,
+    used,
+    limit,
+    nearLimit: ratio >= CONTEXT_WARNING_RATIO,
+    tooLong: used >= limit,
+  } satisfies GeminiContextInspection;
+}
+
+function estimateContextBytes(
+  systemPrompt: string,
+  history: readonly ProviderNeutralMessage[] | undefined,
+  message: string,
+): number {
+  const historyText = (history ?? [])
+    .flatMap((entry) => entry.parts.map((part) => part.text))
+    .join('\n');
+  return Buffer.byteLength(`${systemPrompt}\n${historyText}\n${message}`, 'utf-8');
 }
 
 export class GeminiProvider implements IAIProvider {
@@ -78,6 +111,59 @@ export class GeminiProvider implements IAIProvider {
         }),
       },
     });
+  }
+
+  /**
+   * Measures the next complete request against the model input limit.
+   * @param systemPrompt - Fixed instruction sent with every reconstructed request.
+   * @param message - New user text that will be appended to the completed history.
+   * @param options - Persisted history and request timeout.
+   * @returns SDK token usage when available, otherwise a conservative byte estimate.
+   */
+  async inspectContext(
+    systemPrompt: string,
+    message: string,
+    options?: Pick<SessionOptions, 'history' | 'timeout'>,
+  ): Promise<GeminiContextInspection> {
+    const history = toSdkHistory(options?.history);
+    const contents: Content[] = [...history, { role: 'user', parts: [{ text: message }] }];
+
+    try {
+      const [model, count] = await Promise.all([
+        this.ai.models.get({
+          model: this.model,
+          ...(typeof options?.timeout === 'number'
+            ? { config: { httpOptions: { timeout: options.timeout } } }
+            : {}),
+        }),
+        this.ai.models.countTokens({
+          model: this.model,
+          contents,
+          config: {
+            systemInstruction: systemPrompt,
+            ...(typeof options?.timeout === 'number'
+              ? { httpOptions: { timeout: options.timeout } }
+              : {}),
+          },
+        }),
+      ]);
+      if (
+        typeof model.inputTokenLimit === 'number' &&
+        model.inputTokenLimit > 0 &&
+        typeof count.totalTokens === 'number' &&
+        count.totalTokens >= 0
+      ) {
+        return inspectUsage('sdk', count.totalTokens, model.inputTokenLimit);
+      }
+    } catch {
+      // The actual chat remains authoritative when model metadata or token counting is unavailable.
+    }
+
+    return inspectUsage(
+      'fallback',
+      estimateContextBytes(systemPrompt, options?.history, message),
+      FALLBACK_CONTEXT_BYTE_LIMIT,
+    );
   }
 
   /**
