@@ -27,6 +27,16 @@ export type {
   RecoverGeminiAnalysisSessionOptions,
 } from './gemini-analysis';
 export { completeGeminiAnalysisSession, recoverGeminiAnalysisSession } from './gemini-analysis';
+export { ChatSessionMissingError, completeGeminiChatSession, selectChatSession } from './chat';
+export type { ChatSessionSelection } from './chat';
+export {
+  AISessionLockBusyError,
+  AISessionLockOwnershipError,
+  AISessionLockReleaseError,
+  readAISessionLock,
+  withAISessionLock,
+} from './lock';
+export type { AISessionLockState } from './lock';
 export type {
   PreparedGeminiAnalysisSession,
   PrepareGeminiAnalysisSessionOptions,
