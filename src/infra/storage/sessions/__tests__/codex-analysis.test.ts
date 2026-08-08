@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   assertCodexSessionMigrationIdentity: vi.fn(),
   readAISessionIndex: vi.fn(),
   readAISessionState: vi.fn(),
+  withAISessionIndexTransaction: vi.fn((_username: string, operation: () => unknown) =>
+    operation(),
+  ),
   writeAISessionIndex: vi.fn(),
   writeAISessionState: vi.fn(),
 }));
@@ -18,6 +21,7 @@ vi.mock('../codex-registry', () => ({
 vi.mock('../repository', () => ({
   readAISessionIndex: mocks.readAISessionIndex,
   readAISessionState: mocks.readAISessionState,
+  withAISessionIndexTransaction: mocks.withAISessionIndexTransaction,
   writeAISessionIndex: mocks.writeAISessionIndex,
   writeAISessionState: mocks.writeAISessionState,
 }));

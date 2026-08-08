@@ -13,6 +13,7 @@ import { AISessionPersistError, AISessionStoreCorruptError } from './errors';
 import {
   readAISessionIndex,
   readAISessionState,
+  withAISessionIndexTransaction,
   writeAISessionIndex,
   writeAISessionState,
 } from './repository';
@@ -217,23 +218,25 @@ export function recoverCodexAnalysisSession(
   options: RecoverCodexAnalysisSessionOptions,
   now: () => Date = () => new Date(),
 ): RecoverCodexAnalysisSessionResult {
-  const store = readRecoverableStore(options.username, options.metadata);
-  if (store.target.pendingAnalysis !== undefined) {
-    if (!pendingMatchesResult(store.target, options.metadata)) {
-      throw new AISessionPersistError(
-        'Saved Codex result does not match its pending analysis turn',
-      );
+  return withAISessionIndexTransaction(options.username, () => {
+    const store = readRecoverableStore(options.username, options.metadata);
+    if (store.target.pendingAnalysis !== undefined) {
+      if (!pendingMatchesResult(store.target, options.metadata)) {
+        throw new AISessionPersistError(
+          'Saved Codex result does not match its pending analysis turn',
+        );
+      }
+      return { status: 'pending', session: store.target };
     }
-    return { status: 'pending', session: store.target };
-  }
 
-  const completed = createCompletedSession(store.target, options.metadata);
-  const completedIndex = createCompletedIndex(store, completed, now().toISOString());
-  if (!isDeepStrictEqual(completed, store.target)) {
-    writeAISessionState(options.username, completed);
-  }
-  if (!isDeepStrictEqual(completedIndex, store.index)) {
-    writeAISessionIndex(options.username, completedIndex);
-  }
-  return { status: 'completed', session: completed };
+    const completed = createCompletedSession(store.target, options.metadata);
+    const completedIndex = createCompletedIndex(store, completed, now().toISOString());
+    if (!isDeepStrictEqual(completed, store.target)) {
+      writeAISessionState(options.username, completed);
+    }
+    if (!isDeepStrictEqual(completedIndex, store.index)) {
+      writeAISessionIndex(options.username, completedIndex);
+    }
+    return { status: 'completed', session: completed };
+  });
 }

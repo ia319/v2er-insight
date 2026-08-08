@@ -5,6 +5,9 @@ import type { AISessionIndexV1, CodexSessionStateV1 } from '@/core/ai/sessions/t
 const mocks = vi.hoisted(() => ({
   readAISessionState: vi.fn(),
   readAISessionStore: vi.fn(),
+  withAISessionIndexTransaction: vi.fn((_username: string, operation: () => unknown) =>
+    operation(),
+  ),
   writeAISessionIndex: vi.fn(),
   writeAISessionState: vi.fn(),
   readAnalysisState: vi.fn(),
@@ -15,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../repository', () => ({
   readAISessionState: mocks.readAISessionState,
   readAISessionStore: mocks.readAISessionStore,
+  withAISessionIndexTransaction: mocks.withAISessionIndexTransaction,
   writeAISessionIndex: mocks.writeAISessionIndex,
   writeAISessionState: mocks.writeAISessionState,
 }));

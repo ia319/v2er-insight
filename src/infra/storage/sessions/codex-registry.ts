@@ -20,6 +20,7 @@ import { AISessionStoreCorruptError } from './errors';
 import {
   readAISessionState,
   readAISessionStore,
+  withAISessionIndexTransaction,
   writeAISessionIndex,
   writeAISessionState,
 } from './repository';
@@ -302,15 +303,7 @@ function migrateLegacyRegistry(
   return { index, sessions, registry: toRegistry(index, sessions) };
 }
 
-/**
- * Opens the writable Codex session store and migrates a valid legacy registry when required.
- * Call this function only while the per-user Codex execution lock is held.
- * @param username - Owner of the Codex session store.
- * @param now - Clock used for migration and empty-index timestamps.
- * @returns A validated Codex registry projection.
- * @throws When session data is invalid, migration identities conflict, or migration cannot finish.
- */
-export function ensureCodexSessionRegistry(
+function ensureCodexSessionRegistryWithinTransaction(
   username: string,
   now: () => Date = () => new Date(),
 ): CodexThreadRegistryV1 {
@@ -342,6 +335,23 @@ export function ensureCodexSessionRegistry(
   return emptyRegistry();
 }
 
+/**
+ * Opens the writable Codex session store and migrates a valid legacy registry when required.
+ * Call this function only while the per-user Codex execution lock is held.
+ * @param username - Owner of the Codex session store.
+ * @param now - Clock used for migration and empty-index timestamps.
+ * @returns A validated Codex registry projection.
+ * @throws When session data is invalid, migration identities conflict, or migration cannot finish.
+ */
+export function ensureCodexSessionRegistry(
+  username: string,
+  now: () => Date = () => new Date(),
+): CodexThreadRegistryV1 {
+  return withAISessionIndexTransaction(username, () =>
+    ensureCodexSessionRegistryWithinTransaction(username, now),
+  );
+}
+
 function mergeCodexState(
   username: string,
   state: CodexThreadState,
@@ -364,21 +374,12 @@ function mergeCodexState(
   return next;
 }
 
-/**
- * Applies one legacy registry transition to provider files and publishes the index last.
- * Call this function only while the per-user Codex execution lock is held.
- * @param username - Owner of the Codex session store.
- * @param update - Validated Codex registry transition.
- * @param now - Clock used for the index update timestamp.
- * @returns The updated Codex registry projection.
- * @throws When current state or updater output is invalid, or persistence fails.
- */
-export function updateCodexSessionRegistry(
+function updateCodexSessionRegistryWithinTransaction(
   username: string,
   update: (registry: CodexThreadRegistryV1) => CodexThreadRegistryV1,
   now: () => Date = () => new Date(),
 ): CodexThreadRegistryV1 {
-  ensureCodexSessionRegistry(username, now);
+  ensureCodexSessionRegistryWithinTransaction(username, now);
   const current = loadCodexSessionStore(username);
   if (!current) throw new AISessionStoreCorruptError();
 
@@ -426,4 +427,23 @@ export function updateCodexSessionRegistry(
   };
   writeAISessionIndex(username, index);
   return nextRegistry;
+}
+
+/**
+ * Applies one legacy registry transition to provider files and publishes the index last.
+ * Call this function only while the per-user Codex execution lock is held.
+ * @param username - Owner of the Codex session store.
+ * @param update - Validated Codex registry transition.
+ * @param now - Clock used for the index update timestamp.
+ * @returns The updated Codex registry projection.
+ * @throws When current state or updater output is invalid, or persistence fails.
+ */
+export function updateCodexSessionRegistry(
+  username: string,
+  update: (registry: CodexThreadRegistryV1) => CodexThreadRegistryV1,
+  now: () => Date = () => new Date(),
+): CodexThreadRegistryV1 {
+  return withAISessionIndexTransaction(username, () =>
+    updateCodexSessionRegistryWithinTransaction(username, update, now),
+  );
 }
