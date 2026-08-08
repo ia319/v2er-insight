@@ -42,6 +42,7 @@ export type { CodexAppServerExit, CodexAppServerProcessOptions } from './process
 export { CodexAppServerProcess, startCodexAppServer } from './process';
 export type { JsonRpcNotification, JsonValue } from './protocol';
 export {
+  decodeThreadDeleteResponse,
   decodeThreadReadResponse,
   decodeThreadResumeResponse,
   decodeThreadSetNameResponse,

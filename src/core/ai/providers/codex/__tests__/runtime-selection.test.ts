@@ -6,12 +6,38 @@ import type {
   CodexModelInfo,
   CodexServerInfo,
 } from '@/infra/codex';
-import { selectCodexRuntime, type CodexRuntimeConnection } from '../runtime-selection';
+import {
+  selectCodexControlRuntime,
+  selectCodexRuntime,
+  type CodexRuntimeConnection,
+} from '../runtime-selection';
 
 const first = createCandidate('C:\\codex\\first.exe', 'running-app-server');
 const second = createCandidate('C:\\codex\\second.cmd', 'path', 'command-shim');
 
 describe('selectCodexRuntime', () => {
+  it('should select a control runtime without loading the model catalog', async () => {
+    const connection = createConnection();
+    const dependencies = {
+      probeVersion: vi.fn(async () => '0.144.5'),
+      connect: vi.fn(() => connection),
+    };
+
+    const runtime = await selectCodexControlRuntime(
+      [first],
+      {
+        versionTimeoutMs: 1000,
+        process: { requestTimeoutMs: 1000, shutdownGraceMs: 1000 },
+        connection: { startupTimeoutMs: 1000 },
+      },
+      dependencies,
+    );
+
+    expect(runtime).toMatchObject({ candidate: first, version: '0.144.5' });
+    expect(connection.listModels).not.toHaveBeenCalled();
+    await runtime.connection.close();
+  });
+
   it('should continue after an unusable candidate and retain diagnostics', async () => {
     const firstConnection = createConnection({
       initializeError: new Error('unsupported protocol'),

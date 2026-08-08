@@ -12,6 +12,7 @@ import {
 } from './method-decoders';
 import {
   decodeThreadReadResponse,
+  decodeThreadDeleteResponse,
   decodeThreadResumeResponse,
   decodeThreadSetNameResponse,
   decodeThreadStartResponse,
@@ -239,6 +240,12 @@ export class CodexAppServerConnection {
       { threadId, name },
       decodeThreadSetNameResponse,
     );
+  }
+
+  /** Permanently deletes one persisted thread through the supported App Server method. */
+  async deleteThread(threadId: string): Promise<void> {
+    await this.initialize();
+    await this.process.client.request('thread/delete', { threadId }, decodeThreadDeleteResponse);
   }
 
   /** Starts one text turn with explicit model, effort, cwd, and read-only policy. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CodexAppServerProtocolError } from '../errors';
 import {
+  decodeThreadDeleteResponse,
   decodeThreadReadResponse,
   decodeThreadSetNameResponse,
   decodeThreadStartResponse,
@@ -133,8 +134,10 @@ describe('App Server thread decoders', () => {
     expect(() => decodeTurnStartResponse({ turn })).toThrow(CodexAppServerProtocolError);
   });
 
-  it('should require an object result from thread/name/set', () => {
+  it('should require object results from thread mutations', () => {
     expect(decodeThreadSetNameResponse({})).toBeUndefined();
+    expect(decodeThreadDeleteResponse({})).toBeUndefined();
     expect(() => decodeThreadSetNameResponse(null)).toThrow(CodexAppServerProtocolError);
+    expect(() => decodeThreadDeleteResponse(null)).toThrow(CodexAppServerProtocolError);
   });
 });
