@@ -51,6 +51,7 @@ export {
 } from './thread-decoders';
 export type {
   CodexAgentMessage,
+  CodexErrorInfo,
   CodexMessagePhase,
   CodexThreadActiveFlag,
   CodexThreadInfo,

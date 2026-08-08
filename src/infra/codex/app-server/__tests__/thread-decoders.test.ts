@@ -69,7 +69,21 @@ describe('App Server thread decoders', () => {
         {
           ...createTurn(),
           status: 'failed',
-          error: { message: 'request failed', codexErrorInfo: 'other', additionalDetails: null },
+          error: {
+            message: 'request failed',
+            codexErrorInfo: 'contextWindowExceeded',
+            additionalDetails: null,
+          },
+        },
+        {
+          ...createTurn(),
+          id: 'turn-2',
+          status: 'failed',
+          error: {
+            message: 'connection failed',
+            codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 503 } },
+            additionalDetails: 'upstream unavailable',
+          },
         },
       ],
     };
@@ -79,7 +93,19 @@ describe('App Server thread decoders', () => {
       turns: [
         {
           status: 'failed',
-          error: { message: 'request failed', additionalDetails: null },
+          error: {
+            message: 'request failed',
+            codexErrorInfo: 'contextWindowExceeded',
+            additionalDetails: null,
+          },
+        },
+        {
+          status: 'failed',
+          error: {
+            message: 'connection failed',
+            codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 503 } },
+            additionalDetails: 'upstream unavailable',
+          },
         },
       ],
     });

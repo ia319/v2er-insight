@@ -28,14 +28,25 @@ describe('Codex turn result', () => {
   ] as const)('should reject %s turns', (status, code) => {
     const turn = createTurn({
       status,
-      error: status === 'failed' ? { message: 'request failed', additionalDetails: null } : null,
+      error:
+        status === 'failed'
+          ? {
+              message: 'request failed',
+              codexErrorInfo: 'contextWindowExceeded',
+              additionalDetails: null,
+            }
+          : null,
     });
     try {
       assertCodexTurnCompleted(turn);
       throw new Error('Expected turn rejection');
     } catch (error) {
       expect(error).toBeInstanceOf(CodexTurnResultError);
-      expect(error).toMatchObject({ code, turnId: 'turn-1' });
+      expect(error).toMatchObject({
+        code,
+        turnId: 'turn-1',
+        codexErrorInfo: status === 'failed' ? 'contextWindowExceeded' : null,
+      });
     }
   });
 

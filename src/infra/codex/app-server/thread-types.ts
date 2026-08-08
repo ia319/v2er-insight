@@ -14,8 +14,36 @@ export interface CodexAgentMessage {
   phase: CodexMessagePhase | null;
 }
 
+export type CodexErrorInfo =
+  | 'contextWindowExceeded'
+  | 'usageLimitExceeded'
+  | 'serverOverloaded'
+  | 'cyberPolicy'
+  | 'internalServerError'
+  | 'unauthorized'
+  | 'badRequest'
+  | 'threadRollbackFailed'
+  | 'sandboxError'
+  | 'other'
+  | {
+      httpConnectionFailed: { httpStatusCode: number | null };
+    }
+  | {
+      responseStreamConnectionFailed: { httpStatusCode: number | null };
+    }
+  | {
+      responseStreamDisconnected: { httpStatusCode: number | null };
+    }
+  | {
+      responseTooManyFailedAttempts: { httpStatusCode: number | null };
+    }
+  | {
+      activeTurnNotSteerable: { turnKind: 'review' | 'compact' };
+    };
+
 export interface CodexTurnFailure {
   message: string;
+  codexErrorInfo?: CodexErrorInfo | null;
   additionalDetails: string | null;
 }
 
