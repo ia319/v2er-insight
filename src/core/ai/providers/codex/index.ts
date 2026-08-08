@@ -27,6 +27,12 @@ export type {
 } from './analysis-run';
 export { runCodexAnalysis } from './analysis-run';
 export type {
+  CodexChatTurnErrorCode,
+  CompletedCodexChatTurn,
+  SendCodexChatTurnOptions,
+} from './chat-turn';
+export { CodexChatTurnError, sendCodexChatTurn } from './chat-turn';
+export type {
   CodexBootstrapRecovery,
   CodexBootstrapRecoveryErrorCode,
   RecoverCodexBootstrapOptions,
