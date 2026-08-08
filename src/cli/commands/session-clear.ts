@@ -4,6 +4,7 @@ import { logger } from '@/infra/logger';
 import {
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
+  AISessionIndexLockBusyError,
   AISessionPersistError,
   AISessionStoreCorruptError,
   ChatSessionMissingError,
@@ -104,6 +105,7 @@ function createSourceMissingNotice(username: string): UserNotice {
 function classifyClearFailure(error: unknown): ReasonCode {
   const failure = error instanceof SessionClearExecutionError ? error.failure : error;
   if (failure instanceof ChatSessionMissingError) return 'CHAT_SESSION_MISSING';
+  if (failure instanceof AISessionIndexLockBusyError) return 'SESSION_BUSY';
   if (failure instanceof TypeError || failure instanceof AISessionStoreCorruptError) {
     return 'CHAT_SESSION_INVALID';
   }

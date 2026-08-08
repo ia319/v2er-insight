@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   loggerDiagnostic: vi.fn(),
   loggerError: vi.fn(),
   PersistError: class extends Error {},
+  IndexLockBusyError: class extends Error {},
   StoreCorruptError: class extends Error {},
   MigrationConflictError: class extends Error {},
   MigrationFailedError: class extends Error {},
@@ -45,6 +46,7 @@ vi.mock('@/infra/logger', () => ({
 }));
 
 vi.mock('@/infra/storage', () => ({
+  AISessionIndexLockBusyError: mocks.IndexLockBusyError,
   AISessionMigrationConflictError: mocks.MigrationConflictError,
   AISessionMigrationFailedError: mocks.MigrationFailedError,
   AISessionPersistError: mocks.PersistError,

@@ -4,7 +4,11 @@ import type { AISessionIndexV1, AISessionStateV1 } from '@/core/ai/sessions/type
 import { sortAISessionSummaries } from '@/core/ai/sessions/summary';
 import { AISessionPersistError, AISessionStoreCorruptError } from './errors';
 import { getAISessionFilePath } from './paths';
-import { readAISessionStore, writeAISessionIndex } from './repository';
+import {
+  readAISessionStore,
+  withAISessionIndexTransaction,
+  writeAISessionIndex,
+} from './repository';
 
 function maxTimestamp(...timestamps: string[]): string {
   return timestamps.reduce((latest, timestamp) => (timestamp > latest ? timestamp : latest));
@@ -61,37 +65,40 @@ export function deleteAISession(
   expectedSession: AISessionStateV1,
   now: () => Date = () => new Date(),
 ): AISessionIndexV1 {
-  const current = readAISessionStore(username);
-  if (current.status !== 'valid') throw new AISessionStoreCorruptError();
-  const session = current.sessions.find(
-    (candidate) => candidate.localSessionId === expectedSession.localSessionId,
-  );
-  if (
-    !isDeepStrictEqual(current.index, expectedIndex) ||
-    !isDeepStrictEqual(session, expectedSession)
-  ) {
-    throw new AISessionPersistError('AI session clear scope changed after confirmation');
-  }
-
-  const updatedIndex = createIndexWithoutSession(
-    current.index,
-    expectedSession,
-    now().toISOString(),
-  );
-  writeAISessionIndex(username, updatedIndex);
-  try {
-    fs.unlinkSync(
-      getAISessionFilePath(username, expectedSession.provider, expectedSession.localSessionId),
+  return withAISessionIndexTransaction(username, () => {
+    const current = readAISessionStore(username);
+    if (current.status !== 'valid') throw new AISessionStoreCorruptError();
+    const session = current.sessions.find(
+      (candidate) => candidate.localSessionId === expectedSession.localSessionId,
     );
-  } catch (error) {
-    try {
-      writeAISessionIndex(username, current.index);
-    } catch (rollbackError) {
-      throw new AISessionPersistError(
-        `AI session file deletion failed (${getErrorMessage(error)}) and index rollback failed (${getErrorMessage(rollbackError)})`,
-      );
+    if (
+      current.index.activeByProvider[expectedSession.provider] !==
+        expectedIndex.activeByProvider[expectedSession.provider] ||
+      !isDeepStrictEqual(session, expectedSession)
+    ) {
+      throw new AISessionPersistError('AI session clear scope changed after confirmation');
     }
-    throw new AISessionPersistError(`AI session file deletion failed: ${getErrorMessage(error)}`);
-  }
-  return updatedIndex;
+
+    const updatedIndex = createIndexWithoutSession(
+      current.index,
+      expectedSession,
+      now().toISOString(),
+    );
+    writeAISessionIndex(username, updatedIndex);
+    try {
+      fs.unlinkSync(
+        getAISessionFilePath(username, expectedSession.provider, expectedSession.localSessionId),
+      );
+    } catch (error) {
+      try {
+        writeAISessionIndex(username, current.index);
+      } catch (rollbackError) {
+        throw new AISessionPersistError(
+          `AI session file deletion failed (${getErrorMessage(error)}) and index rollback failed (${getErrorMessage(rollbackError)})`,
+        );
+      }
+      throw new AISessionPersistError(`AI session file deletion failed: ${getErrorMessage(error)}`);
+    }
+    return updatedIndex;
+  });
 }
