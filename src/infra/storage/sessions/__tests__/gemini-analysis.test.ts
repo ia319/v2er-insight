@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   readAISessionIndex: vi.fn(),
   readAISessionState: vi.fn(),
   readAISessionStore: vi.fn(),
+  withAISessionIndexTransaction: vi.fn((_username: string, operation: () => unknown) =>
+    operation(),
+  ),
   writeAISessionIndex: vi.fn(),
   writeAISessionState: vi.fn(),
 }));
@@ -17,6 +20,7 @@ vi.mock('../repository', () => ({
   readAISessionIndex: mocks.readAISessionIndex,
   readAISessionState: mocks.readAISessionState,
   readAISessionStore: mocks.readAISessionStore,
+  withAISessionIndexTransaction: mocks.withAISessionIndexTransaction,
   writeAISessionIndex: mocks.writeAISessionIndex,
   writeAISessionState: mocks.writeAISessionState,
 }));
@@ -135,12 +139,15 @@ describe('Gemini analysis session storage', () => {
     });
   });
 
-  it('rejects a changed index before writing a prepared result', () => {
+  it('rejects a changed Gemini index before writing a prepared result', () => {
     const session = createSession();
     const index = createIndex(session);
     mocks.readAISessionStore.mockReturnValue({
       status: 'valid',
-      index: { ...index, updatedAt: NOW.toISOString() },
+      index: {
+        ...index,
+        activeByProvider: { gemini: NEW_SESSION_ID },
+      },
       sessions: [session],
     });
 
@@ -155,6 +162,51 @@ describe('Gemini analysis session storage', () => {
       }),
     ).toThrow(AISessionPersistError);
     expect(mocks.writeAISessionState).not.toHaveBeenCalled();
+  });
+
+  it('preserves an unrelated Codex index update during Gemini completion', () => {
+    const session = createSession();
+    const index = createIndex(session);
+    const codexSessionId = '6d8eea46-7e52-47ca-a740-34a0b01bb812';
+    const codexSummary = {
+      localSessionId: codexSessionId,
+      provider: 'codex' as const,
+      generation: 1,
+      status: 'ready' as const,
+      model: 'gpt-current',
+      promptHash: 'f'.repeat(64),
+      createdAt: '2026-08-02T03:00:00.000Z',
+      lastUsedAt: '2026-08-02T03:00:00.000Z',
+      externalThreadId: 'thread-1',
+    };
+    mocks.readAISessionStore.mockReturnValue({
+      status: 'valid',
+      index: {
+        ...index,
+        lastSuccessfulAnalysisProvider: 'codex',
+        activeByProvider: { ...index.activeByProvider, codex: codexSessionId },
+        sessions: [codexSummary, ...index.sessions],
+        updatedAt: codexSummary.lastUsedAt,
+      },
+      sessions: [session],
+    });
+
+    completeGeminiAnalysisSession({
+      username: 'alice',
+      prepared: { index, session, isNew: false },
+      metadata: createMetadata(),
+      requestPayload: REQUEST_PAYLOAD,
+      result: RESULT,
+      thinkingLevel: 'high',
+    });
+
+    expect(mocks.writeAISessionIndex).toHaveBeenCalledWith(
+      'alice',
+      expect.objectContaining({
+        activeByProvider: { gemini: SESSION_ID, codex: codexSessionId },
+        sessions: expect.arrayContaining([codexSummary]),
+      }),
+    );
   });
 
   it('reconstructs a missing new generation from committed result metadata', () => {

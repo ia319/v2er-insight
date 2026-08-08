@@ -15,6 +15,7 @@ import {
   readAISessionIndex,
   readAISessionState,
   readAISessionStore,
+  withAISessionIndexTransaction,
   writeAISessionIndex,
   writeAISessionState,
 } from './repository';
@@ -219,30 +220,41 @@ export function completeGeminiAnalysisSession(
   options: CompleteGeminiAnalysisSessionOptions,
   now: () => Date = () => new Date(),
 ): GeminiSessionStateV1 {
-  const current = readStore(options.username);
-  if (!isDeepStrictEqual(current.index, options.prepared.index)) {
-    throw new AISessionPersistError('Gemini session index changed before result completion');
-  }
-  const persisted = current.sessions.find(
-    (session) => session.localSessionId === options.prepared.session.localSessionId,
-  );
-  if (
-    (!options.prepared.isNew && !isDeepStrictEqual(persisted, options.prepared.session)) ||
-    (options.prepared.isNew && persisted !== undefined)
-  ) {
-    throw new AISessionPersistError('Gemini session changed before result completion');
-  }
+  return withAISessionIndexTransaction(options.username, () => {
+    const current = readStore(options.username);
+    const currentGeminiSummaries = current.index.sessions.filter(
+      (summary) => summary.provider === 'gemini',
+    );
+    const preparedGeminiSummaries = options.prepared.index.sessions.filter(
+      (summary) => summary.provider === 'gemini',
+    );
+    if (
+      current.index.activeByProvider.gemini !== options.prepared.index.activeByProvider.gemini ||
+      !isDeepStrictEqual(currentGeminiSummaries, preparedGeminiSummaries)
+    ) {
+      throw new AISessionPersistError('Gemini session index changed before result completion');
+    }
+    const persisted = current.sessions.find(
+      (session) => session.localSessionId === options.prepared.session.localSessionId,
+    );
+    if (
+      (!options.prepared.isNew && !isDeepStrictEqual(persisted, options.prepared.session)) ||
+      (options.prepared.isNew && persisted !== undefined)
+    ) {
+      throw new AISessionPersistError('Gemini session changed before result completion');
+    }
 
-  return persistCompletion(
-    options.username,
-    current.index,
-    options.prepared.session,
-    options.metadata,
-    options.requestPayload,
-    options.result,
-    options.thinkingLevel,
-    now,
-  );
+    return persistCompletion(
+      options.username,
+      current.index,
+      options.prepared.session,
+      options.metadata,
+      options.requestPayload,
+      options.result,
+      options.thinkingLevel,
+      now,
+    );
+  });
 }
 
 /**
@@ -266,42 +278,46 @@ export function recoverGeminiAnalysisSession(
   ) {
     throw new AISessionPersistError('Saved Gemini result does not identify its local session');
   }
-  const current = readRecoverableStore(options.username, localSessionId);
-  const existingSession = current.target ?? undefined;
+  const model = options.metadata.model;
+  const promptHash = options.metadata.promptHash;
+  return withAISessionIndexTransaction(options.username, () => {
+    const current = readRecoverableStore(options.username, localSessionId);
+    const existingSession = current.target ?? undefined;
 
-  const timestamp = now().toISOString();
-  const session: GeminiSessionStateV1 = existingSession
-    ? existingSession
-    : {
-        schemaVersion: AI_SESSION_STATE_SCHEMA_VERSION,
-        localSessionId,
-        username: options.username,
-        provider: 'gemini',
-        generation:
-          current.sessions.reduce(
-            (maximum, candidate) => Math.max(maximum, candidate.generation),
-            0,
-          ) + 1,
-        promptHash: options.metadata.promptHash,
-        model: options.metadata.model,
-        createdAt: options.metadata.createdAt ?? timestamp,
-        lastUsedAt: options.metadata.createdAt ?? timestamp,
-        lastSuccessfulAnalysisAt: null,
-        lastResultVersionId: null,
-        lastAnalysisFingerprint: null,
-        systemInstruction: options.systemInstruction,
-        thinkingLevel: options.thinkingLevel,
-        history: [],
-      };
+    const timestamp = now().toISOString();
+    const session: GeminiSessionStateV1 = existingSession
+      ? existingSession
+      : {
+          schemaVersion: AI_SESSION_STATE_SCHEMA_VERSION,
+          localSessionId,
+          username: options.username,
+          provider: 'gemini',
+          generation:
+            current.sessions.reduce(
+              (maximum, candidate) => Math.max(maximum, candidate.generation),
+              0,
+            ) + 1,
+          promptHash,
+          model,
+          createdAt: options.metadata.createdAt ?? timestamp,
+          lastUsedAt: options.metadata.createdAt ?? timestamp,
+          lastSuccessfulAnalysisAt: null,
+          lastResultVersionId: null,
+          lastAnalysisFingerprint: null,
+          systemInstruction: options.systemInstruction,
+          thinkingLevel: options.thinkingLevel,
+          history: [],
+        };
 
-  return persistCompletion(
-    options.username,
-    current.index,
-    session,
-    options.metadata,
-    options.requestPayload,
-    options.result,
-    options.thinkingLevel,
-    now,
-  );
+    return persistCompletion(
+      options.username,
+      current.index,
+      session,
+      options.metadata,
+      options.requestPayload,
+      options.result,
+      options.thinkingLevel,
+      now,
+    );
+  });
 }
