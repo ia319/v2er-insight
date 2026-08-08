@@ -49,6 +49,10 @@ export type ReasonCode =
   | 'SESSION_MIGRATION_FAILED'
   | 'AI_PROVIDER_FAILED'
   | 'AI_RESULT_WRITE_FAILED'
+  | 'CHAT_SESSION_MISSING'
+  | 'CHAT_SESSION_INVALID'
+  | 'CHAT_CONTEXT_TOO_LONG'
+  | 'CHAT_PROVIDER_FAILED'
   | 'SHOW_RESULT_MISSING'
   | 'SHOW_RESULT_INVALID'
   | 'UNKNOWN_ERROR';
@@ -67,7 +71,8 @@ export type NoticeCode =
   | 'DATA_RETENTION_ENABLED'
   | 'DATA_FILES_CLEANED'
   | 'DATA_RESULT_STALE'
-  | 'DATA_SNAPSHOT_PARTIAL';
+  | 'DATA_SNAPSHOT_PARTIAL'
+  | 'SESSION_CONTEXT_NEAR_LIMIT';
 export type NoticeSeverity = 'info' | 'warning';
 
 /** A machine-identifiable, non-fatal user-facing effect. */

@@ -423,6 +423,39 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '存储问题修复后重新发送并保存结果',
     },
   ],
+  CHAT_SESSION_MISSING: [
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '先完成一次 AI 分析，再使用默认聊天会话',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '需要 Codex 会话时，先显式完成一次 Codex 分析',
+    },
+  ],
+  CHAT_SESSION_INVALID: [
+    {
+      type: 'command',
+      content: 'v2er session check <username>',
+      description: '只读检查活动会话、迁移状态和 provider 关联',
+    },
+  ],
+  CHAT_CONTEXT_TOO_LONG: [
+    {
+      type: 'command',
+      content: 'v2er ai <username> --new-thread',
+      description: '准备好当前 analyzed 数据后，显式创建新的会话 generation',
+    },
+  ],
+  CHAT_PROVIDER_FAILED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username>',
+      description: '检查 provider 运行条件和活动会话，不发送测试消息',
+    },
+  ],
   SHOW_RESULT_MISSING: [
     {
       type: 'command',

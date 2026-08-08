@@ -8,4 +8,5 @@ export { runAi } from './ai';
 export { runShow } from './show';
 export { runPipeline } from './run';
 export { runSessionCheck } from './session';
+export { runChat } from './chat';
 export { configProxy, configShow, configSet, configReset } from './config';
