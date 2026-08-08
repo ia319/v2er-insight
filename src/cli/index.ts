@@ -17,6 +17,7 @@ import {
   configSet,
   configReset,
   runSessionCheck,
+  runSessionClear,
   runChat,
 } from './commands';
 import { logger } from '@/infra/logger';
@@ -173,6 +174,16 @@ session
     const opts = command.optsWithGlobals();
     if (opts.verbose) logger.setLevel('debug');
     const result = await runSessionCheck(username, opts);
+    if (result.status === 'failed') process.exitCode = 1;
+  });
+
+session
+  .command('clear <username>')
+  .description('Permanently clear selected provider sessions')
+  .option('--provider <provider>', 'Specify provider: gemini | codex | all')
+  .option('--all-versions', 'Clear every generation in the selected provider scope')
+  .action(async (username, _options, command) => {
+    const result = await runSessionClear(username, command.optsWithGlobals());
     if (result.status === 'failed') process.exitCode = 1;
   });
 
