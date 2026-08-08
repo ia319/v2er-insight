@@ -209,6 +209,48 @@ function persistCompletion(
   return completed;
 }
 
+function readCurrentPreparedSession(
+  username: string,
+  prepared: PreparedGeminiAnalysisSession,
+): ReturnType<typeof readStore> {
+  const current = readStore(username);
+  const currentGeminiSummaries = current.index.sessions.filter(
+    (summary) => summary.provider === 'gemini',
+  );
+  const preparedGeminiSummaries = prepared.index.sessions.filter(
+    (summary) => summary.provider === 'gemini',
+  );
+  if (
+    current.index.activeByProvider.gemini !== prepared.index.activeByProvider.gemini ||
+    !isDeepStrictEqual(currentGeminiSummaries, preparedGeminiSummaries)
+  ) {
+    throw new AISessionPersistError('Gemini session index changed after preparation');
+  }
+  const persisted = current.sessions.find(
+    (session) => session.localSessionId === prepared.session.localSessionId,
+  );
+  if (
+    (!prepared.isNew && !isDeepStrictEqual(persisted, prepared.session)) ||
+    (prepared.isNew && persisted !== undefined)
+  ) {
+    throw new AISessionPersistError('Gemini session changed after preparation');
+  }
+  return current;
+}
+
+/**
+ * Revalidates a prepared Gemini session after its provider-session lease is acquired.
+ * @param username - Owner of the prepared Gemini session.
+ * @param prepared - Selection made immediately before lock acquisition.
+ * @throws When relevant Gemini state changed before the lease was acquired.
+ */
+export function assertPreparedGeminiAnalysisSession(
+  username: string,
+  prepared: PreparedGeminiAnalysisSession,
+): void {
+  readCurrentPreparedSession(username, prepared);
+}
+
 /**
  * Appends one successful Gemini analysis pair and publishes its active index projection.
  * @param options - Prepared session, committed result metadata, and successful turn contents.
@@ -221,28 +263,7 @@ export function completeGeminiAnalysisSession(
   now: () => Date = () => new Date(),
 ): GeminiSessionStateV1 {
   return withAISessionIndexTransaction(options.username, () => {
-    const current = readStore(options.username);
-    const currentGeminiSummaries = current.index.sessions.filter(
-      (summary) => summary.provider === 'gemini',
-    );
-    const preparedGeminiSummaries = options.prepared.index.sessions.filter(
-      (summary) => summary.provider === 'gemini',
-    );
-    if (
-      current.index.activeByProvider.gemini !== options.prepared.index.activeByProvider.gemini ||
-      !isDeepStrictEqual(currentGeminiSummaries, preparedGeminiSummaries)
-    ) {
-      throw new AISessionPersistError('Gemini session index changed before result completion');
-    }
-    const persisted = current.sessions.find(
-      (session) => session.localSessionId === options.prepared.session.localSessionId,
-    );
-    if (
-      (!options.prepared.isNew && !isDeepStrictEqual(persisted, options.prepared.session)) ||
-      (options.prepared.isNew && persisted !== undefined)
-    ) {
-      throw new AISessionPersistError('Gemini session changed before result completion');
-    }
+    const current = readCurrentPreparedSession(options.username, options.prepared);
 
     return persistCompletion(
       options.username,

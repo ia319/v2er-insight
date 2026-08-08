@@ -30,6 +30,8 @@ import {
 import {
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
+  AISessionIndexLockBusyError,
+  AISessionLockBusyError,
   AISessionPersistError,
   AISessionStoreCorruptError,
   cleanExpiredData,
@@ -41,6 +43,7 @@ import {
   readDataFile,
   saveResultVersion,
   updateAnalysisState,
+  withAISessionLock,
   withCodexExecutionLock,
 } from '@/infra/storage';
 import { logger } from '@/infra/logger';
@@ -68,6 +71,9 @@ function classifyGeminiSessionFailure(
 ): ReasonCode {
   if (error instanceof AISessionMigrationConflictError) return 'SESSION_MIGRATION_CONFLICT';
   if (error instanceof AISessionMigrationFailedError) return 'SESSION_MIGRATION_FAILED';
+  if (error instanceof AISessionLockBusyError || error instanceof AISessionIndexLockBusyError) {
+    return 'SESSION_BUSY';
+  }
   if (error instanceof AISessionPersistError || error instanceof AISessionStoreCorruptError) {
     return 'SESSION_PERSIST_FAILED';
   }
@@ -270,6 +276,7 @@ async function runAiForProvider(
   let resultVersionSource: ResultVersionSource | undefined;
   let recoveredResultMetadata: ResultVersionMetadata | undefined;
   let completeAnalysisSession: ((metadata: ResultVersionMetadata) => Promise<void>) | undefined;
+  let releaseAnalysisSession: ((operationError?: unknown) => void) | undefined;
   let warnings: ValidationResult['warnings'] = [];
 
   const pendingBeforeProvider = providerAnalysisState.pendingResultDelivery;
@@ -331,13 +338,19 @@ async function runAiForProvider(
           ) {
             throw new Error('Saved Gemini result does not match the current analysis prompt');
           }
-          recoverGeminiAnalysisSession({
-            username,
-            metadata: recovered.metadata,
-            requestPayload: request.payload,
-            systemInstruction: request.systemPrompt,
-            result: recovered.result,
-            thinkingLevel: reasoningLevel,
+          const localSessionId = recovered.metadata.localSessionId;
+          if (!localSessionId) {
+            throw new Error('Saved Gemini result does not identify its local session');
+          }
+          await withAISessionLock(username, 'gemini', localSessionId, async () => {
+            recoverGeminiAnalysisSession({
+              username,
+              metadata: recovered.metadata,
+              requestPayload: request.payload,
+              systemInstruction: request.systemPrompt,
+              result: recovered.result,
+              thinkingLevel: reasoningLevel,
+            });
           });
           providerAnalysisState = updateAnalysisState(username, (state) =>
             completeResultDelivery(state, pendingBeforeProvider.deliveryId),
@@ -618,139 +631,144 @@ async function runAiForProvider(
       appVersion: packageJson.version,
     };
     completeAnalysisSession = async (metadata) => execution.complete(metadata);
-  }
-
-  if (warnings.length > 0) {
-    logger.section('AI 响应警告:');
-    for (const warning of warnings) {
-      logger.warn(`  ${warning}`);
-    }
+    releaseAnalysisSession = execution.releaseSession;
   }
 
   try {
-    const stateBeforeWrite = readAnalysisState(username);
-    if (stateBeforeWrite.status !== 'valid') {
-      throw new Error('analysis state changed during AI delivery');
+    if (warnings.length > 0) {
+      logger.section('AI 响应警告:');
+      for (const warning of warnings) {
+        logger.warn(`  ${warning}`);
+      }
     }
-    assertAnalyzedProvenanceUnchanged(stateBeforeWrite.state);
-  } catch (error) {
-    const { message, raw } = extractErrorDetails(error);
-    logger.error(`提交 AI provenance 状态失败: ${message}`);
-    return {
-      step: 'ai',
-      status: 'failed',
-      reasonCode: 'PROVENANCE_UPDATE_FAILED',
-      message: `结果版本未写入，provenance 状态校验失败: ${message}`,
-      recoverable: true,
-      recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
-      meta: { rawError: raw },
-    };
-  }
 
-  let metadata = recoveredResultMetadata;
-  if (metadata) {
-    if (
-      metadata.deliveryId !== delivery.deliveryId ||
-      metadata.resultHash !== hashCanonicalJson(result)
-    ) {
-      logger.error('恢复的 AI 结果与已保存版本不一致');
-      return {
-        step: 'ai',
-        status: 'failed',
-        reasonCode: 'AI_RESULT_WRITE_FAILED',
-        message: `AI 结果与已保存版本 ${metadata.versionId} 不一致`,
-        recoverable: true,
-        recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
-        meta: { resultVersionId: metadata.versionId },
-      };
-    }
-  } else {
-    if (!resultVersionSource) {
-      throw new Error('AI result is missing version source metadata');
-    }
     try {
-      metadata = saveResultVersion(username, result, resultVersionSource);
+      const stateBeforeWrite = readAnalysisState(username);
+      if (stateBeforeWrite.status !== 'valid') {
+        throw new Error('analysis state changed during AI delivery');
+      }
+      assertAnalyzedProvenanceUnchanged(stateBeforeWrite.state);
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
-      logger.error(`保存 AI 分析结果版本失败: ${message}`);
+      logger.error(`提交 AI provenance 状态失败: ${message}`);
       return {
         step: 'ai',
         status: 'failed',
-        reasonCode: 'AI_RESULT_WRITE_FAILED',
-        message: `AI 已返回结果，但结果版本保存失败: ${message}`,
+        reasonCode: 'PROVENANCE_UPDATE_FAILED',
+        message: `结果版本未写入，provenance 状态校验失败: ${message}`,
         recoverable: true,
-        recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
+        recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
         meta: { rawError: raw },
       };
     }
-  }
 
-  try {
-    updateAnalysisState(username, (state) => recordSavedResultVersion(state, metadata));
-  } catch (error) {
-    const { message, raw } = extractErrorDetails(error);
-    logger.error(`记录 AI 结果版本状态失败: ${message}`);
-    return {
-      step: 'ai',
-      status: 'failed',
-      reasonCode: 'PROVENANCE_UPDATE_FAILED',
-      message: `AI 结果版本 ${metadata.versionId} 已保存，provenance 状态更新失败: ${message}`,
-      recoverable: true,
-      recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
-      meta: { rawError: raw, resultVersionId: metadata.versionId },
-    };
-  }
+    let metadata = recoveredResultMetadata;
+    if (metadata) {
+      if (
+        metadata.deliveryId !== delivery.deliveryId ||
+        metadata.resultHash !== hashCanonicalJson(result)
+      ) {
+        logger.error('恢复的 AI 结果与已保存版本不一致');
+        return {
+          step: 'ai',
+          status: 'failed',
+          reasonCode: 'AI_RESULT_WRITE_FAILED',
+          message: `AI 结果与已保存版本 ${metadata.versionId} 不一致`,
+          recoverable: true,
+          recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
+          meta: { resultVersionId: metadata.versionId },
+        };
+      }
+    } else {
+      if (!resultVersionSource) {
+        throw new Error('AI result is missing version source metadata');
+      }
+      try {
+        metadata = saveResultVersion(username, result, resultVersionSource);
+      } catch (error) {
+        const { message, raw } = extractErrorDetails(error);
+        logger.error(`保存 AI 分析结果版本失败: ${message}`);
+        return {
+          step: 'ai',
+          status: 'failed',
+          reasonCode: 'AI_RESULT_WRITE_FAILED',
+          message: `AI 已返回结果，但结果版本保存失败: ${message}`,
+          recoverable: true,
+          recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
+          meta: { rawError: raw },
+        };
+      }
+    }
 
-  if (completeAnalysisSession) {
     try {
-      await completeAnalysisSession(metadata);
+      updateAnalysisState(username, (state) => recordSavedResultVersion(state, metadata));
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
-      const provider = resultVersionSource?.provider;
-      const reasonCode =
-        provider === 'codex'
-          ? classifyCodexSessionPersistenceFailure(error)
-          : provider === 'gemini'
-            ? classifyGeminiSessionFailure(error, 'SESSION_PERSIST_FAILED')
-            : 'SESSION_PERSIST_FAILED';
-      logger.error(`更新 AI session 状态失败: ${message}`);
+      logger.error(`记录 AI 结果版本状态失败: ${message}`);
       return {
         step: 'ai',
         status: 'failed',
-        reasonCode,
-        message: `AI 结果版本 ${metadata.versionId} 已保存，${provider ?? 'AI'} session 状态更新失败: ${message}`,
+        reasonCode: 'PROVENANCE_UPDATE_FAILED',
+        message: `AI 结果版本 ${metadata.versionId} 已保存，provenance 状态更新失败: ${message}`,
         recoverable: true,
-        recoverActions: getRecoveryActions(reasonCode, { username }),
+        recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
         meta: { rawError: raw, resultVersionId: metadata.versionId },
       };
     }
-  }
 
-  try {
-    updateAnalysisState(username, (state) => completeResultDelivery(state, delivery.deliveryId));
-  } catch (error) {
-    const { message, raw } = extractErrorDetails(error);
-    logger.error(`完成 AI provenance 状态失败: ${message}`);
-    return {
-      step: 'ai',
-      status: 'failed',
-      reasonCode: 'PROVENANCE_UPDATE_FAILED',
-      message: `AI 结果版本 ${metadata.versionId} 已保存，最终 provenance 状态更新失败: ${message}`,
-      recoverable: true,
-      recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
-      meta: { rawError: raw, resultVersionId: metadata.versionId },
-    };
-  }
+    if (completeAnalysisSession) {
+      try {
+        await completeAnalysisSession(metadata);
+      } catch (error) {
+        const { message, raw } = extractErrorDetails(error);
+        const provider = resultVersionSource?.provider;
+        const reasonCode =
+          provider === 'codex'
+            ? classifyCodexSessionPersistenceFailure(error)
+            : provider === 'gemini'
+              ? classifyGeminiSessionFailure(error, 'SESSION_PERSIST_FAILED')
+              : 'SESSION_PERSIST_FAILED';
+        logger.error(`更新 AI session 状态失败: ${message}`);
+        return {
+          step: 'ai',
+          status: 'failed',
+          reasonCode,
+          message: `AI 结果版本 ${metadata.versionId} 已保存，${provider ?? 'AI'} session 状态更新失败: ${message}`,
+          recoverable: true,
+          recoverActions: getRecoveryActions(reasonCode, { username }),
+          meta: { rawError: raw, resultVersionId: metadata.versionId },
+        };
+      }
+    }
 
-  return finishAiSuccess(
-    username,
-    options,
-    model,
-    selectedProvider,
-    warnings.length,
-    delivery.deliveryMode,
-    metadata.versionId,
-  );
+    try {
+      updateAnalysisState(username, (state) => completeResultDelivery(state, delivery.deliveryId));
+    } catch (error) {
+      const { message, raw } = extractErrorDetails(error);
+      logger.error(`完成 AI provenance 状态失败: ${message}`);
+      return {
+        step: 'ai',
+        status: 'failed',
+        reasonCode: 'PROVENANCE_UPDATE_FAILED',
+        message: `AI 结果版本 ${metadata.versionId} 已保存，最终 provenance 状态更新失败: ${message}`,
+        recoverable: true,
+        recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
+        meta: { rawError: raw, resultVersionId: metadata.versionId },
+      };
+    }
+
+    return finishAiSuccess(
+      username,
+      options,
+      model,
+      selectedProvider,
+      warnings.length,
+      delivery.deliveryMode,
+      metadata.versionId,
+    );
+  } finally {
+    releaseAnalysisSession?.();
+  }
 }
 
 function finishAiSuccess(

@@ -88,6 +88,7 @@ export type {
 } from './sessions';
 export {
   acquireAISessionLockLease,
+  assertPreparedGeminiAnalysisSession,
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
   AISessionPersistError,
