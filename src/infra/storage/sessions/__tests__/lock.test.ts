@@ -6,6 +6,7 @@ vi.mock('node:fs');
 vi.mock('node:crypto', () => ({ randomUUID: vi.fn() }));
 
 import {
+  acquireAISessionLockLease,
   AISessionLockBusyError,
   AISessionLockOwnershipError,
   AISessionLockReleaseError,
@@ -50,6 +51,15 @@ describe('AI session lock', () => {
       0o600,
     );
     expect(mockedFs.writeFileSync).toHaveBeenCalledWith(10, `${lockOwner()}\n`, 'utf-8');
+    expect(mockedFs.unlinkSync).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a manual lease until its owner releases the cross-layer lifecycle', () => {
+    const lease = acquireAISessionLockLease('alice', 'gemini', SESSION_ID);
+
+    expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
+    lease.release();
+
     expect(mockedFs.unlinkSync).toHaveBeenCalledOnce();
   });
 

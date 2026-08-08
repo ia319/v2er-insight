@@ -83,9 +83,11 @@ export type {
   RecoverCodexAnalysisSessionResult,
   RecoverGeminiAnalysisSessionOptions,
   ChatSessionSelection,
+  AISessionLockLease,
   AISessionLockState,
 } from './sessions';
 export {
+  acquireAISessionLockLease,
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
   AISessionPersistError,

@@ -31,6 +31,7 @@ export { ChatSessionMissingError, completeGeminiChatSession, selectChatSession }
 export type { ChatSessionSelection } from './chat';
 export { deleteAISession } from './clear';
 export {
+  acquireAISessionLockLease,
   AISessionIndexLockBusyError,
   AISessionLockBusyError,
   AISessionLockOwnershipError,
@@ -39,7 +40,7 @@ export {
   withAISessionIndexTransaction,
   withAISessionLock,
 } from './lock';
-export type { AISessionLockState } from './lock';
+export type { AISessionLockLease, AISessionLockState } from './lock';
 export type {
   PreparedGeminiAnalysisSession,
   PrepareGeminiAnalysisSessionOptions,

@@ -22,6 +22,15 @@ export type AISessionLockState =
   | { status: 'invalid' }
   | { status: 'locked'; owner: AISessionLockOwner };
 
+/** A verified provider-session lock that may span multiple persistence layers. */
+export interface AISessionLockLease {
+  /**
+   * Releases the lock and preserves an earlier operation failure if ownership changed.
+   * @param operationError - Failure that occurred while the lease was held.
+   */
+  release(operationError?: unknown): void;
+}
+
 /** Reports that another process is updating the same provider session. */
 export class AISessionLockBusyError extends Error {
   readonly state: Exclude<AISessionLockState, { status: 'missing' }>;
@@ -176,15 +185,32 @@ function acquireLock(
   };
 }
 
-function acquireAISessionLock(
+/**
+ * Acquires a non-blocking provider-session lock for a lifecycle that crosses module boundaries.
+ * @param username - Owner of the provider session.
+ * @param provider - Provider that owns the local session.
+ * @param localSessionId - Canonical local session identity.
+ * @returns A lease whose release verifies lock ownership.
+ * @throws {AISessionLockBusyError} When another process owns the selected session.
+ */
+export function acquireAISessionLockLease(
   username: string,
   provider: AISessionProvider,
   localSessionId: string,
-): () => void {
-  return acquireLock(
+): AISessionLockLease {
+  const release = acquireLock(
     getSessionLockPath(username, provider, localSessionId),
     (state) => new AISessionLockBusyError(state),
   );
+  return {
+    release(operationError?: unknown): void {
+      try {
+        release();
+      } catch (releaseError) {
+        throw new AISessionLockReleaseError(releaseError, operationError);
+      }
+    },
+  };
 }
 
 interface HeldIndexLock {
@@ -256,20 +282,15 @@ export async function withAISessionLock<T>(
   localSessionId: string,
   operation: () => Promise<T>,
 ): Promise<T> {
-  const release = acquireAISessionLock(username, provider, localSessionId);
-  const outcome = await operation().then(
-    (value) => ({ status: 'fulfilled' as const, value }),
-    (reason: unknown) => ({ status: 'rejected' as const, reason }),
-  );
-
-  try {
-    release();
-  } catch (releaseError) {
-    throw new AISessionLockReleaseError(
-      releaseError,
-      outcome.status === 'rejected' ? outcome.reason : undefined,
+  const lease = acquireAISessionLockLease(username, provider, localSessionId);
+  const outcome = await Promise.resolve()
+    .then(operation)
+    .then(
+      (value) => ({ status: 'fulfilled' as const, value }),
+      (reason: unknown) => ({ status: 'rejected' as const, reason }),
     );
-  }
+
+  lease.release(outcome.status === 'rejected' ? outcome.reason : undefined);
 
   if (outcome.status === 'rejected') throw outcome.reason;
   return outcome.value;
