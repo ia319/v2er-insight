@@ -17,6 +17,7 @@ import {
   configSet,
   configReset,
   runSessionCheck,
+  runChat,
 } from './commands';
 import { logger } from '@/infra/logger';
 import { renderNotices } from './workflow/notices';
@@ -104,6 +105,21 @@ program
     const opts = command.optsWithGlobals();
     if (opts.verbose) logger.setLevel('debug');
     const result = await runAi(username, opts);
+    renderNotices(result.notices);
+    if (result.status === 'failed') process.exitCode = 1;
+  });
+
+program
+  .command('chat')
+  .description('Continue an existing AI analysis session')
+  .argument('<username>', 'V2EX username')
+  .argument('<message...>', 'Message to send')
+  .option('--provider <provider>', 'Specify AI provider: gemini | codex')
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, messageParts: string[], _options, command) => {
+    const opts = command.optsWithGlobals();
+    if (opts.verbose) logger.setLevel('debug');
+    const result = await runChat(username, messageParts.join(' '), opts);
     renderNotices(result.notices);
     if (result.status === 'failed') process.exitCode = 1;
   });
