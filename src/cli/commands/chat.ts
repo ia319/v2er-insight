@@ -59,6 +59,13 @@ class ChatContextTooLongError extends Error {
   }
 }
 
+class ChatContextUnverifiedError extends Error {
+  constructor() {
+    super('The selected Gemini session context limit could not be verified');
+    this.name = 'ChatContextUnverifiedError';
+  }
+}
+
 function isProvider(value: string): value is AIProviderId {
   return AI_PROVIDERS.some((provider) => provider === value);
 }
@@ -67,18 +74,12 @@ function isThinkingLevel(value: string): value is ThinkingLevel {
   return THINKING_LEVELS.some((level) => level === value);
 }
 
-function contextNotice(
-  provider: AIProviderId,
-  used: number,
-  limit: number,
-  source: 'sdk' | 'fallback',
-): UserNotice {
-  const unit = source === 'sdk' ? 'tokens' : 'UTF-8 bytes';
+function contextNotice(provider: AIProviderId, used: number, limit: number): UserNotice {
   return {
     code: 'SESSION_CONTEXT_NEAR_LIMIT',
     severity: 'warning',
     summary: `${provider} 会话上下文接近限制`,
-    details: [`当前预检: ${used}/${limit} ${unit}`],
+    details: [`当前预检: ${used}/${limit} tokens`],
     actions: [
       {
         type: 'command',
@@ -119,6 +120,7 @@ async function executeGeminiChat(
     history: selection.session.history,
     timeout: config.timeout,
   });
+  if (context.status === 'unverified') throw new ChatContextUnverifiedError();
   if (context.tooLong) throw new ChatContextTooLongError();
 
   provider.createSession(selection.session.systemInstruction, {
@@ -136,9 +138,7 @@ async function executeGeminiChat(
   completeGeminiChatSession(username, selection, message, reply);
   return {
     reply,
-    notices: context.nearLimit
-      ? [contextNotice('gemini', context.used, context.limit, context.source)]
-      : [],
+    notices: context.nearLimit ? [contextNotice('gemini', context.used, context.limit)] : [],
   };
 }
 
@@ -248,6 +248,7 @@ function classifyChatFailure(error: unknown): ReasonCode {
     return 'SESSION_BUSY';
   }
   if (error instanceof ChatContextTooLongError) return 'CHAT_CONTEXT_TOO_LONG';
+  if (error instanceof ChatContextUnverifiedError) return 'CHAT_CONTEXT_UNVERIFIED';
   if (error instanceof CodexTurnResultError && error.codexErrorInfo === 'contextWindowExceeded') {
     return 'CHAT_CONTEXT_TOO_LONG';
   }
@@ -304,7 +305,8 @@ export async function runChat(
     const reasonCode = classifyChatFailure(error);
     const { message: errorMessage } = extractErrorDetails(error);
     const recoverActions =
-      reasonCode === 'CHAT_CONTEXT_TOO_LONG' && selectedProvider
+      (reasonCode === 'CHAT_CONTEXT_TOO_LONG' || reasonCode === 'CHAT_CONTEXT_UNVERIFIED') &&
+      selectedProvider
         ? getRecoveryActions(reasonCode, { username, provider: selectedProvider })
         : [];
     logger.error(`[${reasonCode}] ${errorMessage}`);

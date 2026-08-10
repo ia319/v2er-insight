@@ -81,6 +81,7 @@ describe('GeminiProvider', () => {
         timeout: 30_000,
       }),
     ).resolves.toEqual({
+      status: 'verified',
       source: 'sdk',
       used: 91,
       limit: 100,
@@ -97,14 +98,15 @@ describe('GeminiProvider', () => {
     });
   });
 
-  it('uses a conservative byte estimate when SDK inspection is unavailable', async () => {
+  it('returns an unverified status when SDK inspection is unavailable', async () => {
     const provider = new GeminiProvider('secret', 'gemini-current');
     mocks.getModel.mockRejectedValue(new Error('metadata unavailable'));
 
     const result = await provider.inspectContext('instruction', 'message');
 
-    expect(result.source).toBe('fallback');
-    expect(result.used).toBe(Buffer.byteLength('instruction\n\nmessage', 'utf-8'));
-    expect(result.limit).toBe(500_000);
+    expect(result).toEqual({
+      status: 'unverified',
+      reason: 'model_metadata_or_token_count_unavailable',
+    });
   });
 });

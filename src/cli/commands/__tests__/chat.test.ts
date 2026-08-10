@@ -165,6 +165,7 @@ describe('chat command', () => {
     mocks.readAISessionIndex.mockReturnValue({ status: 'valid', index: selection.index });
     mocks.inspectCodexSessionStorage.mockReturnValue({ migration: 'not_required' });
     mocks.inspectContext.mockResolvedValue({
+      status: 'verified',
       source: 'sdk',
       used: 50,
       limit: 100,
@@ -227,6 +228,7 @@ describe('chat command', () => {
   it('returns a warning while allowing a near-limit provider request', async () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     mocks.inspectContext.mockResolvedValue({
+      status: 'verified',
       source: 'sdk',
       used: 91,
       limit: 100,
@@ -314,6 +316,7 @@ describe('chat command', () => {
   it('does not call the provider or write stdout when preflight is over the limit', async () => {
     const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     mocks.inspectContext.mockResolvedValue({
+      status: 'verified',
       source: 'sdk',
       used: 100,
       limit: 100,
@@ -324,6 +327,27 @@ describe('chat command', () => {
     const result = await runChat('alice', 'new question', { provider: 'gemini' });
 
     expect(result).toMatchObject({ status: 'failed', reasonCode: 'CHAT_CONTEXT_TOO_LONG' });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    expect(mocks.completeGeminiChatSession).not.toHaveBeenCalled();
+    expect(stdout).not.toHaveBeenCalled();
+  });
+
+  it('does not send or persist when the Gemini context limit cannot be verified', async () => {
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    mocks.inspectContext.mockResolvedValue({
+      status: 'unverified',
+      reason: 'model_metadata_or_token_count_unavailable',
+    });
+
+    const result = await runChat('alice', 'new question', { provider: 'gemini' });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      provider: 'gemini',
+      reasonCode: 'CHAT_CONTEXT_UNVERIFIED',
+      recoverActions: [expect.objectContaining({ type: 'instruction' })],
+    });
+    expect(mocks.createSession).not.toHaveBeenCalled();
     expect(mocks.sendMessage).not.toHaveBeenCalled();
     expect(mocks.completeGeminiChatSession).not.toHaveBeenCalled();
     expect(stdout).not.toHaveBeenCalled();

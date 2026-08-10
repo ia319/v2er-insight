@@ -30,15 +30,20 @@ const THINKING_LEVEL_MAP = {
 } as const satisfies Record<ThinkingLevel, SdkThinkingLevel>;
 
 const CONTEXT_WARNING_RATIO = 0.9;
-const FALLBACK_CONTEXT_BYTE_LIMIT = 500_000;
 
-export interface GeminiContextInspection {
-  source: 'sdk' | 'fallback';
-  used: number;
-  limit: number;
-  nearLimit: boolean;
-  tooLong: boolean;
-}
+export type GeminiContextInspection =
+  | {
+      status: 'verified';
+      source: 'sdk';
+      used: number;
+      limit: number;
+      nearLimit: boolean;
+      tooLong: boolean;
+    }
+  | {
+      status: 'unverified';
+      reason: 'model_metadata_or_token_count_unavailable';
+    };
 
 /** 将项目 ThinkingLevel 转为 SDK 枚举值 */
 function toSdkThinkingLevel(level?: ThinkingLevel): SdkThinkingLevel | undefined {
@@ -52,26 +57,16 @@ function toSdkHistory(history: readonly ProviderNeutralMessage[] | undefined): C
   }));
 }
 
-function inspectUsage(source: GeminiContextInspection['source'], used: number, limit: number) {
+function inspectUsage(used: number, limit: number): GeminiContextInspection {
   const ratio = used / limit;
   return {
-    source,
+    status: 'verified',
+    source: 'sdk',
     used,
     limit,
     nearLimit: ratio >= CONTEXT_WARNING_RATIO,
     tooLong: used >= limit,
-  } satisfies GeminiContextInspection;
-}
-
-function estimateContextBytes(
-  systemPrompt: string,
-  history: readonly ProviderNeutralMessage[] | undefined,
-  message: string,
-): number {
-  const historyText = (history ?? [])
-    .flatMap((entry) => entry.parts.map((part) => part.text))
-    .join('\n');
-  return Buffer.byteLength(`${systemPrompt}\n${historyText}\n${message}`, 'utf-8');
+  };
 }
 
 export class GeminiProvider implements IAIProvider {
@@ -118,7 +113,7 @@ export class GeminiProvider implements IAIProvider {
    * @param systemPrompt - Fixed instruction sent with every reconstructed request.
    * @param message - New user text that will be appended to the completed history.
    * @param options - Persisted history and request timeout.
-   * @returns SDK token usage when available, otherwise a conservative byte estimate.
+   * @returns Verified SDK token usage or an explicit unverified status.
    */
   async inspectContext(
     systemPrompt: string,
@@ -153,17 +148,13 @@ export class GeminiProvider implements IAIProvider {
         typeof count.totalTokens === 'number' &&
         count.totalTokens >= 0
       ) {
-        return inspectUsage('sdk', count.totalTokens, model.inputTokenLimit);
+        return inspectUsage(count.totalTokens, model.inputTokenLimit);
       }
     } catch {
-      // The actual chat remains authoritative when model metadata or token counting is unavailable.
+      // Failing closed prevents a transient SDK failure from bypassing context validation.
     }
 
-    return inspectUsage(
-      'fallback',
-      estimateContextBytes(systemPrompt, options?.history, message),
-      FALLBACK_CONTEXT_BYTE_LIMIT,
-    );
+    return { status: 'unverified', reason: 'model_metadata_or_token_count_unavailable' };
   }
 
   /**

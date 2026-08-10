@@ -451,6 +451,13 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '准备好当前 analyzed 数据后，显式创建新的会话 generation',
     },
   ],
+  CHAT_CONTEXT_UNVERIFIED: [
+    {
+      type: 'instruction',
+      content: '确认 Gemini 模型元数据与 token count 服务可用后，重试原 chat 命令',
+      description: '无法确认请求是否符合模型上下文窗口，本轮消息未发送',
+    },
+  ],
   CHAT_PROVIDER_FAILED: [
     {
       type: 'command',
