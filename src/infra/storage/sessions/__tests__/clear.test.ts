@@ -99,6 +99,22 @@ describe('AI session clear storage', () => {
     expect(mockedWriteAISessionIndex).toHaveBeenLastCalledWith('alice', index);
   });
 
+  it('keeps the cleared index when the session file is already missing', () => {
+    const session = createSession();
+    const index = createIndex(session);
+    mockedReadAISessionStore.mockReturnValue({ status: 'valid', index, sessions: [session] });
+    mockedFs.unlinkSync.mockImplementation(() => {
+      throw Object.assign(new Error('file not found'), { code: 'ENOENT' });
+    });
+
+    const updated = deleteAISession('alice', index, session);
+
+    expect(updated.activeByProvider).toEqual({});
+    expect(updated.sessions).toEqual([]);
+    expect(mockedWriteAISessionIndex).toHaveBeenCalledOnce();
+    expect(mockedWriteAISessionIndex).toHaveBeenCalledWith('alice', updated);
+  });
+
   it('reports both failures when the index cannot be restored', () => {
     const session = createSession();
     const index = createIndex(session);

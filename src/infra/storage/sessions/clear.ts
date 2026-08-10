@@ -18,6 +18,10 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && 'code' in error && error.code === code;
+}
+
 function createIndexWithoutSession(
   index: AISessionIndexV1,
   session: AISessionStateV1,
@@ -90,6 +94,7 @@ export function deleteAISession(
         getAISessionFilePath(username, expectedSession.provider, expectedSession.localSessionId),
       );
     } catch (error) {
+      if (hasErrorCode(error, 'ENOENT')) return updatedIndex;
       try {
         writeAISessionIndex(username, current.index);
       } catch (rollbackError) {
