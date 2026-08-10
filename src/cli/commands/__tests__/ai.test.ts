@@ -875,13 +875,14 @@ describe('runAi', () => {
 
   it('should retain pending delivery when result version persistence fails', async () => {
     const context = mockInput();
+    const persistenceError = new Error('disk full');
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({ data: { summary: 'result' }, warnings: [] });
     mockedSaveResultVersion.mockImplementation(() => {
-      throw new Error('disk full');
+      throw persistenceError;
     });
 
     const result = await runAi('testuser', {});
@@ -893,6 +894,7 @@ describe('runAi', () => {
       deliveryMode: 'change',
     });
     expect(context.getState().providers).toBeUndefined();
+    expect(mockedSessionLeaseRelease).toHaveBeenCalledWith(persistenceError);
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 

@@ -634,6 +634,12 @@ async function runAiForProvider(
     releaseAnalysisSession = execution.releaseSession;
   }
 
+  let deliveryOperationError: unknown;
+  const failDelivery = (error: unknown, failure: StepRunResult): StepRunResult => {
+    deliveryOperationError = error;
+    return failure;
+  };
+
   try {
     if (warnings.length > 0) {
       logger.section('AI 响应警告:');
@@ -651,7 +657,7 @@ async function runAiForProvider(
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
       logger.error(`提交 AI provenance 状态失败: ${message}`);
-      return {
+      return failDelivery(error, {
         step: 'ai',
         status: 'failed',
         reasonCode: 'PROVENANCE_UPDATE_FAILED',
@@ -659,7 +665,7 @@ async function runAiForProvider(
         recoverable: true,
         recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
         meta: { rawError: raw },
-      };
+      });
     }
 
     let metadata = recoveredResultMetadata;
@@ -668,8 +674,9 @@ async function runAiForProvider(
         metadata.deliveryId !== delivery.deliveryId ||
         metadata.resultHash !== hashCanonicalJson(result)
       ) {
+        const error = new Error('Recovered AI result does not match its saved version');
         logger.error('恢复的 AI 结果与已保存版本不一致');
-        return {
+        return failDelivery(error, {
           step: 'ai',
           status: 'failed',
           reasonCode: 'AI_RESULT_WRITE_FAILED',
@@ -677,7 +684,7 @@ async function runAiForProvider(
           recoverable: true,
           recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
           meta: { resultVersionId: metadata.versionId },
-        };
+        });
       }
     } else {
       if (!resultVersionSource) {
@@ -688,7 +695,7 @@ async function runAiForProvider(
       } catch (error) {
         const { message, raw } = extractErrorDetails(error);
         logger.error(`保存 AI 分析结果版本失败: ${message}`);
-        return {
+        return failDelivery(error, {
           step: 'ai',
           status: 'failed',
           reasonCode: 'AI_RESULT_WRITE_FAILED',
@@ -696,7 +703,7 @@ async function runAiForProvider(
           recoverable: true,
           recoverActions: getRecoveryActions('AI_RESULT_WRITE_FAILED', { username }),
           meta: { rawError: raw },
-        };
+        });
       }
     }
 
@@ -705,7 +712,7 @@ async function runAiForProvider(
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
       logger.error(`记录 AI 结果版本状态失败: ${message}`);
-      return {
+      return failDelivery(error, {
         step: 'ai',
         status: 'failed',
         reasonCode: 'PROVENANCE_UPDATE_FAILED',
@@ -713,7 +720,7 @@ async function runAiForProvider(
         recoverable: true,
         recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
         meta: { rawError: raw, resultVersionId: metadata.versionId },
-      };
+      });
     }
 
     if (completeAnalysisSession) {
@@ -729,7 +736,7 @@ async function runAiForProvider(
               ? classifyGeminiSessionFailure(error, 'SESSION_PERSIST_FAILED')
               : 'SESSION_PERSIST_FAILED';
         logger.error(`更新 AI session 状态失败: ${message}`);
-        return {
+        return failDelivery(error, {
           step: 'ai',
           status: 'failed',
           reasonCode,
@@ -737,7 +744,7 @@ async function runAiForProvider(
           recoverable: true,
           recoverActions: getRecoveryActions(reasonCode, { username }),
           meta: { rawError: raw, resultVersionId: metadata.versionId },
-        };
+        });
       }
     }
 
@@ -746,7 +753,7 @@ async function runAiForProvider(
     } catch (error) {
       const { message, raw } = extractErrorDetails(error);
       logger.error(`完成 AI provenance 状态失败: ${message}`);
-      return {
+      return failDelivery(error, {
         step: 'ai',
         status: 'failed',
         reasonCode: 'PROVENANCE_UPDATE_FAILED',
@@ -754,7 +761,7 @@ async function runAiForProvider(
         recoverable: true,
         recoverActions: getRecoveryActions('PROVENANCE_UPDATE_FAILED', { username }),
         meta: { rawError: raw, resultVersionId: metadata.versionId },
-      };
+      });
     }
 
     return finishAiSuccess(
@@ -766,8 +773,11 @@ async function runAiForProvider(
       delivery.deliveryMode,
       metadata.versionId,
     );
+  } catch (error) {
+    deliveryOperationError = error;
+    throw error;
   } finally {
-    releaseAnalysisSession?.();
+    releaseAnalysisSession?.(deliveryOperationError);
   }
 }
 
