@@ -1,7 +1,9 @@
+import type { AIProviderId } from '@/config';
 import type { ReasonCode, RecoveryAction } from './types';
 
 interface RecoveryRenderContext {
   username?: string;
+  provider?: AIProviderId;
 }
 
 /**
@@ -445,7 +447,7 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
   CHAT_CONTEXT_TOO_LONG: [
     {
       type: 'command',
-      content: 'v2er ai <username> --new-thread',
+      content: 'v2er ai <username> --provider <provider> --new-thread',
       description: '准备好当前 analyzed 数据后，显式创建新的会话 generation',
     },
   ],
@@ -506,8 +508,10 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
  * 渲染恢复动作中的模板变量（如 <username>）。
  */
 function renderTemplate(content: string, context: RecoveryRenderContext): string {
-  if (!context.username) return content;
-  return content.replace(/<username>/g, context.username);
+  let rendered = content;
+  if (context.username) rendered = rendered.replace(/<username>/g, context.username);
+  if (context.provider) rendered = rendered.replace(/<provider>/g, context.provider);
+  return rendered;
 }
 
 /**

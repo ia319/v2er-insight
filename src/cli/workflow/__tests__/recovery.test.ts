@@ -57,4 +57,15 @@ describe('getRecoveryActions', () => {
     expect(actions[0]?.content).toContain('备份');
     expect(actions[1]?.content).toContain('alice');
   });
+
+  it('should preserve the selected provider when replacing an over-limit chat session', () => {
+    const actions = getRecoveryActions('CHAT_CONTEXT_TOO_LONG', {
+      username: 'alice',
+      provider: 'codex',
+    });
+
+    expect(actions).toContainEqual(
+      expect.objectContaining({ content: 'v2er ai alice --provider codex --new-thread' }),
+    );
+  });
 });

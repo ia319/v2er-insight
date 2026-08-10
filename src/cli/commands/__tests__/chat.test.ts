@@ -20,6 +20,14 @@ const mocks = vi.hoisted(() => ({
   updateCodexSessionRegistry: vi.fn(),
   closeCodexRuntime: vi.fn(),
   IndexLockBusyError: class extends Error {},
+  TurnResultError: class extends Error {
+    readonly codexErrorInfo: string;
+
+    constructor(codexErrorInfo: string) {
+      super('Codex turn failed');
+      this.codexErrorInfo = codexErrorInfo;
+    }
+  },
 }));
 
 vi.mock('@/config', () => ({
@@ -57,7 +65,7 @@ vi.mock('@/core/ai', () => ({
 
 vi.mock('@/core/ai/providers/codex', () => ({
   CodexChatTurnError: class extends Error {},
-  CodexTurnResultError: class extends Error {},
+  CodexTurnResultError: mocks.TurnResultError,
   sendCodexChatTurn: mocks.sendCodexChatTurn,
   selectCodexRuntime: mocks.selectCodexRuntime,
 }));
@@ -267,6 +275,40 @@ describe('chat command', () => {
       'Codex chat runtime close failed: close failed',
     );
     expect(stdout).toHaveBeenCalledWith('codex reply\n');
+  });
+
+  it('pins the default provider before choosing the Codex execution lock', async () => {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    mocks.selectChatSession.mockImplementation((_username, provider) =>
+      provider === 'gemini' ? selection : codexSelection,
+    );
+
+    const result = await runChat('alice', 'new question', {});
+
+    expect(result).toEqual({ status: 'success', provider: 'gemini', notices: undefined });
+    expect(mocks.selectChatSession).toHaveBeenCalledWith('alice', 'gemini');
+    expect(mocks.withCodexExecutionLock).not.toHaveBeenCalled();
+    expect(mocks.sendCodexChatTurn).not.toHaveBeenCalled();
+  });
+
+  it('keeps the resolved Codex provider in context-limit recovery', async () => {
+    mocks.readAISessionIndex.mockReturnValue({ status: 'valid', index: codexSelection.index });
+    mocks.selectChatSession.mockReturnValue(codexSelection);
+    mocks.sendCodexChatTurn.mockRejectedValue(new mocks.TurnResultError('contextWindowExceeded'));
+
+    const result = await runChat('alice', 'new question', {});
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      provider: 'codex',
+      reasonCode: 'CHAT_CONTEXT_TOO_LONG',
+      recoverActions: [
+        expect.objectContaining({
+          content: 'v2er ai alice --provider codex --new-thread',
+        }),
+      ],
+    });
+    expect(mocks.withCodexExecutionLock).toHaveBeenCalledOnce();
   });
 
   it('does not call the provider or write stdout when preflight is over the limit', async () => {

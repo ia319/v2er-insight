@@ -36,7 +36,8 @@ import {
   withCodexExecutionLock,
   type ChatSessionSelection,
 } from '@/infra/storage';
-import type { ReasonCode, UserNotice } from '../workflow/types';
+import { getRecoveryActions } from '../workflow/recovery';
+import type { ReasonCode, RecoveryAction, UserNotice } from '../workflow/types';
 import { extractErrorDetails } from '../utils/error';
 
 export interface ChatCommandOptions {
@@ -47,6 +48,7 @@ export interface ChatCommandResult {
   status: 'success' | 'failed';
   provider: AIProviderId | null;
   reasonCode?: ReasonCode;
+  recoverActions?: RecoveryAction[];
   notices?: UserNotice[];
 }
 
@@ -186,28 +188,35 @@ async function executeCodexChat(
   }
 }
 
-function shouldUseCodexLock(username: string, requestedProvider?: AIProviderId): boolean {
-  if (requestedProvider === 'codex') return true;
-  if (requestedProvider === 'gemini') return false;
+function resolveChatProvider(
+  username: string,
+  requestedProvider: AIProviderId | undefined,
+): AIProviderId {
+  if (requestedProvider) return requestedProvider;
   const index = readAISessionIndex(username);
-  if (index.status === 'valid') return index.index.lastSuccessfulAnalysisProvider === 'codex';
-  if (index.status === 'invalid') return false;
-  return inspectCodexSessionStorage(username).migration === 'pending';
+  if (index.status === 'valid') {
+    const provider = index.index.lastSuccessfulAnalysisProvider;
+    if (provider) return provider;
+    throw new ChatSessionMissingError(null);
+  }
+  if (index.status === 'invalid') throw new AISessionStoreCorruptError();
+  if (inspectCodexSessionStorage(username).migration === 'pending') return 'codex';
+  throw new ChatSessionMissingError(null);
 }
 
 async function executeSelectedChat(
   username: string,
   message: string,
-  requestedProvider: AIProviderId | undefined,
+  provider: AIProviderId,
 ): Promise<{ provider: AIProviderId; reply: string; notices: UserNotice[] }> {
   const config = getConfig();
-  const selected = selectChatSession(username, requestedProvider);
+  const selected = selectChatSession(username, provider);
   return withAISessionLock(
     username,
     selected.provider,
     selected.session.localSessionId,
     async () => {
-      const current = selectChatSession(username, requestedProvider);
+      const current = selectChatSession(username, provider);
       if (
         current.provider !== selected.provider ||
         current.session.localSessionId !== selected.session.localSessionId
@@ -272,15 +281,19 @@ export async function runChat(
     return { status: 'failed', provider: requestedProvider ?? null, reasonCode };
   }
 
+  let selectedProvider: AIProviderId | null = requestedProvider ?? null;
   try {
+    const provider = resolveChatProvider(username, requestedProvider);
+    selectedProvider = provider;
     const execute = async () => {
-      const storage = inspectCodexSessionStorage(username);
-      if (storage.migration === 'pending') ensureCodexSessionRegistry(username);
-      return executeSelectedChat(username, message, requestedProvider);
+      if (provider === 'codex') {
+        const storage = inspectCodexSessionStorage(username);
+        if (storage.migration === 'pending') ensureCodexSessionRegistry(username);
+      }
+      return executeSelectedChat(username, message, provider);
     };
-    const execution = shouldUseCodexLock(username, requestedProvider)
-      ? await withCodexExecutionLock(username, execute)
-      : await executeSelectedChat(username, message, requestedProvider);
+    const execution =
+      provider === 'codex' ? await withCodexExecutionLock(username, execute) : await execute();
     process.stdout.write(`${execution.reply}\n`);
     return {
       status: 'success',
@@ -290,11 +303,16 @@ export async function runChat(
   } catch (error) {
     const reasonCode = classifyChatFailure(error);
     const { message: errorMessage } = extractErrorDetails(error);
+    const recoverActions =
+      reasonCode === 'CHAT_CONTEXT_TOO_LONG' && selectedProvider
+        ? getRecoveryActions(reasonCode, { username, provider: selectedProvider })
+        : [];
     logger.error(`[${reasonCode}] ${errorMessage}`);
     return {
       status: 'failed',
-      provider: requestedProvider ?? null,
+      provider: selectedProvider,
       reasonCode,
+      ...(recoverActions.length > 0 ? { recoverActions } : {}),
       notices: undefined,
     };
   }
