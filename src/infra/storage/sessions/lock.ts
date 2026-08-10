@@ -124,6 +124,33 @@ function readLock(lockPath: string): AISessionLockState {
   }
 }
 
+function isProcessRunning(pid: number): boolean {
+  if (pid === process.pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !hasErrorCode(error, 'ESRCH');
+  }
+}
+
+function tryReclaimAbandonedLock(lockPath: string, state: AISessionLockState): AISessionLockState {
+  if (state.status !== 'locked' || isProcessRunning(state.owner.pid)) return state;
+
+  // Recheck ownership immediately before deletion to avoid removing a replacement owner's lock.
+  const confirmed = readLock(lockPath);
+  if (confirmed.status !== 'locked' || confirmed.owner.token !== state.owner.token) {
+    return confirmed;
+  }
+
+  try {
+    fs.unlinkSync(lockPath);
+    return { status: 'missing' };
+  } catch (error) {
+    return hasErrorCode(error, 'ENOENT') ? { status: 'missing' } : confirmed;
+  }
+}
+
 /** Reads one session lock without changing it. */
 export function readAISessionLock(
   username: string,
@@ -147,15 +174,21 @@ function acquireLock(
   };
 
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
-  let descriptor: number;
-  try {
-    descriptor = fs.openSync(lockPath, 'wx', 0o600);
-  } catch (error) {
-    if (hasErrorCode(error, 'EEXIST')) {
-      const state = readLock(lockPath);
-      throw createBusyError(state.status === 'missing' ? { status: 'invalid' } : state);
+  let descriptor: number | undefined;
+  let mayRetryAfterReclaim = true;
+  while (descriptor === undefined) {
+    try {
+      descriptor = fs.openSync(lockPath, 'wx', 0o600);
+    } catch (error) {
+      if (!hasErrorCode(error, 'EEXIST')) throw error;
+      const observed = readLock(lockPath);
+      const current = mayRetryAfterReclaim ? tryReclaimAbandonedLock(lockPath, observed) : observed;
+      if (mayRetryAfterReclaim && current.status === 'missing') {
+        mayRetryAfterReclaim = false;
+        continue;
+      }
+      throw createBusyError(current.status === 'missing' ? { status: 'invalid' } : current);
     }
-    throw error;
   }
 
   try {
