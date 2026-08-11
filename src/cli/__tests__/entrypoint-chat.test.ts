@@ -56,16 +56,16 @@ describe('chat entrypoint', () => {
     process.argv = ['node', 'v2er', 'chat', 'alice', '--provider', 'gemini', 'what', 'changed?'];
 
     await import('../index');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(mockedRunChat).toHaveBeenCalledWith(
-      'alice',
-      'what changed?',
-      expect.objectContaining({ provider: 'gemini' }),
-    );
-    expect(mockedLogger.info).toHaveBeenCalledWith('恢复建议:');
-    expect(mockedLogger.detail).toHaveBeenCalledWith(
-      '命令: v2er ai alice --provider gemini --new-thread',
-    );
+    await vi.waitFor(() => {
+      expect(mockedRunChat).toHaveBeenCalledWith(
+        'alice',
+        'what changed?',
+        expect.objectContaining({ provider: 'gemini' }),
+      );
+      expect(mockedLogger.info).toHaveBeenCalledWith('恢复建议:');
+      expect(mockedLogger.detail).toHaveBeenCalledWith(
+        '命令: v2er ai alice --provider gemini --new-thread',
+      );
+    });
   });
 });

@@ -15,7 +15,7 @@ import {
 const first = createCandidate('C:\\codex\\first.exe', 'running-app-server');
 const second = createCandidate('C:\\codex\\second.cmd', 'path', 'command-shim');
 
-describe('selectCodexRuntime', () => {
+describe('selectCodexControlRuntime', () => {
   it('should select a control runtime without loading the model catalog', async () => {
     const connection = createConnection();
     const dependencies = {
@@ -38,6 +38,37 @@ describe('selectCodexRuntime', () => {
     await runtime.connection.close();
   });
 
+  it('should reject a candidate that requires account authentication', async () => {
+    const connection = createConnection({
+      account: { accountType: null, requiresOpenaiAuth: true },
+    });
+    const dependencies = {
+      probeVersion: vi.fn(async () => '0.144.5'),
+      connect: vi.fn(() => connection),
+    };
+
+    await expect(
+      selectCodexControlRuntime([first], createOptions(), dependencies),
+    ).rejects.toMatchObject({ attempts: [{ code: 'account_unavailable' }] });
+    expect(connection.listModels).not.toHaveBeenCalled();
+    expect(connection.close).toHaveBeenCalledOnce();
+  });
+
+  it('should close a candidate after a protocol failure', async () => {
+    const connection = createConnection({ initializeError: new Error('unsupported protocol') });
+    const dependencies = {
+      probeVersion: vi.fn(async () => '0.144.5'),
+      connect: vi.fn(() => connection),
+    };
+
+    await expect(
+      selectCodexControlRuntime([first], createOptions(), dependencies),
+    ).rejects.toMatchObject({ attempts: [{ code: 'protocol_failed' }] });
+    expect(connection.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('selectCodexRuntime', () => {
   it('should continue after an unusable candidate and retain diagnostics', async () => {
     const firstConnection = createConnection({
       initializeError: new Error('unsupported protocol'),

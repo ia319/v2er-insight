@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CodexThreadInfo, CodexTurnInfo } from '@/infra/codex';
-import { sendCodexChatTurn } from '../chat-turn';
+import { sendCodexChatTurn, type SendCodexChatTurnOptions } from '../chat-turn';
 import type { CodexThreadRegistryV1, CodexThreadState } from '../thread-state';
 
 const HASH = 'a'.repeat(64);
@@ -50,6 +50,27 @@ function createTurn(): CodexTurnInfo {
     status: 'completed',
     error: null,
     agentMessages: [{ id: 'message-1', text: 'answer', phase: 'final_answer' }],
+  };
+}
+
+function createStartedTurnConnection(
+  state: CodexThreadState,
+): SendCodexChatTurnOptions['connection'] {
+  const thread = createThread();
+  const turn = createTurn();
+  return {
+    resumeThread: vi.fn().mockResolvedValue({
+      thread,
+      model: state.model,
+      cwd: state.projectPath,
+      instructionSources: [],
+      reasoningEffort: state.lastReasoningEffort,
+    }),
+    readThread: vi.fn().mockResolvedValue(thread),
+    runTurn: vi.fn(async (_options, _timeout, onStarted) => {
+      await onStarted?.({ ...turn, status: 'inProgress', agentMessages: [] });
+      return turn;
+    }),
   };
 }
 
@@ -199,6 +220,78 @@ describe('Codex chat turn', () => {
       name: 'CodexTurnResultError',
       code: 'turn_failed',
       codexErrorInfo: 'contextWindowExceeded',
+    });
+  });
+
+  it('rejects a started turn when the selected session is no longer active', async () => {
+    const state = createState();
+    const registry = createRegistry(state);
+    const connection = createStartedTurnConnection(state);
+
+    await expect(
+      sendCodexChatTurn({
+        registry,
+        state,
+        message: 'question',
+        reasoningEffort: 'medium',
+        timeoutMs: 30_000,
+        connection,
+        updateRegistry: async (update) => update({ ...registry, activeSessionId: null }),
+        platform: 'win32',
+      }),
+    ).rejects.toMatchObject({ name: 'CodexChatTurnError', code: 'session_not_active' });
+  });
+
+  it('rejects a started turn when acceptance is not persisted', async () => {
+    const state = createState();
+    const registry = createRegistry(state);
+    const connection = createStartedTurnConnection(state);
+
+    await expect(
+      sendCodexChatTurn({
+        registry,
+        state,
+        message: 'question',
+        reasoningEffort: 'medium',
+        timeoutMs: 30_000,
+        connection,
+        updateRegistry: async (update) => {
+          update(registry);
+          return registry;
+        },
+        platform: 'win32',
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodexChatTurnError',
+      code: 'acceptance_not_persisted',
+    });
+  });
+
+  it('rejects a completed turn when completion is not persisted', async () => {
+    const state = createState();
+    let registry = createRegistry(state);
+    let updateCount = 0;
+    const connection = createStartedTurnConnection(state);
+
+    await expect(
+      sendCodexChatTurn({
+        registry,
+        state,
+        message: 'question',
+        reasoningEffort: 'high',
+        timeoutMs: 30_000,
+        connection,
+        updateRegistry: async (update) => {
+          updateCount += 1;
+          const updated = update(registry);
+          if (updateCount === 1) registry = updated;
+          return registry;
+        },
+        platform: 'win32',
+      }),
+    ).rejects.toMatchObject({
+      name: 'CodexChatTurnError',
+      code: 'completion_not_persisted',
     });
   });
 });

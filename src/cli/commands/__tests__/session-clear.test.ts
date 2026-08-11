@@ -226,6 +226,25 @@ describe('session clear command', () => {
     expect(mocks.withCodexLock).toHaveBeenCalledOnce();
     expect(mocks.deleteThread).toHaveBeenCalledWith('thread-1');
     expect(calls).toEqual(['external', 'local']);
+    expect(mocks.closeRuntime).toHaveBeenCalledOnce();
+  });
+
+  it('reports an external Codex deletion failure and closes the runtime', async () => {
+    mocks.deleteThread.mockRejectedValue(new Error('external deletion failed'));
+
+    const result = await runSessionClear(
+      'alice',
+      { provider: 'codex' },
+      { isInteractive: () => true, confirm: vi.fn().mockResolvedValue(true) },
+    );
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      reasonCode: 'SESSION_DELETE_FAILED',
+      deleted: 0,
+    });
+    expect(mocks.deleteSession).not.toHaveBeenCalled();
+    expect(mocks.closeRuntime).toHaveBeenCalledOnce();
   });
 
   it('rejects a scope that changes after confirmation and before deletion', async () => {

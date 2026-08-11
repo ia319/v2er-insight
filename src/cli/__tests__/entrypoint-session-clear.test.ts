@@ -65,15 +65,15 @@ describe('session clear entrypoint', () => {
     ];
 
     await import('../index');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(mockedRunSessionClear).toHaveBeenCalledWith(
-      'alice',
-      expect.objectContaining({ provider: 'all', allVersions: true }),
-    );
-    expect(mockedLogger.info).toHaveBeenCalledWith('恢复建议:');
-    expect(mockedLogger.detail).toHaveBeenCalledWith(
-      '命令: v2er session check alice --provider codex',
-    );
+    await vi.waitFor(() => {
+      expect(mockedRunSessionClear).toHaveBeenCalledWith(
+        'alice',
+        expect.objectContaining({ provider: 'all', allVersions: true }),
+      );
+      expect(mockedLogger.info).toHaveBeenCalledWith('恢复建议:');
+      expect(mockedLogger.detail).toHaveBeenCalledWith(
+        '命令: v2er session check alice --provider codex',
+      );
+    });
   });
 });
