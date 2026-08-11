@@ -21,7 +21,8 @@ import {
   runChat,
 } from './commands';
 import { logger } from '@/infra/logger';
-import { renderNotices } from './workflow/notices';
+import { renderNotices, renderRecoveryActions } from './workflow/notices';
+import { getRecoveryActions } from './workflow/recovery';
 import packageJson from '../../package.json';
 
 // Log-level initialization precedes other startup side effects.
@@ -122,7 +123,16 @@ program
     if (opts.verbose) logger.setLevel('debug');
     const result = await runChat(username, messageParts.join(' '), opts);
     renderNotices(result.notices);
-    if (result.status === 'failed') process.exitCode = 1;
+    if (result.status === 'failed') {
+      renderRecoveryActions(
+        result.recoverActions ??
+          getRecoveryActions(result.reasonCode, {
+            username,
+            ...(result.provider ? { provider: result.provider } : {}),
+          }),
+      );
+      process.exitCode = 1;
+    }
   });
 
 // show - 展示结果
@@ -184,7 +194,10 @@ session
   .option('--all-versions', 'Clear every generation in the selected provider scope')
   .action(async (username, _options, command) => {
     const result = await runSessionClear(username, command.optsWithGlobals());
-    if (result.status === 'failed') process.exitCode = 1;
+    if (result.status === 'failed') {
+      renderRecoveryActions(getRecoveryActions(result.reasonCode, { username }));
+      process.exitCode = 1;
+    }
   });
 
 program.parse();

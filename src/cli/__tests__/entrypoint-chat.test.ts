@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockedRunChat = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
+const mockedLogger = vi.hoisted(() => ({
+  setLevel: vi.fn(),
+  warn: vi.fn(),
+  diagnostic: vi.fn(),
+  info: vi.fn(),
+  detail: vi.fn(),
+}));
 
 vi.mock('../commands', () => ({
   runFetch: vi.fn(),
@@ -14,6 +21,7 @@ vi.mock('../commands', () => ({
   configSet: vi.fn(),
   configReset: vi.fn(),
   runSessionCheck: vi.fn(),
+  runSessionClear: vi.fn(),
   runChat: mockedRunChat,
 }));
 
@@ -23,7 +31,7 @@ vi.mock('@/config', () => ({
 }));
 
 vi.mock('@/infra/logger', () => ({
-  logger: { setLevel: vi.fn(), warn: vi.fn(), diagnostic: vi.fn() },
+  logger: mockedLogger,
 }));
 
 let originalArgv: string[];
@@ -33,7 +41,11 @@ describe('chat entrypoint', () => {
     originalArgv = process.argv;
     vi.clearAllMocks();
     mockedGetConfig.mockReturnValue({ log: { level: 'info' } });
-    mockedRunChat.mockResolvedValue({ status: 'success', provider: 'gemini' });
+    mockedRunChat.mockResolvedValue({
+      status: 'failed',
+      provider: 'gemini',
+      reasonCode: 'CHAT_CONTEXT_TOO_LONG',
+    });
   });
 
   afterEach(() => {
@@ -50,6 +62,10 @@ describe('chat entrypoint', () => {
       'alice',
       'what changed?',
       expect.objectContaining({ provider: 'gemini' }),
+    );
+    expect(mockedLogger.info).toHaveBeenCalledWith('恢复建议:');
+    expect(mockedLogger.detail).toHaveBeenCalledWith(
+      '命令: v2er ai alice --provider gemini --new-thread',
     );
   });
 });

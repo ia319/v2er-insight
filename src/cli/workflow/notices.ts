@@ -1,5 +1,22 @@
 import { logger } from '@/infra/logger';
-import type { UserNotice } from './types';
+import type { RecoveryAction, UserNotice } from './types';
+
+/**
+ * Renders recovery actions through the diagnostic logger.
+ *
+ * @param actions - Ordered command or instruction actions for a failed operation.
+ * @returns Nothing.
+ */
+export function renderRecoveryActions(actions: readonly RecoveryAction[] = []): void {
+  if (actions.length === 0) return;
+
+  logger.info('恢复建议:');
+  for (const action of actions) {
+    const label = action.type === 'command' ? '命令' : '操作';
+    logger.detail(`${label}: ${action.content}`);
+    logger.detail(`说明: ${action.description}`);
+  }
+}
 
 /**
  * Renders one structured notice through the diagnostic logger.

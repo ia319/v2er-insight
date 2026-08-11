@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockedRunSessionClear = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
+const mockedLogger = vi.hoisted(() => ({
+  setLevel: vi.fn(),
+  warn: vi.fn(),
+  diagnostic: vi.fn(),
+  info: vi.fn(),
+  detail: vi.fn(),
+}));
 
 vi.mock('../commands', () => ({
   runFetch: vi.fn(),
@@ -24,7 +31,7 @@ vi.mock('@/config', () => ({
 }));
 
 vi.mock('@/infra/logger', () => ({
-  logger: { setLevel: vi.fn(), warn: vi.fn(), diagnostic: vi.fn() },
+  logger: mockedLogger,
 }));
 
 let originalArgv: string[];
@@ -34,7 +41,11 @@ describe('session clear entrypoint', () => {
     originalArgv = process.argv;
     vi.clearAllMocks();
     mockedGetConfig.mockReturnValue({ log: { level: 'info' } });
-    mockedRunSessionClear.mockResolvedValue({ status: 'success', deleted: 3 });
+    mockedRunSessionClear.mockResolvedValue({
+      status: 'failed',
+      reasonCode: 'SESSION_DELETE_FAILED',
+      deleted: 0,
+    });
   });
 
   afterEach(() => {
@@ -59,6 +70,10 @@ describe('session clear entrypoint', () => {
     expect(mockedRunSessionClear).toHaveBeenCalledWith(
       'alice',
       expect.objectContaining({ provider: 'all', allVersions: true }),
+    );
+    expect(mockedLogger.info).toHaveBeenCalledWith('恢复建议:');
+    expect(mockedLogger.detail).toHaveBeenCalledWith(
+      '命令: v2er session check alice --provider codex',
     );
   });
 });
