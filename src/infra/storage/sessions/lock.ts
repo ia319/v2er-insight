@@ -249,12 +249,7 @@ export function acquireAISessionLockLease(
   };
 }
 
-interface HeldIndexLock {
-  depth: number;
-  release: () => void;
-}
-
-const heldIndexLocks = new Map<string, HeldIndexLock>();
+const heldIndexLocks = new Set<string>();
 
 function acquireAISessionIndexLock(lockPath: string): () => void {
   const deadline = Date.now() + INDEX_LOCK_TIMEOUT_MS;
@@ -276,19 +271,10 @@ function acquireAISessionIndexLock(lockPath: string): () => void {
  */
 export function withAISessionIndexTransaction<T>(username: string, operation: () => T): T {
   const lockPath = getSessionIndexLockPath(username);
-  const held = heldIndexLocks.get(lockPath);
-  if (held) {
-    held.depth += 1;
-    try {
-      return operation();
-    } finally {
-      held.depth -= 1;
-    }
-  }
+  if (heldIndexLocks.has(lockPath)) return operation();
 
   const release = acquireAISessionIndexLock(lockPath);
-  const owned: HeldIndexLock = { depth: 1, release };
-  heldIndexLocks.set(lockPath, owned);
+  heldIndexLocks.add(lockPath);
   const outcome = (() => {
     try {
       return { status: 'fulfilled' as const, value: operation() };
@@ -299,7 +285,7 @@ export function withAISessionIndexTransaction<T>(username: string, operation: ()
 
   heldIndexLocks.delete(lockPath);
   try {
-    owned.release();
+    release();
   } catch (releaseError) {
     throw new AISessionLockReleaseError(
       releaseError,

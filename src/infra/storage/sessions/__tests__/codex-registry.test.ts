@@ -313,6 +313,7 @@ describe('Codex provider session storage', () => {
     );
 
     expect(next.sessions[0]?.lastUsedAt).toBe('2026-08-02T02:30:00.000Z');
+    expect(mocks.withAISessionIndexTransaction).toHaveBeenCalledOnce();
     expect(mocks.writeAISessionState.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.writeAISessionIndex.mock.invocationCallOrder[0] ?? 0,
     );

@@ -7,6 +7,7 @@ vi.mock('node:crypto', () => ({ randomUUID: vi.fn() }));
 
 import {
   acquireAISessionLockLease,
+  AISessionIndexLockBusyError,
   AISessionLockBusyError,
   AISessionLockOwnershipError,
   AISessionLockReleaseError,
@@ -187,5 +188,23 @@ describe('AI session lock', () => {
       0o600,
     );
     expect(mockedFs.unlinkSync).toHaveBeenCalledOnce();
+  });
+
+  it('retries shared-index contention until the publication deadline', () => {
+    mockedFs.openSync.mockImplementation(() => {
+      throw Object.assign(new Error('exists'), { code: 'EEXIST' });
+    });
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(1_500)
+      .mockReturnValue(2_000);
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+    expect(() => withAISessionIndexTransaction('alice', () => undefined)).toThrow(
+      AISessionIndexLockBusyError,
+    );
+
+    expect(mockedFs.openSync).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledOnce();
   });
 });
