@@ -43,7 +43,7 @@ export type CodexErrorInfo =
 
 export interface CodexTurnFailure {
   message: string;
-  codexErrorInfo?: CodexErrorInfo | null;
+  codexErrorInfo: CodexErrorInfo | null;
   additionalDetails: string | null;
 }
 

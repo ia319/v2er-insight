@@ -115,7 +115,7 @@ describe('sendCodexPromptTurn', () => {
       return {
         ...fixture.completed,
         status: 'failed',
-        error: { message: 'failed', additionalDetails: null },
+        error: { message: 'failed', codexErrorInfo: null, additionalDetails: null },
       };
     });
 

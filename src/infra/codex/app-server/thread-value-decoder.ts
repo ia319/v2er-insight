@@ -102,8 +102,9 @@ function decodeHttpFailure(value: unknown, path: string): { httpStatusCode: numb
 
 function decodeCodexErrorInfo(value: unknown, path: string): CodexErrorInfo | null {
   if (value === null || value === undefined) return null;
-  if (typeof value === 'string' && SIMPLE_CODEX_ERROR_INFO.has(value)) {
-    return value as CodexErrorInfo;
+  if (typeof value === 'string') {
+    if (SIMPLE_CODEX_ERROR_INFO.has(value)) return value as CodexErrorInfo;
+    return fail(path, 'Codex error info');
   }
   const record = expectRecord(value, path);
   const keys = Object.keys(record);

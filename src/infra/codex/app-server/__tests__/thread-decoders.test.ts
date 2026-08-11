@@ -134,6 +134,20 @@ describe('App Server thread decoders', () => {
     expect(() => decodeTurnStartResponse({ turn })).toThrow(CodexAppServerProtocolError);
   });
 
+  it('should identify an unknown Codex error info string', () => {
+    const turn = {
+      ...createTurn(),
+      status: 'failed',
+      error: {
+        message: 'request failed',
+        codexErrorInfo: 'unknownFailure',
+        additionalDetails: null,
+      },
+    };
+
+    expect(() => decodeTurnStartResponse({ turn })).toThrow(/Codex error info/);
+  });
+
   it('should require object results from thread mutations', () => {
     expect(decodeThreadSetNameResponse({})).toBeUndefined();
     expect(decodeThreadDeleteResponse({})).toBeUndefined();
