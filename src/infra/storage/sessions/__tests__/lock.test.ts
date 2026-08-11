@@ -55,12 +55,15 @@ describe('AI session lock', () => {
     expect(mockedFs.unlinkSync).toHaveBeenCalledOnce();
   });
 
-  it('keeps a manual lease until its owner releases the cross-layer lifecycle', () => {
+  it('releases a manual lease at most once across layers', () => {
     const lease = acquireAISessionLockLease('alice', 'gemini', SESSION_ID);
 
     expect(mockedFs.unlinkSync).not.toHaveBeenCalled();
     lease.release();
+    mockedFs.readFileSync.mockReturnValue(lockOwner('replacement-token'));
+    expect(() => lease.release()).not.toThrow();
 
+    expect(mockedFs.readFileSync).toHaveBeenCalledOnce();
     expect(mockedFs.unlinkSync).toHaveBeenCalledOnce();
   });
 

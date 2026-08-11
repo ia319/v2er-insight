@@ -25,7 +25,7 @@ export type AISessionLockState =
 /** A verified provider-session lock that may span multiple persistence layers. */
 export interface AISessionLockLease {
   /**
-   * Releases the lock and preserves an earlier operation failure if ownership changed.
+   * Releases the lock at most once and preserves an earlier failure if ownership changed.
    * @param operationError - Failure that occurred while the lease was held.
    */
   release(operationError?: unknown): void;
@@ -231,14 +231,17 @@ export function acquireAISessionLockLease(
   provider: AISessionProvider,
   localSessionId: string,
 ): AISessionLockLease {
-  const release = acquireLock(
+  const releaseLock = acquireLock(
     getSessionLockPath(username, provider, localSessionId),
     (state) => new AISessionLockBusyError(state),
   );
+  let released = false;
   return {
     release(operationError?: unknown): void {
+      if (released) return;
       try {
-        release();
+        releaseLock();
+        released = true;
       } catch (releaseError) {
         throw new AISessionLockReleaseError(releaseError, operationError);
       }

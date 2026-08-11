@@ -63,6 +63,7 @@ export type GeminiCommandExecution =
       localSessionId: string;
       delivery: PendingResultDeliveryState;
       complete: (metadata: ResultVersionMetadata) => void;
+      /** Caller must release the prepared session after delivery completes or fails. */
       releaseSession: (operationError?: unknown) => void;
     });
 
