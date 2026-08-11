@@ -41,9 +41,9 @@ export type CodexRuntimeConnection = Pick<
   | 'readThread'
   | 'setThreadName'
   | 'runTurn'
+  | 'deleteThread'
   | 'close'
-> &
-  Partial<Pick<CodexAppServerConnection, 'deleteThread'>>;
+>;
 
 export interface SelectedCodexRuntime {
   candidate: CodexExecutableCandidate;

@@ -103,6 +103,9 @@ function createConnection(thread: CodexThreadInfo): CodexRuntimeConnection {
     }),
     readThread: vi.fn(async () => thread),
     setThreadName: vi.fn(async () => undefined),
+    deleteThread: vi.fn(async () => {
+      throw new Error('Not used');
+    }),
     runTurn: vi.fn(async () => {
       throw new Error('Not used');
     }),

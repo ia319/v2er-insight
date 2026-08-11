@@ -178,6 +178,9 @@ function createConnection(
     setThreadName: vi.fn(async () => {
       throw new Error('Not used by runtime selection tests');
     }),
+    deleteThread: vi.fn(async () => {
+      throw new Error('Not used by runtime selection tests');
+    }),
     runTurn: vi.fn(async () => {
       throw new Error('Not used by runtime selection tests');
     }),

@@ -110,10 +110,6 @@ export async function clearConfirmedSessionScope(
         new SessionDeleteFailedError(firstCodexSession.externalThreadId, error),
       );
     }
-    if (!controlRuntime.connection.deleteThread) {
-      await controlRuntime.connection.close().catch(() => undefined);
-      throw new SessionDeleteUnsupportedError();
-    }
     deleteCodexThread = controlRuntime.connection.deleteThread.bind(controlRuntime.connection);
   }
 
