@@ -200,4 +200,8 @@ session
     }
   });
 
-program.parse();
+async function main(): Promise<void> {
+  await program.parseAsync();
+}
+
+void main();
