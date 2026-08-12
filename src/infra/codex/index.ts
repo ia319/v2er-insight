@@ -52,6 +52,7 @@ export type {
   CodexReasoningEffortOption,
   CodexServerInfo,
   CodexAgentMessage,
+  CodexErrorInfo,
   CodexThreadInfo,
   CodexThreadSessionInfo,
   CodexTurnInfo,

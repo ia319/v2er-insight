@@ -6,8 +6,9 @@ import {
   resolveGeminiConfig,
   type AIProviderId,
 } from '@/config';
-import { resolveApiKey } from '@/core/ai';
+import { resolveApiKey, type AISessionProvider, type AISessionStateV1 } from '@/core/ai';
 import { logger } from '@/infra/logger';
+import { readAISessionStore, readStoredResultVersion } from '@/infra/storage';
 import { checkCodexSession } from './session/codex-check';
 import type { CodexSessionCheckReport } from './session/codex-types';
 
@@ -18,6 +19,69 @@ export interface SessionCheckOptions {
 export interface SessionCheckResult {
   status: 'success' | 'failed';
   provider: AIProviderId | null;
+}
+
+function hasMatchingResultVersion(session: AISessionStateV1): boolean {
+  const versionId = session.lastResultVersionId;
+  if (versionId === null) return true;
+  const stored = readStoredResultVersion(session.username, versionId);
+  if (stored.status !== 'valid') return false;
+  const metadata = stored.version.metadata;
+  return (
+    metadata.provider === session.provider &&
+    metadata.localSessionId === session.localSessionId &&
+    metadata.model === session.model &&
+    metadata.promptHash === session.promptHash &&
+    metadata.externalThreadId === (session.provider === 'codex' ? session.externalThreadId : null)
+  );
+}
+
+function renderProviderSessions(username: string, provider: AISessionProvider): boolean {
+  const store = readAISessionStore(username);
+  logger.section('持久 Session');
+  if (store.status === 'missing') {
+    logger.detail('会话存储: 不存在');
+    return true;
+  }
+  if (store.status === 'invalid') {
+    logger.error('会话存储无效、不可读，或 index 与 provider 文件不一致');
+    return false;
+  }
+
+  logger.detail(
+    `最近成功 analysis provider: ${store.index.lastSuccessfulAnalysisProvider ?? '无'}`,
+  );
+  const activeSessionId = store.index.activeByProvider[provider];
+  logger.detail(`活动 ${provider} session: ${activeSessionId ?? '无'}`);
+  const sessions = store.sessions.filter((session) => session.provider === provider);
+  if (sessions.length === 0) {
+    logger.detail(`${provider} sessions: 0`);
+    return true;
+  }
+
+  let valid = true;
+  for (const session of sessions) {
+    const active = session.localSessionId === activeSessionId ? ' [活动]' : '';
+    logger.detail(
+      `- generation=${session.generation}${active}; session=${session.localSessionId}; model=${session.model}`,
+    );
+    logger.detail(`  promptHash=${session.promptHash}`);
+    if (session.provider === 'gemini') {
+      logger.detail(
+        `  thinking=${session.thinkingLevel ?? '未记录'}; history=${session.history.length / 2} 对`,
+      );
+    } else {
+      logger.detail(
+        `  effort=${session.lastReasoningEffort ?? '未记录'}; thread=${session.externalThreadId}`,
+      );
+    }
+    logger.detail(`  resultVersion=${session.lastResultVersionId ?? '迁移遗留：未证明关联'}`);
+    if (!hasMatchingResultVersion(session)) {
+      valid = false;
+      logger.error(`session ${session.localSessionId} 的结果版本关联缺失或身份不匹配`);
+    }
+  }
+  return valid;
 }
 
 function isProvider(value: string): value is AIProviderId {
@@ -168,9 +232,10 @@ export async function runSessionCheck(
     logger.detail(`模型: ${gemini.model}`);
     logger.detail(`思考等级: ${gemini.thinkingLevel}`);
     logger.detail(`API Key: ${hasApiKey ? '已配置' : '未配置'}`);
+    const sessionsValid = username ? renderProviderSessions(username, 'gemini') : true;
     if (!hasApiKey) logger.warn('Gemini API Key 未配置');
-    else logger.success('Session 检查通过');
-    return { status: hasApiKey ? 'success' : 'failed', provider: 'gemini' };
+    else if (sessionsValid) logger.success('Session 检查通过');
+    return { status: hasApiKey && sessionsValid ? 'success' : 'failed', provider: 'gemini' };
   }
 
   try {
@@ -181,9 +246,13 @@ export async function runSessionCheck(
     renderProject(report);
     renderRuntime(report);
     renderLocalState(report);
+    const sessionsValid = username ? renderProviderSessions(username, 'codex') : true;
     renderIssues(report);
     return {
-      status: report.issues.some((issue) => issue.severity === 'error') ? 'failed' : 'success',
+      status:
+        report.issues.some((issue) => issue.severity === 'error') || !sessionsValid
+          ? 'failed'
+          : 'success',
       provider: 'codex',
     };
   } catch (error) {

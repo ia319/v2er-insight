@@ -27,6 +27,12 @@ export type {
 } from './analysis-run';
 export { runCodexAnalysis } from './analysis-run';
 export type {
+  CodexChatTurnErrorCode,
+  CompletedCodexChatTurn,
+  SendCodexChatTurnOptions,
+} from './chat-turn';
+export { CodexChatTurnError, sendCodexChatTurn } from './chat-turn';
+export type {
   CodexBootstrapRecovery,
   CodexBootstrapRecoveryErrorCode,
   RecoverCodexBootstrapOptions,
@@ -90,10 +96,16 @@ export type {
   CodexRuntimeAttempt,
   CodexRuntimeAttemptCode,
   CodexRuntimeConnection,
+  CodexControlRuntimeSelectionOptions,
   CodexRuntimeSelectionOptions,
   SelectedCodexRuntime,
+  SelectedCodexControlRuntime,
 } from './runtime-selection';
-export { CodexRuntimeSelectionError, selectCodexRuntime } from './runtime-selection';
+export {
+  CodexRuntimeSelectionError,
+  selectCodexControlRuntime,
+  selectCodexRuntime,
+} from './runtime-selection';
 export type {
   CodexBootstrapStatus,
   CodexPendingAnalysisDelivery,

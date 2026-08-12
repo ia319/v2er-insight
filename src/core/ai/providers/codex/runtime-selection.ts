@@ -41,6 +41,7 @@ export type CodexRuntimeConnection = Pick<
   | 'readThread'
   | 'setThreadName'
   | 'runTurn'
+  | 'deleteThread'
   | 'close'
 >;
 
@@ -55,12 +56,23 @@ export interface SelectedCodexRuntime {
   attempts: CodexRuntimeAttempt[];
 }
 
+export interface SelectedCodexControlRuntime {
+  candidate: CodexExecutableCandidate;
+  version: string;
+  server: CodexServerInfo;
+  account: CodexAccountStatus;
+  connection: CodexRuntimeConnection;
+  attempts: CodexRuntimeAttempt[];
+}
+
 export interface CodexRuntimeSelectionOptions {
   versionTimeoutMs: number;
   process: CodexAppServerProcessOptions;
   connection: CodexAppServerConnectionOptions;
   model: Pick<CodexProviderConfig, 'model' | 'reasoningEffort'>;
 }
+
+export type CodexControlRuntimeSelectionOptions = Omit<CodexRuntimeSelectionOptions, 'model'>;
 
 interface CodexRuntimeDependencies {
   probeVersion(candidate: CodexExecutableCandidate, timeoutMs: number): Promise<string>;
@@ -84,6 +96,57 @@ export class CodexRuntimeSelectionError extends Error {
     this.name = 'CodexRuntimeSelectionError';
     this.attempts = attempts;
   }
+}
+
+/**
+ * Selects a runtime for account-level thread operations that do not depend on a model catalog.
+ * @param candidates - Executable candidates in discovery priority order.
+ * @param options - Version, process, and protocol deadlines.
+ * @param dependencies - Injectable process boundary for deterministic tests.
+ * @returns An initialized authenticated control connection.
+ */
+export async function selectCodexControlRuntime(
+  candidates: readonly CodexExecutableCandidate[],
+  options: CodexControlRuntimeSelectionOptions,
+  dependencies: CodexRuntimeDependencies = DEFAULT_DEPENDENCIES,
+): Promise<SelectedCodexControlRuntime> {
+  const attempts: CodexRuntimeAttempt[] = [];
+  for (const candidate of candidates) {
+    let version: string;
+    try {
+      version = await dependencies.probeVersion(candidate, options.versionTimeoutMs);
+    } catch (error) {
+      attempts.push(createAttempt(candidate, 'version_failed', error));
+      if (candidate.source === 'explicit') break;
+      continue;
+    }
+
+    let connection: CodexRuntimeConnection | undefined;
+    try {
+      connection = dependencies.connect(candidate, options.process, options.connection);
+      const server = await connection.initialize();
+      const account = await connection.readAccount();
+      if (account.accountType === null && account.requiresOpenaiAuth) {
+        attempts.push(
+          createAttempt(
+            candidate,
+            'account_unavailable',
+            new Error('Codex account authentication is required'),
+            version,
+          ),
+        );
+        await connection.close().catch(() => undefined);
+        if (candidate.source === 'explicit') break;
+        continue;
+      }
+      return { candidate, version, server, account, connection, attempts };
+    } catch (error) {
+      attempts.push(createAttempt(candidate, 'protocol_failed', error, version));
+      await connection?.close().catch(() => undefined);
+      if (candidate.source === 'explicit') break;
+    }
+  }
+  throw new CodexRuntimeSelectionError(attempts);
 }
 
 function getErrorMessage(error: unknown): string {

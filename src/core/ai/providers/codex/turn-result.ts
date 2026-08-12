@@ -1,4 +1,4 @@
-import type { CodexAgentMessage, CodexTurnInfo } from '@/infra/codex';
+import type { CodexAgentMessage, CodexErrorInfo, CodexTurnInfo } from '@/infra/codex';
 
 export type CodexTurnResultErrorCode =
   | 'turn_in_progress'
@@ -9,12 +9,19 @@ export type CodexTurnResultErrorCode =
 export class CodexTurnResultError extends Error {
   readonly code: CodexTurnResultErrorCode;
   readonly turnId: string;
+  readonly codexErrorInfo: CodexErrorInfo | null;
 
-  constructor(code: CodexTurnResultErrorCode, turnId: string, message: string) {
+  constructor(
+    code: CodexTurnResultErrorCode,
+    turnId: string,
+    message: string,
+    codexErrorInfo: CodexErrorInfo | null = null,
+  ) {
     super(message);
     this.name = 'CodexTurnResultError';
     this.code = code;
     this.turnId = turnId;
+    this.codexErrorInfo = codexErrorInfo;
   }
 }
 
@@ -44,6 +51,7 @@ export function assertCodexTurnCompleted(turn: CodexTurnInfo): void {
         'turn_failed',
         turn.id,
         turn.error?.message ?? `Codex turn "${turn.id}" failed`,
+        turn.error?.codexErrorInfo ?? null,
       );
   }
 }

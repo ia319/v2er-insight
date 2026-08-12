@@ -1,7 +1,9 @@
+import type { AIProviderId } from '@/config';
 import type { ReasonCode, RecoveryAction } from './types';
 
 interface RecoveryRenderContext {
   username?: string;
+  provider?: AIProviderId;
 }
 
 /**
@@ -423,6 +425,75 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '存储问题修复后重新发送并保存结果',
     },
   ],
+  CHAT_SESSION_MISSING: [
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '先完成一次 AI 分析，再使用默认聊天会话',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider codex',
+      description: '需要 Codex 会话时，先显式完成一次 Codex 分析',
+    },
+  ],
+  CHAT_SESSION_INVALID: [
+    {
+      type: 'command',
+      content: 'v2er session check <username>',
+      description: '只读检查活动会话、迁移状态和 provider 关联',
+    },
+  ],
+  CHAT_CONTEXT_TOO_LONG: [
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider <provider> --new-thread',
+      description: '准备好当前 analyzed 数据后，显式创建新的会话 generation',
+    },
+  ],
+  CHAT_CONTEXT_UNVERIFIED: [
+    {
+      type: 'instruction',
+      content: '确认 Gemini 模型元数据与 token count 服务可用后，重试原 chat 命令',
+      description: '无法确认请求是否符合模型上下文窗口，本轮消息未发送',
+    },
+  ],
+  CHAT_PROVIDER_FAILED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username>',
+      description: '检查 provider 运行条件和活动会话，不发送测试消息',
+    },
+  ],
+  SESSION_CONFIRMATION_REQUIRED: [
+    {
+      type: 'instruction',
+      content: '在交互式终端重新执行 session clear 并确认列出的永久删除范围',
+      description: '非交互终端不能代替用户确认永久清理',
+    },
+  ],
+  SESSION_CLEAR_CANCELLED: [],
+  SESSION_DELETE_UNSUPPORTED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '确认当前 Codex CLI 版本和 App Server 能力后再重试',
+    },
+  ],
+  SESSION_DELETE_FAILED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username> --provider codex',
+      description: '确认外部 thread 与本地映射的当前状态，再决定是否重试',
+    },
+  ],
+  SESSION_CLEAR_FAILED: [
+    {
+      type: 'command',
+      content: 'v2er session check <username>',
+      description: '确认外部 Codex thread 与本地映射仍然存在，再决定是否重试',
+    },
+  ],
   SHOW_RESULT_MISSING: [
     {
       type: 'command',
@@ -444,8 +515,10 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
  * 渲染恢复动作中的模板变量（如 <username>）。
  */
 function renderTemplate(content: string, context: RecoveryRenderContext): string {
-  if (!context.username) return content;
-  return content.replace(/<username>/g, context.username);
+  let rendered = content;
+  if (context.username) rendered = rendered.replace(/<username>/g, context.username);
+  if (context.provider) rendered = rendered.replace(/<provider>/g, context.provider);
+  return rendered;
 }
 
 /**

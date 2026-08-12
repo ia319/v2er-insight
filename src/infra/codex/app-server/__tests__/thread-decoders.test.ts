@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CodexAppServerProtocolError } from '../errors';
 import {
+  decodeThreadDeleteResponse,
   decodeThreadReadResponse,
   decodeThreadSetNameResponse,
   decodeThreadStartResponse,
@@ -69,7 +70,21 @@ describe('App Server thread decoders', () => {
         {
           ...createTurn(),
           status: 'failed',
-          error: { message: 'request failed', codexErrorInfo: 'other', additionalDetails: null },
+          error: {
+            message: 'request failed',
+            codexErrorInfo: 'contextWindowExceeded',
+            additionalDetails: null,
+          },
+        },
+        {
+          ...createTurn(),
+          id: 'turn-2',
+          status: 'failed',
+          error: {
+            message: 'connection failed',
+            codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 503 } },
+            additionalDetails: 'upstream unavailable',
+          },
         },
       ],
     };
@@ -79,7 +94,19 @@ describe('App Server thread decoders', () => {
       turns: [
         {
           status: 'failed',
-          error: { message: 'request failed', additionalDetails: null },
+          error: {
+            message: 'request failed',
+            codexErrorInfo: 'contextWindowExceeded',
+            additionalDetails: null,
+          },
+        },
+        {
+          status: 'failed',
+          error: {
+            message: 'connection failed',
+            codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 503 } },
+            additionalDetails: 'upstream unavailable',
+          },
         },
       ],
     });
@@ -107,8 +134,24 @@ describe('App Server thread decoders', () => {
     expect(() => decodeTurnStartResponse({ turn })).toThrow(CodexAppServerProtocolError);
   });
 
-  it('should require an object result from thread/name/set', () => {
+  it('should identify an unknown Codex error info string', () => {
+    const turn = {
+      ...createTurn(),
+      status: 'failed',
+      error: {
+        message: 'request failed',
+        codexErrorInfo: 'unknownFailure',
+        additionalDetails: null,
+      },
+    };
+
+    expect(() => decodeTurnStartResponse({ turn })).toThrow(/Codex error info/);
+  });
+
+  it('should require object results from thread mutations', () => {
     expect(decodeThreadSetNameResponse({})).toBeUndefined();
+    expect(decodeThreadDeleteResponse({})).toBeUndefined();
     expect(() => decodeThreadSetNameResponse(null)).toThrow(CodexAppServerProtocolError);
+    expect(() => decodeThreadDeleteResponse(null)).toThrow(CodexAppServerProtocolError);
   });
 });

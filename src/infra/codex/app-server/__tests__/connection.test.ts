@@ -288,6 +288,18 @@ describe('CodexAppServerConnection', () => {
     await connection.close();
   });
 
+  it('should delete persisted threads through the App Server', async () => {
+    const { connection, requests } = createHarness(createIsolatedThreadResponder());
+
+    await expect(connection.deleteThread('thread-1')).resolves.toBeUndefined();
+    expect(requests).toContainEqual({
+      id: expect.any(Number),
+      method: 'thread/delete',
+      params: { threadId: 'thread-1' },
+    });
+    await connection.close();
+  });
+
   it('should reject a persisted thread that still exposes MCP tools', async () => {
     const { connection } = createHarness(
       createIsolatedThreadResponder({
@@ -537,6 +549,9 @@ function createIsolatedThreadResponder(
         return;
       }
       case 'thread/name/set':
+        writeResult(output, request.id, {});
+        return;
+      case 'thread/delete':
         writeResult(output, request.id, {});
         return;
       case 'thread/read':

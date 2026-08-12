@@ -4,12 +4,13 @@ import type { UserNotice } from '../types';
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
   warn: vi.fn(),
+  detail: vi.fn(),
   diagnostic: vi.fn(),
 }));
 
 vi.mock('@/infra/logger', () => ({ logger: mockLogger }));
 
-import { renderNotice, renderNotices } from '../notices';
+import { renderNotice, renderNotices, renderRecoveryActions } from '../notices';
 import {
   createDataFilesCleanedNotice,
   createDataRetentionEnabledNotice,
@@ -72,6 +73,36 @@ describe('notice rendering', () => {
       'info',
       '[DATA_FILES_CLEANED] 没有需要恢复的影响',
     );
+  });
+
+  it('ignores empty recovery input and renders ordered action details', () => {
+    renderRecoveryActions();
+    renderRecoveryActions([]);
+
+    expect(mockLogger.info).not.toHaveBeenCalled();
+    expect(mockLogger.detail).not.toHaveBeenCalled();
+
+    renderRecoveryActions([
+      {
+        type: 'command',
+        content: 'v2er session check alice --provider codex',
+        description: 'inspect the persisted session',
+      },
+      {
+        type: 'instruction',
+        content: 'verify the external thread manually',
+        description: 'confirm remote state before retrying',
+      },
+    ]);
+
+    expect(mockLogger.info).toHaveBeenCalledOnce();
+    expect(mockLogger.info).toHaveBeenCalledWith('恢复建议:');
+    expect(mockLogger.detail.mock.calls).toEqual([
+      ['命令: v2er session check alice --provider codex'],
+      ['说明: inspect the persisted session'],
+      ['操作: verify the external thread manually'],
+      ['说明: confirm remote state before retrying'],
+    ]);
   });
 });
 

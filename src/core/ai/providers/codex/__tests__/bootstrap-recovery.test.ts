@@ -261,7 +261,7 @@ describe('recoverCodexBootstrap', () => {
       '2026-07-19T01:01:00.000Z',
     );
     const failed = createTurn('failed');
-    failed.error = { message: 'request failed', additionalDetails: null };
+    failed.error = { message: 'request failed', codexErrorInfo: null, additionalDetails: null };
     const updater = createUpdater(registry);
 
     await expect(

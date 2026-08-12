@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedResolveApiKey = vi.hoisted(() => vi.fn());
 const mockedCheckCodexSession = vi.hoisted(() => vi.fn());
+const mockedReadAISessionStore = vi.hoisted(() => vi.fn());
+const mockedReadStoredResultVersion = vi.hoisted(() => vi.fn());
 
 const mockedLogger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -28,6 +30,10 @@ vi.mock('@/core/ai', async () => {
 
 vi.mock('../session/codex-check', () => ({ checkCodexSession: mockedCheckCodexSession }));
 vi.mock('@/infra/logger', () => ({ logger: mockedLogger }));
+vi.mock('@/infra/storage', () => ({
+  readAISessionStore: mockedReadAISessionStore,
+  readStoredResultVersion: mockedReadStoredResultVersion,
+}));
 
 import { runSessionCheck } from '../session';
 import type { CodexSessionCheckReport } from '../session/codex-types';
@@ -93,6 +99,7 @@ describe('runSessionCheck', () => {
     vi.clearAllMocks();
     mockedGetConfig.mockReturnValue({ ai: { provider: 'gemini' } });
     mockedResolveApiKey.mockReturnValue('configured');
+    mockedReadAISessionStore.mockReturnValue({ status: 'missing' });
   });
 
   it('should report Gemini readiness without invoking Codex diagnostics', async () => {
@@ -103,6 +110,71 @@ describe('runSessionCheck', () => {
     expect(result).toEqual({ status: 'failed', provider: 'gemini' });
     expect(mockedCheckCodexSession).not.toHaveBeenCalled();
     expect(mockedLogger.detail).toHaveBeenCalledWith('API Key: 未配置');
+  });
+
+  it('should render validated Gemini history and its result version relation', async () => {
+    const session = {
+      schemaVersion: 1,
+      localSessionId: '6d8eea46-7e52-47ca-a740-34a0b01bb810',
+      username: 'alice',
+      provider: 'gemini' as const,
+      generation: 2,
+      promptHash: 'a'.repeat(64),
+      model: 'gemini-current',
+      createdAt: '2026-08-08T01:00:00.000Z',
+      lastUsedAt: '2026-08-08T02:00:00.000Z',
+      lastSuccessfulAnalysisAt: '2026-08-08T01:00:00.000Z',
+      lastResultVersionId: '20260808T010000000Z-aaaaaaaaaaaa',
+      lastAnalysisFingerprint: 'b'.repeat(64),
+      systemInstruction: 'Analyze.',
+      thinkingLevel: 'high',
+      history: [
+        { role: 'user' as const, parts: [{ text: 'analysis' }] },
+        { role: 'model' as const, parts: [{ text: 'profile' }] },
+      ],
+    };
+    const index = {
+      schemaVersion: 1,
+      lastSuccessfulAnalysisProvider: 'gemini' as const,
+      activeByProvider: { gemini: session.localSessionId },
+      sessions: [],
+      updatedAt: session.lastUsedAt,
+    };
+    mockedReadAISessionStore.mockReturnValue({ status: 'valid', index, sessions: [session] });
+    mockedReadStoredResultVersion.mockReturnValue({
+      status: 'valid',
+      version: {
+        metadata: {
+          provider: 'gemini',
+          localSessionId: session.localSessionId,
+          model: session.model,
+          promptHash: session.promptHash,
+          externalThreadId: null,
+        },
+      },
+    });
+
+    const result = await runSessionCheck('alice', { provider: 'gemini' });
+
+    expect(result).toEqual({ status: 'success', provider: 'gemini' });
+    expect(mockedLogger.detail).toHaveBeenCalledWith(
+      '活动 gemini session: ' + session.localSessionId,
+    );
+    expect(mockedLogger.detail).toHaveBeenCalledWith('  thinking=high; history=1 对');
+    expect(mockedLogger.detail).toHaveBeenCalledWith(
+      '  resultVersion=20260808T010000000Z-aaaaaaaaaaaa',
+    );
+  });
+
+  it('should fail when an indexed provider session is invalid', async () => {
+    mockedReadAISessionStore.mockReturnValue({ status: 'invalid' });
+
+    const result = await runSessionCheck('alice', { provider: 'gemini' });
+
+    expect(result).toEqual({ status: 'failed', provider: 'gemini' });
+    expect(mockedLogger.error).toHaveBeenCalledWith(
+      '会话存储无效、不可读，或 index 与 provider 文件不一致',
+    );
   });
 
   it('should reject unknown providers before provider diagnostics', async () => {

@@ -168,7 +168,27 @@ Codex 默认值：
 | `ai.codex.turnTimeout`     | `600_000` 毫秒         | 单个 turn 的完成期限                     |
 | `ai.codex.shutdownGrace`   | `2_000` 毫秒           | 独立 App Server 子进程的关闭宽限         |
 
-### 4. 报告展示 (Show)
+### 4. 持续聊天 (Chat)
+
+向已有的 AI 分析会话发送普通消息：
+
+```bash
+v2er chat <username> <message...>
+v2er chat <username> --provider gemini <message...>
+v2er chat <username> --provider codex <message...>
+```
+
+未指定 `--provider` 时，命令使用最近一次成功生成画像的 provider。显式 provider 只选择本次消息使用的活动会话，后续默认选择保持不变。消息以 `-` 开头时，在消息前加入 `--` 结束选项解析。
+
+命令把本轮模型回复写入 `stdout`，把诊断和上下文警告写入 `stderr`。普通聊天完成后，`result.json`、结果版本和最近成功画像的 provider 保持不变。
+
+目标 provider 必须存在活动会话。需要建立或重置聊天基线时，执行：
+
+```bash
+v2er ai <username> --provider <provider> --new-thread
+```
+
+### 5. 报告展示 (Show)
 
 以结构化的格式展示最终的分析报告，包含 OCEAN 五维性格雷达图（字符模拟）。
 
@@ -181,7 +201,7 @@ v2er show <username> [选项]
 | `--brief` | 简略版输出（仅摘要及核心指标） |
 | `--json`  | 输出 AI 返回的原始 JSON 数据   |
 
-### 5. 配置管理 (Config)
+### 6. 配置管理 (Config)
 
 - **group**: 配置分组名，可选 `ai`、`fetch`、`analyzer`、`data`、`log`、`proxy`
 - **path**: 点分路径，如 `ai.model`、`log.level`、`data.keepRaw`
@@ -231,14 +251,38 @@ v2er config set ai.codex.projectPath <path>
 
 默认配置 `data.keepRaw=true`：永久保留 `raw.json` 和 `analyzed.json`。`data.keepRaw=false`：按 `data.rawRetention` 自动清理。`v2er config reset data` 恢复默认保留。清理对重发和外部会话的影响见 [数据生命周期](docs/data-lifecycle.md)。
 
-### 6. Provider Session 检查
+### 7. AI 会话管理
+
+#### 检查会话
 
 ```bash
 v2er session check [username] --provider gemini
 v2er session check [username] --provider codex
 ```
 
-Gemini 检查展示模型、思考等级和 API Key 可用状态。Codex 检查的 RPC 范围为 initialize、`account/read(refreshToken: false)`、model/list 和可选 thread/read；输出包含 CLI 候选的来源、信任依据与版本，账户状态、实时模型目录、Project 路径、执行锁、本地 session，以及指定用户的 thread 状态。凭据存储访问仍由独立 App Server 承担。
+会话检查是只读操作。指定用户后，命令展示活动会话代次、模型、历史或 thread 身份，以及最近结果版本关联。
+
+- Gemini：展示思考等级和 API Key 可用状态。
+- Codex：通过初始化、`account/read(refreshToken: false)`、`model/list` 和可选的 `thread/read` 检查运行环境。输出包括 CLI 候选及其信任依据、账户状态、模型目录、Project 路径、执行锁、本地会话和 thread 状态。
+
+Codex 凭据存储由独立 App Server 访问。
+
+#### 永久清理
+
+```bash
+v2er session clear <username>
+v2er session clear <username> --provider all
+v2er session clear <username> --provider codex --all-versions
+```
+
+默认范围是最近一次成功生成画像的 provider 的活动会话。`--provider all` 选择两个 provider 的活动会话，`--all-versions` 选择对应 provider 的全部会话代次。
+
+命令先在 `stderr` 展示精确目标和保留项。交互终端中输入完整的 `yes` 后，命令锁定目标并重新核对清理范围。
+
+- Gemini：删除所选本地会话文件并更新共享索引。
+- Codex：先调用 App Server 的 `thread/delete`，再删除对应的本地会话文件和索引映射。远端删除失败或所选 CLI 不支持该方法时，对应本地会话保持不变。
+
+清理范围不包含 `raw.json`、`analyzed.json`、`result.json`、`analysis-state.json` 和 `results/` 中的不可变结果版本。
 
 ---
 
@@ -316,12 +360,12 @@ pnpm run ci             # 完整 CI（类型 + lint + 格式 + 测试）
 - 文件权限：在 Linux/Mac 系统上，程序创建的配置文件权限为 `0600`（仅当前用户读写）。
 - 隐私保护：建议避免在配置文件中直接存储包含明文凭据的代理 URL。
 - Windows 用户建议：手动检查 `~/.v2er-insight/config.json` 的访问控制列表 (ACL)，确保其安全性。
-- Codex 本地执行边界：持久分析 thread 的 sandbox 为 read-only；Web、shell、apps、plugins 和 MCP 工具为关闭状态。
+- Codex 本地执行边界：持久 thread 的 sandbox 为 read-only；Web、shell、apps、plugins 和 MCP 工具为关闭状态。
 - Codex 提示词注入安全边界：
-  - 不可信输入：`AnalyzerOutput` 中的帖子和回复。
+  - 不可信输入：`AnalyzerOutput` 中的帖子和回复，以及 `chat` 命令的用户消息。
   - 发送前隔离：持久 thread 的 MCP 工具数量为零。
-  - 运行期监听：在分析请求开始前订阅 Codex 事件。
-  - 中断条件：工具调用、其他非分析动作或未知动作开始。
-  - 中断结果：通过 `turn/interrupt` 请求中断；画像解析和结果持久化均未开始，已有结果文件保持原状。
+  - 运行期监听：在 `turn/start` 前订阅 Codex 事件。
+  - 中断条件：工具调用、其他执行型动作或未知动作开始。
+  - 中断结果：通过 `turn/interrupt` 请求中断。分析 turn 在画像解析和结果持久化前结束；普通聊天保持画像结果不变。
 - Codex session 完成失败：持久化数据包含结果版本、`result.json`、结果索引和 pending 版本关联。状态一致时，后续同一 Codex 命令复用已保存版本并完成原 turn。
 - Codex Project：默认目录包含各用户的 raw、analyzed、result 和 session 数据；App Server 加载的 Project 指令来源保留在 thread 元数据中。

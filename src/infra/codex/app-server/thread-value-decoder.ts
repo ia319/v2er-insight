@@ -1,6 +1,7 @@
 import { CodexAppServerProtocolError } from './errors';
 import type {
   CodexAgentMessage,
+  CodexErrorInfo,
   CodexMessagePhase,
   CodexThreadActiveFlag,
   CodexThreadInfo,
@@ -74,12 +75,66 @@ function decodeAgentMessages(value: unknown, path: string): CodexAgentMessage[] 
   return messages;
 }
 
+const SIMPLE_CODEX_ERROR_INFO = new Set<string>([
+  'contextWindowExceeded',
+  'usageLimitExceeded',
+  'serverOverloaded',
+  'cyberPolicy',
+  'internalServerError',
+  'unauthorized',
+  'badRequest',
+  'threadRollbackFailed',
+  'sandboxError',
+  'other',
+]);
+
+function decodeHttpFailure(value: unknown, path: string): { httpStatusCode: number | null } {
+  const record = expectRecord(value, path);
+  const status = record.httpStatusCode;
+  if (
+    status !== null &&
+    (typeof status !== 'number' || !Number.isSafeInteger(status) || status < 100 || status > 599)
+  ) {
+    return fail(`${path}.httpStatusCode`, 'HTTP status code or null');
+  }
+  return { httpStatusCode: status };
+}
+
+function decodeCodexErrorInfo(value: unknown, path: string): CodexErrorInfo | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    if (SIMPLE_CODEX_ERROR_INFO.has(value)) return value as CodexErrorInfo;
+    return fail(path, 'Codex error info');
+  }
+  const record = expectRecord(value, path);
+  const keys = Object.keys(record);
+  if (keys.length !== 1) return fail(path, 'Codex error info');
+  const kind = keys[0];
+  if (
+    kind === 'httpConnectionFailed' ||
+    kind === 'responseStreamConnectionFailed' ||
+    kind === 'responseStreamDisconnected' ||
+    kind === 'responseTooManyFailedAttempts'
+  ) {
+    return { [kind]: decodeHttpFailure(record[kind], `${path}.${kind}`) } as CodexErrorInfo;
+  }
+  if (kind === 'activeTurnNotSteerable') {
+    const details = expectRecord(record[kind], `${path}.${kind}`);
+    if (details.turnKind !== 'review' && details.turnKind !== 'compact') {
+      return fail(`${path}.${kind}.turnKind`, 'non-steerable turn kind');
+    }
+    return { activeTurnNotSteerable: { turnKind: details.turnKind } };
+  }
+  return fail(path, 'Codex error info');
+}
+
 /** Decodes failure details retained by the provider. */
 export function decodeTurnFailure(value: unknown, path: string): CodexTurnFailure | null {
   if (value === null) return null;
   const record = expectRecord(value, path);
   return {
     message: expectString(record.message, `${path}.message`),
+    codexErrorInfo: decodeCodexErrorInfo(record.codexErrorInfo, `${path}.codexErrorInfo`),
     additionalDetails: expectNullableString(record.additionalDetails, `${path}.additionalDetails`),
   };
 }

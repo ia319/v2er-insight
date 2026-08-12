@@ -36,6 +36,11 @@ export function decodeThreadSetNameResponse(value: unknown): void {
   expectRecord(value, 'thread/name/set.result');
 }
 
+/** Validates the empty result of `thread/delete`. */
+export function decodeThreadDeleteResponse(value: unknown): void {
+  expectRecord(value, 'thread/delete.result');
+}
+
 /** Validates the empty result of `turn/interrupt`. */
 export function decodeTurnInterruptResponse(value: unknown): void {
   expectRecord(value, 'turn/interrupt.result');

@@ -29,6 +29,22 @@ const THINKING_LEVEL_MAP = {
   high: SdkThinkingLevel.HIGH,
 } as const satisfies Record<ThinkingLevel, SdkThinkingLevel>;
 
+const CONTEXT_WARNING_RATIO = 0.9;
+
+export type GeminiContextInspection =
+  | {
+      status: 'verified';
+      source: 'sdk';
+      used: number;
+      limit: number;
+      nearLimit: boolean;
+      tooLong: boolean;
+    }
+  | {
+      status: 'unverified';
+      reason: 'model_metadata_or_token_count_unavailable';
+    };
+
 /** 将项目 ThinkingLevel 转为 SDK 枚举值 */
 function toSdkThinkingLevel(level?: ThinkingLevel): SdkThinkingLevel | undefined {
   return level ? THINKING_LEVEL_MAP[level] : undefined;
@@ -39,6 +55,18 @@ function toSdkHistory(history: readonly ProviderNeutralMessage[] | undefined): C
     role: message.role,
     parts: message.parts.map((part) => ({ text: part.text })),
   }));
+}
+
+function inspectUsage(used: number, limit: number): GeminiContextInspection {
+  const ratio = used / limit;
+  return {
+    status: 'verified',
+    source: 'sdk',
+    used,
+    limit,
+    nearLimit: ratio >= CONTEXT_WARNING_RATIO,
+    tooLong: used >= limit,
+  };
 }
 
 export class GeminiProvider implements IAIProvider {
@@ -78,6 +106,55 @@ export class GeminiProvider implements IAIProvider {
         }),
       },
     });
+  }
+
+  /**
+   * Measures the next complete request against the model input limit.
+   * @param systemPrompt - Fixed instruction sent with every reconstructed request.
+   * @param message - New user text that will be appended to the completed history.
+   * @param options - Persisted history and request timeout.
+   * @returns Verified SDK token usage or an explicit unverified status.
+   */
+  async inspectContext(
+    systemPrompt: string,
+    message: string,
+    options?: Pick<SessionOptions, 'history' | 'timeout'>,
+  ): Promise<GeminiContextInspection> {
+    const history = toSdkHistory(options?.history);
+    const contents: Content[] = [...history, { role: 'user', parts: [{ text: message }] }];
+
+    try {
+      const [model, count] = await Promise.all([
+        this.ai.models.get({
+          model: this.model,
+          ...(typeof options?.timeout === 'number'
+            ? { config: { httpOptions: { timeout: options.timeout } } }
+            : {}),
+        }),
+        this.ai.models.countTokens({
+          model: this.model,
+          contents,
+          config: {
+            systemInstruction: systemPrompt,
+            ...(typeof options?.timeout === 'number'
+              ? { httpOptions: { timeout: options.timeout } }
+              : {}),
+          },
+        }),
+      ]);
+      if (
+        typeof model.inputTokenLimit === 'number' &&
+        model.inputTokenLimit > 0 &&
+        typeof count.totalTokens === 'number' &&
+        count.totalTokens >= 0
+      ) {
+        return inspectUsage(count.totalTokens, model.inputTokenLimit);
+      }
+    } catch {
+      // Failing closed prevents a transient SDK failure from bypassing context validation.
+    }
+
+    return { status: 'unverified', reason: 'model_metadata_or_token_count_unavailable' };
   }
 
   /**

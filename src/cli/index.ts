@@ -17,9 +17,12 @@ import {
   configSet,
   configReset,
   runSessionCheck,
+  runSessionClear,
+  runChat,
 } from './commands';
 import { logger } from '@/infra/logger';
-import { renderNotices } from './workflow/notices';
+import { renderNotices, renderRecoveryActions } from './workflow/notices';
+import { getRecoveryActions } from './workflow/recovery';
 import packageJson from '../../package.json';
 
 // Log-level initialization precedes other startup side effects.
@@ -108,6 +111,30 @@ program
     if (result.status === 'failed') process.exitCode = 1;
   });
 
+program
+  .command('chat')
+  .description('Continue an existing AI analysis session')
+  .argument('<username>', 'V2EX username')
+  .argument('<message...>', 'Message to send')
+  .option('--provider <provider>', 'Specify AI provider: gemini | codex')
+  .option('-v, --verbose', 'Show debug output')
+  .action(async (username, messageParts: string[], _options, command) => {
+    const opts = command.optsWithGlobals();
+    if (opts.verbose) logger.setLevel('debug');
+    const result = await runChat(username, messageParts.join(' '), opts);
+    renderNotices(result.notices);
+    if (result.status === 'failed') {
+      renderRecoveryActions(
+        result.recoverActions ??
+          getRecoveryActions(result.reasonCode, {
+            username,
+            ...(result.provider ? { provider: result.provider } : {}),
+          }),
+      );
+      process.exitCode = 1;
+    }
+  });
+
 // show - 展示结果
 program
   .command('show')
@@ -160,4 +187,21 @@ session
     if (result.status === 'failed') process.exitCode = 1;
   });
 
-program.parse();
+session
+  .command('clear <username>')
+  .description('Permanently clear selected provider sessions')
+  .option('--provider <provider>', 'Specify provider: gemini | codex | all')
+  .option('--all-versions', 'Clear every generation in the selected provider scope')
+  .action(async (username, _options, command) => {
+    const result = await runSessionClear(username, command.optsWithGlobals());
+    if (result.status === 'failed') {
+      renderRecoveryActions(getRecoveryActions(result.reasonCode, { username }));
+      process.exitCode = 1;
+    }
+  });
+
+async function main(): Promise<void> {
+  await program.parseAsync();
+}
+
+void main();

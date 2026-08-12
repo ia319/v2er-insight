@@ -6,10 +6,67 @@ import type {
   CodexModelInfo,
   CodexServerInfo,
 } from '@/infra/codex';
-import { selectCodexRuntime, type CodexRuntimeConnection } from '../runtime-selection';
+import {
+  selectCodexControlRuntime,
+  selectCodexRuntime,
+  type CodexRuntimeConnection,
+} from '../runtime-selection';
 
 const first = createCandidate('C:\\codex\\first.exe', 'running-app-server');
 const second = createCandidate('C:\\codex\\second.cmd', 'path', 'command-shim');
+
+describe('selectCodexControlRuntime', () => {
+  it('should select a control runtime without loading the model catalog', async () => {
+    const connection = createConnection();
+    const dependencies = {
+      probeVersion: vi.fn(async () => '0.144.5'),
+      connect: vi.fn(() => connection),
+    };
+
+    const runtime = await selectCodexControlRuntime(
+      [first],
+      {
+        versionTimeoutMs: 1000,
+        process: { requestTimeoutMs: 1000, shutdownGraceMs: 1000 },
+        connection: { startupTimeoutMs: 1000 },
+      },
+      dependencies,
+    );
+
+    expect(runtime).toMatchObject({ candidate: first, version: '0.144.5' });
+    expect(connection.listModels).not.toHaveBeenCalled();
+    await runtime.connection.close();
+  });
+
+  it('should reject a candidate that requires account authentication', async () => {
+    const connection = createConnection({
+      account: { accountType: null, requiresOpenaiAuth: true },
+    });
+    const dependencies = {
+      probeVersion: vi.fn(async () => '0.144.5'),
+      connect: vi.fn(() => connection),
+    };
+
+    await expect(
+      selectCodexControlRuntime([first], createOptions(), dependencies),
+    ).rejects.toMatchObject({ attempts: [{ code: 'account_unavailable' }] });
+    expect(connection.listModels).not.toHaveBeenCalled();
+    expect(connection.close).toHaveBeenCalledOnce();
+  });
+
+  it('should close a candidate after a protocol failure', async () => {
+    const connection = createConnection({ initializeError: new Error('unsupported protocol') });
+    const dependencies = {
+      probeVersion: vi.fn(async () => '0.144.5'),
+      connect: vi.fn(() => connection),
+    };
+
+    await expect(
+      selectCodexControlRuntime([first], createOptions(), dependencies),
+    ).rejects.toMatchObject({ attempts: [{ code: 'protocol_failed' }] });
+    expect(connection.close).toHaveBeenCalledOnce();
+  });
+});
 
 describe('selectCodexRuntime', () => {
   it('should continue after an unusable candidate and retain diagnostics', async () => {
@@ -150,6 +207,9 @@ function createConnection(
       throw new Error('Not used by runtime selection tests');
     }),
     setThreadName: vi.fn(async () => {
+      throw new Error('Not used by runtime selection tests');
+    }),
+    deleteThread: vi.fn(async () => {
       throw new Error('Not used by runtime selection tests');
     }),
     runTurn: vi.fn(async () => {

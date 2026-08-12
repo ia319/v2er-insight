@@ -26,8 +26,12 @@ const mockedExecuteCodexAnalysis = vi.hoisted(() => vi.fn());
 const mockedInspectCodexResultDeliverySession = vi.hoisted(() => vi.fn());
 const mockedGetConfig = vi.hoisted(() => vi.fn());
 const mockedWithCodexExecutionLock = vi.hoisted(() => vi.fn());
+const mockedWithAISessionLock = vi.hoisted(() => vi.fn());
+const mockedAcquireAISessionLockLease = vi.hoisted(() => vi.fn());
+const mockedSessionLeaseRelease = vi.hoisted(() => vi.fn());
 const mockedEnsureCodexSessionRegistry = vi.hoisted(() => vi.fn());
 const mockedPrepareGeminiAnalysisSession = vi.hoisted(() => vi.fn());
+const mockedAssertPreparedGeminiAnalysisSession = vi.hoisted(() => vi.fn());
 const mockedCompleteGeminiAnalysisSession = vi.hoisted(() => vi.fn());
 const mockedRecoverCodexAnalysisSession = vi.hoisted(() => vi.fn());
 const mockedRecoverGeminiAnalysisSession = vi.hoisted(() => vi.fn());
@@ -62,6 +66,9 @@ vi.mock('@/infra/storage', async (importOriginal) => {
     recoverResultVersionDelivery: mockedRecoverResultVersionDelivery,
     saveResultVersion: mockedSaveResultVersion,
     updateAnalysisState: mockedUpdateAnalysisState,
+    acquireAISessionLockLease: mockedAcquireAISessionLockLease,
+    assertPreparedGeminiAnalysisSession: mockedAssertPreparedGeminiAnalysisSession,
+    withAISessionLock: mockedWithAISessionLock,
     withCodexExecutionLock: mockedWithCodexExecutionLock,
     ensureCodexSessionRegistry: mockedEnsureCodexSessionRegistry,
     prepareGeminiAnalysisSession: mockedPrepareGeminiAnalysisSession,
@@ -105,6 +112,7 @@ import { CodexProjectPathError } from '@/core/ai/providers/codex';
 import {
   AISessionMigrationConflictError,
   AISessionMigrationFailedError,
+  AISessionLockBusyError,
   CodexExecutionLockBusyError,
 } from '@/infra/storage';
 import packageJson from '../../../../package.json';
@@ -395,6 +403,15 @@ describe('runAi', () => {
     mockedWithCodexExecutionLock.mockImplementation(
       (_username: string, operation: () => Promise<unknown>) => operation(),
     );
+    mockedWithAISessionLock.mockImplementation(
+      (
+        _username: string,
+        _provider: string,
+        _sessionId: string,
+        operation: () => Promise<unknown>,
+      ) => operation(),
+    );
+    mockedAcquireAISessionLockLease.mockReturnValue({ release: mockedSessionLeaseRelease });
     mockedInspectCodexResultDeliverySession.mockReturnValue('completed');
     mockedRecoverResultVersionDelivery.mockReturnValue({ status: 'missing' });
     mockedPrepareGeminiAnalysisSession.mockReturnValue(createPreparedGeminiSession());
@@ -534,6 +551,12 @@ describe('runAi', () => {
       result: recoveredResult,
       thinkingLevel: 'high',
     });
+    expect(mockedWithAISessionLock).toHaveBeenCalledWith(
+      'testuser',
+      'gemini',
+      GEMINI_SESSION_ID,
+      expect.any(Function),
+    );
     expect(mockedResolveApiKey).not.toHaveBeenCalled();
     expect(MockGeminiProvider).not.toHaveBeenCalled();
     expect(context.getState().pendingResultDelivery).toBeUndefined();
@@ -685,6 +708,18 @@ describe('runAi', () => {
     expect(result.reasonCode).toBe('AI_API_KEY_MISSING');
   });
 
+  it('should report a busy Gemini session before provider execution', async () => {
+    mockedResolveApiKey.mockReturnValue('test-api-key');
+    mockedAcquireAISessionLockLease.mockImplementationOnce(() => {
+      throw new AISessionLockBusyError({ status: 'invalid' });
+    });
+
+    const result = await runAi('testuser', {});
+
+    expect(result).toMatchObject({ status: 'failed', reasonCode: 'SESSION_BUSY' });
+    expect(MockGeminiProvider).not.toHaveBeenCalled();
+  });
+
   it('should stop before provider access when delivery preparation cannot be persisted', async () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedUpdateAnalysisState.mockImplementation(() => {
@@ -699,6 +734,7 @@ describe('runAi', () => {
     });
     expect(MockGeminiProvider).not.toHaveBeenCalled();
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
+    expect(mockedSessionLeaseRelease).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it('should complete full flow and persist result', async () => {
@@ -797,6 +833,18 @@ describe('runAi', () => {
     expect(saveOrder).toBeLessThan(savedStateOrder);
     expect(savedStateOrder).toBeLessThan(sessionCompletionOrder);
     expect(sessionCompletionOrder).toBeLessThan(completedStateOrder);
+    expect(mockedAcquireAISessionLockLease).toHaveBeenCalledWith(
+      'testuser',
+      'gemini',
+      GEMINI_SESSION_ID,
+    );
+    expect(mockedAssertPreparedGeminiAnalysisSession).toHaveBeenCalledWith(
+      'testuser',
+      createPreparedGeminiSession(),
+    );
+    const [releaseOrder] = mockedSessionLeaseRelease.mock.invocationCallOrder;
+    if (releaseOrder === undefined) throw new Error('Expected Gemini session lease release');
+    expect(completedStateOrder).toBeLessThan(releaseOrder);
     expect(mockedCleanExpiredData).toHaveBeenCalledWith('testuser');
     expect(mockLogger.success).toHaveBeenCalledWith(expect.stringContaining('已保存'));
     expect(result).toMatchObject({
@@ -827,13 +875,14 @@ describe('runAi', () => {
 
   it('should retain pending delivery when result version persistence fails', async () => {
     const context = mockInput();
+    const persistenceError = new Error('disk full');
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedWithRetry.mockImplementation((fn: () => unknown) => fn());
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({ data: { summary: 'result' }, warnings: [] });
     mockedSaveResultVersion.mockImplementation(() => {
-      throw new Error('disk full');
+      throw persistenceError;
     });
 
     const result = await runAi('testuser', {});
@@ -845,6 +894,7 @@ describe('runAi', () => {
       deliveryMode: 'change',
     });
     expect(context.getState().providers).toBeUndefined();
+    expect(mockedSessionLeaseRelease).toHaveBeenCalledWith(persistenceError);
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
   });
 

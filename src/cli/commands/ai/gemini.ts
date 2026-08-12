@@ -22,6 +22,8 @@ import type { ResultVersionMetadata } from '@/core/result-version';
 import { THINKING_LEVELS, type ResolvedGeminiConfig, type ThinkingLevel } from '@/config';
 import { logger } from '@/infra/logger';
 import {
+  acquireAISessionLockLease,
+  assertPreparedGeminiAnalysisSession,
   completeGeminiAnalysisSession,
   ensureCodexSessionRegistry,
   prepareGeminiAnalysisSession,
@@ -61,6 +63,8 @@ export type GeminiCommandExecution =
       localSessionId: string;
       delivery: PendingResultDeliveryState;
       complete: (metadata: ResultVersionMetadata) => void;
+      /** Caller must release the prepared session after delivery completes or fails. */
+      releaseSession: (operationError?: unknown) => void;
     });
 
 function isThinkingLevel(value: string): value is ThinkingLevel {
@@ -122,63 +126,75 @@ export async function executeGeminiAnalysis(
   const apiKey = resolveApiKey();
   if (!apiKey) return { status: 'apiKeyMissing', model };
 
-  const target: ResultDeliveryTarget = {
-    providerKey,
-    analysisFingerprint: options.provenance.analysisFingerprint,
-    payloadHash: options.provenance.payloadHash,
-    basedOnPartial: options.provenance.basedOnPartial,
-    deliveryMode: options.resend ? 'resend' : 'change',
-  };
-  const delivery = options.prepareDelivery(target);
-  if (
-    !isPendingResultDeliveryState(delivery) ||
-    !matchesResultDeliveryTarget(delivery, target) ||
-    delivery.resultVersionId !== null
-  ) {
-    throw new Error('Gemini result delivery was not prepared for provider execution');
-  }
-
-  const provider = new GeminiProvider(apiKey, model);
-  const retryOptions = {
-    maxRetries: options.config.maxRetries,
-    baseDelay: options.config.baseDelay,
-    maxDelay: options.config.maxDelay,
-    onRetry: (attempt: number, maxRetries: number, error: Error, delay: number) => {
-      const delaySec = (delay / 1000).toFixed(1);
-      logger.warn(`  AI 重试 (${attempt}/${maxRetries}) [${delaySec}s 后]`);
-      logger.debug(`  原因: ${error.message}`);
-    },
-  };
-
-  await provider.createSession(options.request.systemPrompt, {
-    thinkingLevel,
-    timeout: options.config.timeout,
-    history: preparedSession.session.history,
-  });
-  logger.section('发送完整分析数据至 AI...');
-  const rawResponse = await withRetry(
-    () => provider.sendMessage(options.request.payload),
-    retryOptions,
+  const lease = acquireAISessionLockLease(
+    options.username,
+    'gemini',
+    preparedSession.session.localSessionId,
   );
-  const parsed = parseResponse(rawResponse);
-  return {
-    status: 'result',
-    model,
-    providerKey,
-    result: parsed.data,
-    warnings: parsed.warnings,
-    thinkingLevel,
-    localSessionId: preparedSession.session.localSessionId,
-    delivery,
-    complete: (metadata) => {
-      completeGeminiAnalysisSession({
-        username: options.username,
-        prepared: preparedSession,
-        metadata,
-        requestPayload: options.request.payload,
-        result: parsed.data,
-        thinkingLevel,
-      });
-    },
-  };
+  try {
+    assertPreparedGeminiAnalysisSession(options.username, preparedSession);
+    const target: ResultDeliveryTarget = {
+      providerKey,
+      analysisFingerprint: options.provenance.analysisFingerprint,
+      payloadHash: options.provenance.payloadHash,
+      basedOnPartial: options.provenance.basedOnPartial,
+      deliveryMode: options.resend ? 'resend' : 'change',
+    };
+    const delivery = options.prepareDelivery(target);
+    if (
+      !isPendingResultDeliveryState(delivery) ||
+      !matchesResultDeliveryTarget(delivery, target) ||
+      delivery.resultVersionId !== null
+    ) {
+      throw new Error('Gemini result delivery was not prepared for provider execution');
+    }
+
+    const provider = new GeminiProvider(apiKey, model);
+    const retryOptions = {
+      maxRetries: options.config.maxRetries,
+      baseDelay: options.config.baseDelay,
+      maxDelay: options.config.maxDelay,
+      onRetry: (attempt: number, maxRetries: number, error: Error, delay: number) => {
+        const delaySec = (delay / 1000).toFixed(1);
+        logger.warn(`  AI 重试 (${attempt}/${maxRetries}) [${delaySec}s 后]`);
+        logger.debug(`  原因: ${error.message}`);
+      },
+    };
+
+    await provider.createSession(options.request.systemPrompt, {
+      thinkingLevel,
+      timeout: options.config.timeout,
+      history: preparedSession.session.history,
+    });
+    logger.section('发送完整分析数据至 AI...');
+    const rawResponse = await withRetry(
+      () => provider.sendMessage(options.request.payload),
+      retryOptions,
+    );
+    const parsed = parseResponse(rawResponse);
+    return {
+      status: 'result',
+      model,
+      providerKey,
+      result: parsed.data,
+      warnings: parsed.warnings,
+      thinkingLevel,
+      localSessionId: preparedSession.session.localSessionId,
+      delivery,
+      complete: (metadata) => {
+        completeGeminiAnalysisSession({
+          username: options.username,
+          prepared: preparedSession,
+          metadata,
+          requestPayload: options.request.payload,
+          result: parsed.data,
+          thinkingLevel,
+        });
+      },
+      releaseSession: (operationError?: unknown) => lease.release(operationError),
+    };
+  } catch (error) {
+    lease.release(error);
+    throw error;
+  }
 }

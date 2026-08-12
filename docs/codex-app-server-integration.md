@@ -71,11 +71,11 @@ Windows 发现通过只读进程路径查询取得正在运行的 `codex.exe`；
   → 等待子进程退出
 ```
 
-同一个新 thread 的提示轮和首轮分析共用一次 App Server 进程。后续命令重新启动子进程，并按 thread ID 恢复。
+同一个新 thread 的提示轮和首轮分析共用一次 App Server 进程。后续分析或普通聊天命令重新启动子进程，并按 thread ID 恢复。`session clear` 使用独立的控制进程调用 `thread/delete`。
 
 `thread/start` 创建持久 session，参数包含实际模型、Project cwd、`serviceName: v2er-insight`、`ephemeral: false` 和第 9 节定义的权限边界。请求不包含 base instructions 或 developer instructions。App Server 返回的 `instructionSources` 保存于本地 session 元数据，v2er 不修改对应指令来源。`thread/resume` 复用相同身份与权限边界；随后通过 `thread/read(includeTurns: true)` 返回的 turn 身份、状态和 agent message 核验恢复状态。
 
-每个 turn 携带实际模型、reasoning effort、Project cwd 和相同权限边界。分析轮额外包含 delivery ID 与结果 Schema。外部 turn ID 在 App Server 接受请求后进入本地恢复状态。
+每个 turn 携带实际模型、reasoning effort、Project cwd 和相同权限边界。分析 turn 还包含 delivery ID 与结果 Schema；普通聊天 turn 发送文本消息。外部 turn ID 在 App Server 接受请求后进入本地恢复状态。
 
 自有 App Server 的关闭流程包含 stdin 结束和 `shutdownGrace` 期限内的正常退出等待。等待超时的终止范围限于本次命令创建的子进程。桌面 App 进程及其 App Server 位于该清理范围之外。
 
@@ -102,6 +102,8 @@ Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和
 
 用户在 App 中修改显示名后，v2er 继续按 thread ID 恢复，不覆盖用户名称。
 
+`v2er chat` 选择 ready 状态的活动会话，按 thread ID 恢复并发送一个普通 user turn。恢复失败、活动回合、状态未知或上下文超限会终止本轮。Thread、provider 和画像结果保持不变。
+
 ## 6. 消息顺序
 
 ### 新 thread 初始化
@@ -118,6 +120,10 @@ Codex 执行边界覆盖本地 registry、Project、runtime、账户、模型和
 提示词文本统一使用 LF 换行。Session 中的 `promptHash` 是该实际发送文本的 UTF-8 SHA-256 小写十六进制摘要。
 
 首轮分析成功后，thread 进入可恢复状态。后续分析复用相同的分析轮契约。
+
+### 普通聊天
+
+普通聊天 turn 发送用户消息。命令等待该 turn 完成并把最终 agent message 写入 `stdout`。本地会话记录更新最近 turn ID、模型 effort 和使用时间；结果版本、`result.json`、`analysis-state.json` 和最近成功画像的 provider 保持不变。
 
 ### 初始化恢复
 
@@ -155,7 +161,7 @@ v2er 启动的 turn 具有实时状态和持久 ID。Turn 状态包括：
 - `failed`：回合失败，`turn.error` 提供错误信息。
 - `interrupted`：回合中断。
 
-提示轮以最终 turn 状态作为确认条件。分析轮校验 `completed` 状态与最终 agent message，随后执行结果 Schema 解析。最终消息优先取最后一个非空 `phase: final_answer`，缺少该 phase 时取最后一个非空 phase-null 消息。`commentary` 消息属于过程输出。
+提示轮以最终 turn 状态作为确认条件。分析 turn 校验 `completed` 状态与最终 agent message，随后执行结果 Schema 解析。普通聊天 turn 校验相同的完成状态和最终消息。最终消息优先取最后一个非空 `phase: final_answer`，缺少该 phase 时取最后一个非空 phase-null 消息。`commentary` 消息属于过程输出。
 
 分析结果解析只接受原始 JSON 和完整闭合的 `AIAnalysisResult`。JSON 语法、必填字段、字段值或额外字段无效时，旧画像保持不变，不生成默认画像。
 
@@ -172,7 +178,7 @@ Codex provider 使用以下运行边界：
 - `web_search: disabled`。
 - 稳定 feature 中的执行、浏览器、App、plugin、hook、协作、skill 安装和工具发现能力关闭。
 - 默认 `cwd` 为 storage `getDataRootDir()`；显式覆盖使用规范化绝对路径。
-- 每个 analysis turn 显式复用同一权限和 `cwd`。
+- 每个分析和普通聊天 turn 显式复用同一权限和 `cwd`。
 
 默认 Project 包含各用户的本地数据，`read-only` sandbox 允许 Codex 读取该目录内文件。`read-only` 约束写入权限，不构成文件读取白名单；`cwd` 只承担工作目录和 App 归组职责。显式 Project 路径的内容责任归属于路径所有者。
 
@@ -180,24 +186,26 @@ Codex provider 使用以下运行边界：
 
 临时 ephemeral thread 使用相同模型、Project 和基础权限配置，模型 turn 数量为零。`mcpServerStatus/list(detail: toolsAndAuthOnly)` 提供所选 Codex home 解析后的服务名与工具名。持久 thread config 按动态服务名写入 `mcp_servers.<name>.enabled: false`。
 
-持久 thread 创建或恢复后再次读取 MCP 清单。MCP 工具数量为零时进入提示轮或分析轮；非空清单和无法验证的响应归入协议错误。清单读取最多包含 100 页，重复游标归入协议错误。
+持久 thread 创建或恢复后再次读取 MCP 清单。MCP 工具数量为零时进入提示轮、分析 turn 或普通聊天 turn；非空清单和无法验证的响应归入协议错误。清单读取最多包含 100 页，重复游标归入协议错误。
 
 画像分析使用独立 App Server 的标准 thread/turn 方法。App Server 发给客户端的反向请求统一返回 method-not-found；App Server 内部执行的模型工具不经过该客户端反向请求通道。工具审批请求映射为明确失败，命令保持可终止状态。
 
 ### 提示词注入安全边界
 
-- 不可信输入范围：`AnalyzerOutput` 中的帖子和回复；消息类型为分析轮普通 user message。
+- 不可信输入范围：`AnalyzerOutput` 中的帖子和回复，以及 `chat` 命令的用户消息；两者都通过普通 user message 发送。
 - 发送前执行隔离：thread 权限配置与持久 thread 零 MCP 工具校验。
 - 运行期监听：App Server `turn`（一次用户输入触发的处理过程）事件监听先于 `turn` 创建；`runTurn()` 订阅 `item/started` 后调用 `turn/start`。`item/started` 表示 `turn` 内容或动作开始。
 - 允许事件类型：user message、agent message、plan、reasoning 和 context compaction。
-- 中断条件：工具调用、其他非分析动作或未知动作开始。
+- 中断条件：工具调用、其他执行型动作或未知动作开始。
 - 中断流程：程序通过 `turn/interrupt` 请求 Codex 停止当前 `turn`；`runTurn()` 抛出 `CodexUnexpectedTurnActionError`。
-- 数据路径：工具调用、其他非分析动作或未知动作触发中断时，当前 AI 步骤在 `parseAIAnalysisResult()` 和任何结果持久化之前失败，已有结果文件保持原状。Session 完成失败不属于该边界；已保存版本及其 pending 关联是后续命令的恢复依据。
+- 数据路径：执行型或未知动作触发中断时，分析 turn 在 `parseAIAnalysisResult()` 和结果持久化之前失败；普通聊天 turn 保持画像结果不变。已经接受的 turn ID 继续作为会话恢复依据。会话完成失败时，已保存版本及其 pending 关联继续作为后续命令的恢复依据。
 - 事件时序：`item/started` 通知与对应动作并发；运行期监听位于通知接收之后。
 
 ## 10. 并发和幂等
 
-同一用户的 AI 分析由跨进程锁串行化。Codex 的锁范围覆盖 runtime 与 turn、结果版本写入、pending 版本关联、session 完成、provider 发送态更新及数据清理；Gemini 使用同一锁保护共享 session index、结果关联和历史发布。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。锁文件继续使用 `.codex-execution.lock` 路径。
+`.codex-execution.lock` 串行执行同一用户的 AI 分析，以及 Codex 普通聊天和删除操作。Codex 分析的锁范围覆盖 runtime 与 turn、结果版本写入、pending 版本关联、会话完成和 provider 发送态更新。Gemini 分析使用同一外层锁保护结果关联、历史发布和共享索引初始化。锁记录保留 owner 诊断信息，释放具有 token 身份校验；异常退出后的遗留锁保持 busy 状态。
+
+普通聊天和已确认删除还获取按 `username + provider + localSessionId` 区分的非阻塞会话锁。崩溃遗留锁只在本机 PID 已确认不存在且二次读取的 owner token 保持一致时回收。Codex 分析、普通聊天和删除共同使用外层的每用户 Codex 执行锁，因此同一 Codex 会话一次只允许一个请求访问 provider 或修改本地状态。`sessions/index.json` 的发布使用独立短事务锁，并从当前索引合并另一 provider 的映射；provider 网络等待不持有索引锁。
 
 桌面 App 已有活动回合时返回 busy 状态，并保留用户当前回合。
 
@@ -215,7 +223,7 @@ Pending delivery identity 在外部请求前持久化，App Server 接受后关�
 
 完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史。解析后的画像结果保存于 `results/versions/vNNNNNN.json` 不可变 envelope、`results/index.json` 和当前 `result.json`；版本 metadata 保存 model、reasoning effort、local session ID、thread ID、thread name 和分析来源哈希。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
 
-会话索引和 provider 文件读取结果分为 missing、invalid 和 valid；索引摘要必须与对应 provider 文件一致。Invalid 文件保持原内容；有效更新先写 provider 文件，再发布索引。每个文件使用 UTF-8 无 BOM、同目录临时文件和原子替换。目标文件的创建模式为 `0o600`；Windows 的实际访问范围由现有 ACL 决定。新旧会话存储均采用永久保留策略。
+会话索引和 provider 文件读取结果分为 missing、invalid 和 valid；索引摘要必须与对应 provider 文件一致。Invalid 文件保持原内容；有效更新先写 provider 文件，再发布索引。每个文件使用 UTF-8 无 BOM、同目录临时文件和原子替换。目标文件的创建模式为 `0o600`；Windows 的实际访问范围由现有 ACL 决定。新旧会话存储位于自动数据保留策略的范围之外。确认后的 `session clear` 可以删除 `sessions/` 中的会话文件；旧迁移来源保持不变。
 
 ## 12. 诊断与恢复
 
@@ -231,6 +239,8 @@ Pending delivery identity 在外部请求前持久化，App Server 接受后关�
 诊断访问范围为账户类型与鉴权可用状态、CLI 与模型元数据、Project、新旧会话存储、thread、turn 和 lock owner 摘要。会话检查不写入索引、provider 文件或旧注册表；迁移 pending 和 conflict 均保持原文件。指定用户时，`thread/read(includeTurns: true)` 的解码结果包含 agent message 文本，诊断报告仅保留状态和身份元数据。凭据存储访问仍由独立 App Server 承担。
 
 `v2er session check --provider gemini` 展示解析后的 Gemini 模型、思考等级和 API Key 可用状态，API Key 内容保持隐藏。
+
+`v2er session clear <username> --provider codex` 在交互确认和锁内范围复核后调用 `thread/delete`。远端删除成功后，命令删除对应的本地会话文件和索引映射。JSON-RPC method-not-found 返回 `SESSION_DELETE_UNSUPPORTED`；其他远端失败返回 `SESSION_DELETE_FAILED`。两类失败都保留对应本地会话。Codex home 中的内部 thread 文件只由 App Server 管理。
 
 恢复行为按状态区分：
 
@@ -251,4 +261,4 @@ CLI 原因码覆盖可执行文件缺失或不兼容、账户不可用、协议�
 
 ## 13. 兼容性验证范围
 
-自动化测试覆盖协议边界、runtime 选择、Project 映射、模型默认值、thread 恢复、状态持久化和进程关闭。测试通过注入的进程与连接边界运行，默认 CI 不访问真实 Codex 账户或本机 App Server runtime。
+自动化测试覆盖协议边界、runtime 选择、Project 映射、模型默认值、thread 恢复、普通聊天 turn、`thread/delete`、状态持久化和进程关闭。测试通过注入的进程与连接边界运行，默认 CI 不访问真实 Codex 账户或本机 App Server runtime。

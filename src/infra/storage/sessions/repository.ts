@@ -10,6 +10,8 @@ import { readJsonFileResult } from '../reader';
 import { writeJsonFileAtomically } from '../writer';
 import { getAISessionFilePath, getAISessionIndexPath } from './paths';
 
+export { withAISessionIndexTransaction } from './lock';
+
 export type AISessionIndexReadResult =
   | { status: 'missing' }
   | { status: 'invalid' }

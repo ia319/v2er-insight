@@ -2,15 +2,9 @@ import { logger } from '@/infra/logger';
 import { runAi, runAnalyze, runFetch, runShow } from '../commands';
 import type { AiCommandOptions, FetchCommandOptions, ShowCommandOptions } from '../types';
 import { extractErrorDetails } from '../utils/error';
+import { renderNotices, renderRecoveryActions } from './notices';
 import { buildExecutionPlan, detectWorkflowState, resolveEntryStep } from './state';
-import type {
-  RecoveryAction,
-  RunOutcome,
-  RunWorkflowOptions,
-  StepRunResult,
-  WorkflowStep,
-} from './types';
-import { renderNotices } from './notices';
+import type { RunOutcome, RunWorkflowOptions, StepRunResult, WorkflowStep } from './types';
 
 type StepExecutor = () => Promise<StepRunResult>;
 type WorkflowExecutorSet = Record<WorkflowStep, StepExecutor>;
@@ -158,21 +152,5 @@ function printResultSummary(result: StepRunResult): void {
     logger.detail(rawError);
   }
 
-  if (!result.recoverActions || result.recoverActions.length === 0) {
-    return;
-  }
-
-  logger.info('恢复建议:');
-  for (const action of result.recoverActions) {
-    printRecoveryAction(action);
-  }
-}
-
-function printRecoveryAction(action: RecoveryAction): void {
-  if (action.type === 'command') {
-    logger.detail(`命令: ${action.content}`);
-  } else {
-    logger.detail(`操作: ${action.content}`);
-  }
-  logger.detail(`说明: ${action.description}`);
+  renderRecoveryActions(result.recoverActions);
 }
