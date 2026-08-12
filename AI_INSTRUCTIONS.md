@@ -62,8 +62,14 @@ root
 │   │       ├── fetch.ts      # runFetch: Fetch user data
 │   │       ├── analyze.ts    # runAnalyze: Process raw data
 │   │       ├── ai.ts         # runAi: AI profiling
+│   │       ├── ai/           # Provider-specific AI execution boundaries
+│   │       ├── chat.ts       # runChat: Continue one persistent provider session
 │   │       ├── show.ts       # runShow: Format and display report
 │   │       ├── config.ts     # Config management (show/set/reset/proxy)
+│   │       ├── session.ts    # runSessionCheck: Read-only provider diagnostics
+│   │       ├── session/      # Codex diagnostic report and runtime checks
+│   │       ├── session-clear.ts # Confirmed permanent session deletion
+│   │       ├── session-clear/ # Clear scope resolution and execution
 │   │       └── run.ts        # runPipeline: Main command entry
 │   │   ├── workflow/         # Workflow orchestration
 │   │   │   ├── types.ts      # StepRunResult, WorkflowStep, RunOutcome
@@ -358,8 +364,10 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `v2er fetch <username>` → Fetch and save Raw Snapshot V2 with collection diagnostics (raw.json)
 - `v2er analyze <username>` → Validate Raw Snapshot V2 and generate statistics (analyzed.json)
 - `v2er ai <username>` → Generate a user profile and save `result.json` plus an immutable result version
+- `v2er chat <username> <message...> [--provider gemini|codex]` → Continue one existing provider session without changing profile results
 - `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
 - `v2er session check [username] [--provider gemini|codex]` → Run read-only provider diagnostics
+- `v2er session clear <username> [--provider gemini|codex|all] [--all-versions]` → Preview, confirm, and permanently delete selected sessions
 - `v2er config show [group]` → View config (with apiKey masking)
 - `v2er config set <path> <value>` → Set config via dot-path (e.g. `ai.model`)
 - `v2er config reset [group]` → Reset to defaults
@@ -380,6 +388,8 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 `--reasoning-effort`, `--new-thread`, `--codex-project`, `--resend`, and `--verbose`.
 
+The `chat` subcommand accepts an optional provider override and verbose diagnostics. Provider selection uses the explicit override when present and otherwise uses `lastSuccessfulAnalysisProvider`. A missing shared index with a pending legacy Codex registry selects Codex for migration. The command writes the final reply to `stdout` and diagnostics to `stderr`. Successful chat preserves profile results, result versions, analysis provenance, and `lastSuccessfulAnalysisProvider`.
+
 **Shared Logic** (`utils.ts` and `utils/error.ts`):
 
 - `createFetchEvents(label)`: Centralized progress/error reporting for fetch/ai operations.
@@ -391,7 +401,7 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 - `UserNotice` carries a stable `NoticeCode`, severity, impact details, recovery actions, and an optional documentation path.
 - `StepRunResult.notices` keeps non-fatal effects separate from failure `ReasonCode` values.
 - `renderNotice()` and `renderNotices()` render stable notice codes and recovery details through stderr diagnostics.
-- Current notice codes are `DATA_RETENTION_ENABLED`, `DATA_FILES_CLEANED`, `DATA_RESULT_STALE`, and `DATA_SNAPSHOT_PARTIAL`.
+- The `NoticeCode` union includes `DATA_RETENTION_ENABLED`, `DATA_FILES_CLEANED`, `DATA_RESULT_STALE`, `DATA_SNAPSHOT_PARTIAL`, `SESSION_SOURCE_DATA_MISSING`, and `SESSION_CONTEXT_NEAR_LIMIT`.
 - Config changes and `config show data` emit `DATA_RETENTION_ENABLED` only while cleanup is enabled.
 - Successful AI cleanup emits `DATA_FILES_CLEANED` only when source files were actually removed; subcommands and pipelines render the returned notice once.
 
@@ -420,6 +430,7 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 - Gemini calls `ensureCodexSessionRegistry()` while `runAi()` holds the per-user execution lock and before session selection, result reuse, credential access, or provider access.
 - Shared session-store initialization validates an existing store, migrates a valid legacy `codex-sessions.json` into Codex provider files and the shared index, or creates an empty shared index.
 - After credential resolution, Gemini persists pending delivery before SDK Chat creation and AnalyzerOutput delivery.
+- Gemini acquires the selected provider-session lease before delivery preparation, revalidates the persisted selection, and holds the lease through result-version persistence, session completion, and provenance completion.
 - Gemini provider and parse failures retain the uncommitted pending delivery; a retry to the same target reuses its delivery ID.
 - Analyzed provenance is revalidated immediately before Gemini result-version persistence.
 - Successful Gemini output enters `saveResultVersion()` with actual model, thinking level, prompt hash, capture quality, warning count, and application version.
@@ -430,9 +441,14 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 - Codex records the saved version on pending/current state, completes the accepted session turn, associates the version and analysis fingerprint with the provider file, publishes the shared index, then advances provider hashes and clears pending state.
 - Saved Codex delivery recovery compares the pending identity with the owning session. A matching accepted turn reuses the saved result; a completed session advances provider provenance without another model request.
 - An unresolved Codex delivery blocks Gemini execution and remains under the per-user Codex lock until session reconciliation.
+- `runChat()` resolves the provider before selecting the Codex execution lock. It uses an explicit provider, `lastSuccessfulAnalysisProvider`, or a pending legacy Codex registry when the shared index is absent. Successful chat preserves `lastSuccessfulAnalysisProvider`, `result.json`, immutable versions, and analysis provenance.
+- Gemini chat requires a verified SDK input-token limit and token count before it reconstructs the SDK Chat. Unavailable inspection returns `CHAT_CONTEXT_UNVERIFIED` without sending; a verified request appends one pair only after a non-empty response.
+- Codex chat resumes the exact persisted thread ID and sends one ordinary turn without `outputSchema`. Provider and thread selection remain fixed when the turn fails.
+- Gemini analysis and every chat or confirmed deletion use provider-session locks. The outer per-user Codex execution lock serializes Codex analysis, chat, and deletion. Provider network calls run outside the short shared-index transaction.
+- Every high-level session index mutation publishes through `withAISessionIndexTransaction()` and merges unrelated provider projections from the current index.
 - `runShow()` accepts complete `AIAnalysisResult` values and derives stale and partial notices from valid current-result provenance.
 - Legacy results with absent sidecars retain unknown provenance; structurally invalid results produce `SHOW_RESULT_INVALID`.
-- stdout carries JSON report content; stderr carries command and workflow notices.
+- `stdout` carries JSON report content; `stderr` carries command and workflow notices.
 
 ### 6. Config Module (Complete)
 
@@ -494,13 +510,15 @@ Main and `ai` commands forward provider, model, Gemini thinking level, Codex rea
 
 Provider option resolution validates the configured or CLI provider against `AI_PROVIDERS` before provider access. Gemini rejects Codex Project and reasoning-effort options; Codex rejects Gemini thinking-level options. Both providers accept `--new-thread`.
 
-`v2er session check [username] [--provider gemini|codex]` uses the provider diagnostic RPC surface. Gemini output contains resolved model, thinking level, and API-key availability. Codex follows runtime priority for sequential candidate probing and retains candidate source, executable trust, version state, selected runtime/account metadata, the live visible model catalog, Project resolution, execution lock, registry summary, and one target thread summary when a user is supplied. Unvisited candidates retain a `not_checked` version state; model-configuration fallback reuses recorded version probes. Credential-store access remains inside the owned App Server.
+`v2er session check [username] [--provider gemini|codex]` uses the provider diagnostic RPC surface and remains read-only. A user-scoped check validates the shared index, provider files, active generation, provider history or thread identity, and result-version association. Gemini output contains resolved model, thinking level, and API-key availability. Codex follows runtime priority for sequential candidate probing and retains candidate source, executable trust, version state, selected runtime/account metadata, the live visible model catalog, Project resolution, execution lock, registry summary, and one target thread summary when a user is supplied. Unvisited candidates retain a `not_checked` version state; model-configuration fallback reuses recorded version probes. Credential-store access remains inside the owned App Server.
+
+`v2er session clear <username>` previews exact identities on `stderr` and requires an interactive `yes`. Its default scope is the active session for `lastSuccessfulAnalysisProvider`. `--provider` selects `gemini`, `codex`, or `all`; `--all-versions` expands the selected providers to every generation. After confirmation, the command locks every target and resolves the scope again. Codex deletion removes the external thread before the local mapping. Raw data, analyzed data, current results, provenance, and immutable result versions remain unchanged.
 
 Codex automatic launch is limited to signed Windows native candidates discovered from running Codex processes or the ChatGPT App bundle. The Authenticode signature must be valid and the publisher must match the OpenAI allowlist. PATH candidates remain diagnostic observations until configured through `ai.codex.executable`; an explicit path is user-authorized and still passes version, protocol, account, and model checks. Thread methods validate their responses during creation, resume, and delivery. An ordinary Codex CLI shares App login state and thread history only when both processes resolve the same `CODEX_HOME`.
 
 Codex version and App Server processes inherit an allowlisted runtime environment from the v2er-insight parent process, covering Codex home, user/system/temp paths, locale, proxy, and certificate settings. The root `proxy` setting overrides HTTP and HTTPS proxy variables for App Server launches; version probes retain the inherited values. Native candidates exclude PATH; explicitly authorized command shims retain PATH and PATHEXT. `.cmd` launchers use a validated system command processor. API keys, access tokens, `NODE_OPTIONS`, `ComSpec`, and unrelated application variables remain outside the child environment. Proxy values may contain proxy credentials.
 
-Codex thread config disables web search and stable execution, browser, app, plugin, hook, collaboration, skill-installation, and tool-discovery features on start and resume. An ephemeral thread discovers effective MCP server names with zero model turns. Persisted thread config disables each discovered server that exposes tools, and its MCP inventory contains zero tools before delivery. `runTurn()` subscribes to App Server item events before `turn/start`. Analysis-only item types enter result collection. Tool calls, other non-analysis actions, and unknown actions trigger `turn/interrupt` and `CodexUnexpectedTurnActionError` before analysis parsing and result persistence; immutable versions, `result.json`, result index, and delivery state remain unchanged. App Server reverse requests remain on the method-not-found boundary.
+Codex thread config disables web search and stable execution, browser, app, plugin, hook, collaboration, skill-installation, and tool-discovery features on start and resume. An ephemeral thread discovers effective MCP server names with zero model turns. Persisted thread config disables each discovered server that exposes tools, and its MCP inventory contains zero tools before delivery. `runTurn()` subscribes to App Server item events before `turn/start`. Message, plan, reasoning, and context-compaction items enter response collection. Tool calls, other execution-capable actions, and unknown actions trigger `turn/interrupt` and `CodexUnexpectedTurnActionError`. Analysis parsing and profile-result persistence have not started at that boundary; chat returns a provider failure after retaining any accepted-turn metadata. App Server reverse requests remain on the method-not-found boundary.
 
 ### 7. Analyzer Module (Complete)
 
@@ -619,8 +637,14 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `CodexSessionStateV1` preserves the complete recoverable Codex thread state and requires `externalThreadId` to match its thread ID.
 - `GeminiSessionStateV1` stores one fixed system instruction and provider-neutral history containing paired user and model text messages.
 - `prepareGeminiAnalysisSession()` selects a compatible active session or an unpersisted next generation.
+- `assertPreparedGeminiAnalysisSession()` revalidates relevant Gemini state after the provider-session lease is acquired.
 - `completeGeminiAnalysisSession()` appends one deterministic user/model pair after result-version commit and publishes the active index last.
 - `recoverGeminiAnalysisSession()` reconstructs or republishes session state from committed Gemini result metadata without another provider request.
+- `selectChatSession()` selects an explicit provider or the last successful analysis provider and requires its active session.
+- `completeGeminiChatSession()` appends one successful ordinary user/model pair without changing the last successful analysis provider.
+- `deleteAISession()` removes one exact local provider session and updates the current shared index. A missing target file completes idempotently; other local deletion failures roll back the index.
+- `withAISessionLock()` serializes one asynchronous provider-session operation; `acquireAISessionLockLease()` spans provider execution and later persistence layers with verified release. Acquisition reclaims an orphaned lock only after its local PID is confirmed absent and a second read confirms the same owner token. Elapsed time is diagnostic metadata rather than a reclamation condition.
+- `withAISessionIndexTransaction()` serializes one short synchronous read-modify-write publication and supports same-process reentry.
 - `isLocalSessionId(value)` accepts canonical UUID strings before file-path construction.
 - Session validators require exact persisted keys, canonical timestamps and hashes, unique index identities, valid active-session references, paired Gemini roles, and all-or-null result association fields.
 
@@ -648,11 +672,14 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - Gemini and Codex save every successful result through `saveResultVersion()` and return `resultVersionId` in successful command metadata.
 - Gemini recreates each SDK Chat from one fixed system instruction and the complete successful provider-neutral history; only the current AnalyzerOutput uses `sendMessage()`.
 - Gemini session completion occurs after the immutable result version, current result, result index, and pending-version association are persisted. Recovery repairs a missing session or index publication from the committed version.
+- Gemini holds the selected provider-session lease from post-selection validation through provider execution, result persistence, session completion, and final provenance advancement. Delivery failures are passed into lease release so a later release failure preserves both causes. Saved-result recovery acquires the same session lock before repairing history.
 - Codex session completion occurs after the immutable version, `result.json`, result index, and pending-version association are persisted.
 - Codex session completion failures preserve the saved version ID on pending analysis state for retry without another model request.
 - Gemini and Codex analysis hold one per-user cross-process lock across session-store migration, provider execution, result/provenance persistence, session completion, and cleanup.
-- Concurrent Codex commands return `AI_CODEX_BUSY`; concurrent Gemini commands return `SESSION_BUSY`.
-- Gemini execution-lock, session persistence, and session-store corruption failures return `SESSION_PERSIST_FAILED`. Gemini legacy migration conflicts and migration-write failures return `SESSION_MIGRATION_CONFLICT` and `SESSION_MIGRATION_FAILED`.
+- `runAi()` maps provider-session and shared-index conflicts to `SESSION_BUSY`, and maps Codex execution-lock contention to `AI_CODEX_BUSY`. `runChat()` maps provider-session, shared-index, Codex execution-lock, and active-thread conflicts to `SESSION_BUSY`.
+- Gemini execution-lock, non-busy session persistence, and session-store corruption failures return `SESSION_PERSIST_FAILED`. Gemini legacy migration conflicts and migration-write failures return `SESSION_MIGRATION_CONFLICT` and `SESSION_MIGRATION_FAILED`.
+- `runChat()` pins the resolved provider before choosing the Codex execution lock and maps missing, invalid, busy, context-limit, context-unverified, provider, and persistence failures to stable chat/session reason codes without returning a workflow step.
+- `runSessionClear()` separates preview, interactive confirmation, locked scope revalidation, provider deletion, and local index transactions. A later failure preserves the completed deletion count and reports an external-only Codex deletion when the corresponding local write fails.
 - Codex session recovery or completion failures return `AI_CODEX_SESSION_UPDATE_FAILED`, except migration conflicts and migration-write failures retain `SESSION_MIGRATION_CONFLICT` and `SESSION_MIGRATION_FAILED`. Codex lock filesystem or ownership failures retain `AI_CODEX_LOCK_FAILED`.
 - Typed Codex runtime, Project, protocol, timeout, thread, turn, output, and registry failures map to provider-specific reason codes and recovery actions at the CLI boundary. Unclassified errors retain the shared provider failure fallback.
 
@@ -751,9 +778,13 @@ Codex thread config disables web search and stable execution, browser, app, plug
 │   └── .write.lock # Per-user result version writer
 ├── sessions/
 │   ├── index.json # Provider activity and session summaries
+│   ├── .locks/
+│   │   ├── index.lock # Short shared-index publication lock
+│   │   ├── codex/<localSessionId>.lock # Codex provider-session locks
+│   │   └── gemini/<localSessionId>.lock # Gemini provider-session locks
 │   ├── codex/ # Provider-specific Codex session files
 │   └── gemini/ # Provider-specific Gemini session files
-└── .codex-execution.lock # Per-user AI analysis transaction owner
+└── .codex-execution.lock # Per-user AI analysis and Codex session-operation lock
 ```
 
 **Public API** (valid username pattern: `/^[a-zA-Z0-9_-]+$/`; other values throw Error):
@@ -782,10 +813,18 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `readAISessionStore(username)` → Validated index plus provider files with exact summary projection checks
 - `writeAISessionIndex(username, index)` → Validated atomic session-index replacement
 - `writeAISessionState(username, session)` → Validated atomic provider-session replacement
+- `readAISessionLock(username, provider, localSessionId)` → Missing, invalid, or validated provider-session lock state
+- `withAISessionLock(username, provider, localSessionId, operation)` → Non-blocking asynchronous provider-session serialization
+- `acquireAISessionLockLease(username, provider, localSessionId)` → Cross-layer provider-session lease with dead-PID recovery and token-checked release
+- `withAISessionIndexTransaction(username, operation)` → Reentrant synchronous per-user index publication transaction
 - `prepareGeminiAnalysisSession(options)` → Compatible active Gemini session or unpersisted next generation
+- `assertPreparedGeminiAnalysisSession(username, prepared)` → Post-acquisition prepared-state validation
 - `completeGeminiAnalysisSession(options)` → Result-associated history append with provider-file-first publication
 - `recoverGeminiAnalysisSession(options)` → Idempotent repair after result-version commit
 - `recoverCodexAnalysisSession(options)` → Accepted-turn status and idempotent result association repair
+- `selectChatSession(username, provider?)` → Explicit or last-successful provider selection with exact active state
+- `completeGeminiChatSession(username, selection, userText, modelText)` → Successful chat-pair append without analysis-provider changes
+- `deleteAISession(username, expectedIndex, expectedSession)` → Idempotent exact local session deletion with current-index merge and non-missing-failure rollback
 - `ensureCodexSessionRegistry(username)` → Writable Codex registry projection with idempotent legacy migration; requires the caller to hold the per-user Codex execution lock
 - `inspectCodexSessionStorage(username)` → Read-only new/legacy state and migration status with an unambiguous registry projection
 - `updateCodexSessionRegistry(username, updater)` → Codex provider-file updates followed by session-index publication
@@ -803,10 +842,12 @@ Codex thread config disables web search and stable execution, browser, app, plug
 
 - `data.keepRaw = true` → Permanent raw/analyzed retention (default)
 - `data.keepRaw = false` → Age-based cleanup after `data.rawRetention` days (default retention: 1)
-- `result.json`, `analysis-state.json`, `codex-sessions.json`, `results/`, and `sessions/` → Permanent retention
+- `result.json`, `analysis-state.json`, `codex-sessions.json`, and `results/` → Permanent retention
+- `sessions/` → Excluded from automatic retention cleanup; remove only through confirmed `session clear`
 - Codex writes to `sessions/`; a valid legacy registry migrates provider files before index publication and remains unchanged
 - New and legacy stores require a matching migration source hash; missing or mismatched markers stop model execution
-- `.codex-execution.lock` → AI analysis transaction lock shared by Gemini and Codex; abnormal termination retains owner metadata for diagnosis
+- `.codex-execution.lock` → AI analysis lock shared by Gemini and Codex, and outer execution lock for Codex chat and deletion; abnormal termination retains owner metadata for diagnosis
+- `sessions/.locks/` → Provider-session execution locks and a short shared-index publication lock; reclaim only a confirmed dead PID with unchanged owner token, and validate token ownership before release
 - Cleanup diagnostics distinguish disabled retention, missing files, unexpired files, unavailable metadata, and deletion failures.
 - `docs/data-lifecycle.md` documents user-facing retention effects and recovery commands.
 
@@ -843,6 +884,8 @@ Detailed protocol and recovery reference: `docs/codex-app-server-integration.md`
 - **Turn progression**: At most one external turn per advance; exhaustive prepared-action control flow; accepted turn ID persistence before completion wait.
 - **Result boundary**: Completed terminal turn, final agent message selection, closed `AIAnalysisResult` parsing, immutable version and current-result persistence before session completion, provider-hash advancement after session completion.
 - **Recovery boundary**: Exact thread and turn IDs, persisted pending identity, owning-session comparison for saved deliveries, saved-result reuse for accepted turns, busy state for active turns, explicit error for untracked acceptance.
+- **Chat boundary**: Resume the exact ready thread, send one plain turn without structured output, retain only local turn metadata, and return the final agent text without changing profile results.
+- **Deletion boundary**: Use `thread/delete` before removing a Codex local mapping. Treat JSON-RPC method-not-found as unsupported and retain local state; never edit Codex internal thread files directly.
 
 ## Proxy Configuration
 
@@ -877,4 +920,4 @@ If no proxy source is present, network clients use a direct connection.
 - **Language**: All test descriptions, data, and assertions in English; comments may be Chinese.
 - **Fixtures**: Anonymized HTML snapshots for parser tests.
 - **Network Mocking**: `vi.mock` for Fetcher and parser modules.
-- **Coverage**: 450+ tests covering parsers, URL generators, services, CLI, config, analyzer, AI, and retry.
+- **Coverage**: 900+ tests covering parsers, URL generators, services, CLI, config, analyzer, AI, sessions, storage transactions, and retry.

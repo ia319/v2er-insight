@@ -4,15 +4,15 @@
 
 每个用户的数据位于 `~/.v2er-insight/data/<username>/`：
 
-| 文件                  | 用途                                           | 自动清理 |
-| --------------------- | ---------------------------------------------- | -------- |
-| `raw.json`            | 规范化抓取快照                                 | 可选     |
-| `analyzed.json`       | 发送给 AI 的完整 AnalyzerOutput V2             | 可选     |
-| `result.json`         | 当前 AI 分析结果                               | 永久保留 |
-| `results/`            | 不可变结果版本和有序版本 metadata              | 永久保留 |
-| `analysis-state.json` | 数据指纹、当前结果版本、pending 和 provider 态 | 永久保留 |
-| `sessions/`           | AI 会话索引和 provider 会话状态                | 永久保留 |
-| `codex-sessions.json` | 旧版 Codex 会话的只读迁移来源                  | 永久保留 |
+| 文件                  | 用途                                           | 清理策略       |
+| --------------------- | ---------------------------------------------- | -------------- |
+| `raw.json`            | 规范化抓取快照                                 | 可选自动清理   |
+| `analyzed.json`       | 发送给 AI 的完整 AnalyzerOutput V2             | 可选自动清理   |
+| `result.json`         | 当前 AI 分析结果                               | 永久保留       |
+| `results/`            | 不可变结果版本和有序版本 metadata              | 永久保留       |
+| `analysis-state.json` | 数据指纹、当前结果版本、pending 和 provider 态 | 永久保留       |
+| `sessions/`           | AI 会话索引和 provider 会话状态                | 确认后手动清理 |
+| `codex-sessions.json` | 旧版 Codex 会话的只读迁移来源                  | 永久保留       |
 
 `data.keepRaw=true` 是默认配置，对应源数据永久保留。`v2er config reset data` 恢复该配置。
 
@@ -38,6 +38,22 @@ v2er config set data.rawRetention 7
 - `--resend` 的新分析输入：从可读取且 provenance 匹配的 `analyzed.json` 重建。
 - Gemini 会话上下文：从 `sessions/gemini/` 保存的完整成功历史恢复。
 - `raw.json` 与 `analyzed.json` 提供完整 AnalyzerOutput 的重建数据；`result.json`、`results/` 与 `analysis-state.json` 保存当前结果、不可变版本和投递状态。
+
+## 手动清理 AI 会话
+
+`v2er session clear <username>` 清理经过选择和确认的 AI 会话。默认范围是最近一次成功生成画像的 provider 的活动会话；`--provider gemini|codex|all` 选择 provider，`--all-versions` 选择对应 provider 的全部会话代次。
+
+清理按以下顺序执行：
+
+1. 展示 provider、会话代次、本地会话 ID、Codex thread ID 和本地文件路径。
+2. 接受交互终端输入的完整 `yes`。
+3. 获取目标会话锁并重新核对清理范围。
+4. 执行 provider 删除并持久化剩余会话索引。
+
+- Gemini：删除所选本地会话历史。
+- Codex：先永久删除远端 thread，再删除对应的本地会话文件和索引映射。Codex CLI 不支持 `thread/delete` 或远端删除失败时，对应本地会话保持不变。
+
+会话清理的保留范围包括 `raw.json`、`analyzed.json`、`result.json`、`analysis-state.json` 和 `results/`。删除会话后，不可变画像版本继续由现有展示流程读取；普通聊天需要新的活动会话。缺少 `analyzed.json` 时，清理预览显示 `SESSION_SOURCE_DATA_MISSING`，并提供 `v2er <username> --force` 重建命令。
 
 Provider 会话的存储与恢复规则见 [AI 会话](ai-conversations.md)。
 
