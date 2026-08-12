@@ -243,6 +243,8 @@ describe('session clear command', () => {
       reasonCode: 'SESSION_DELETE_FAILED',
       deleted: 0,
     });
+    expect(mocks.deleteThread).toHaveBeenCalledOnce();
+    expect(mocks.deleteThread).toHaveBeenCalledWith('thread-1');
     expect(mocks.deleteSession).not.toHaveBeenCalled();
     expect(mocks.closeRuntime).toHaveBeenCalledOnce();
   });
