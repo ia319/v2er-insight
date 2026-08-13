@@ -1,12 +1,14 @@
 import { isAIAnalysisResult } from '@/core/ai';
+import { ANALYZER_OUTPUT_SCHEMA_VERSION, isAnalyzerOutput } from '@/core/analyzer';
 import { hashCanonicalJson } from '@/core/provenance/canonical-json';
 import { formatResultVersionId, isResultDeliveryId, isResultVersionId } from './identifiers';
 import {
   RESULT_VERSION_INDEX_SCHEMA_VERSION,
   STORED_RESULT_VERSION_SCHEMA_VERSION,
-  type ResultVersionIndexV1,
+  type ResultInputSummary,
+  type ResultVersionIndex,
   type ResultVersionMetadata,
-  type StoredResultVersionV1,
+  type StoredResultVersion,
 } from './types';
 
 const METADATA_KEYS = [
@@ -46,6 +48,10 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
 
 function isSha256Hash(value: unknown): value is string {
   return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function isNullableHash(value: unknown): value is string | null {
@@ -147,20 +153,68 @@ export function isResultVersionMetadata(value: unknown): value is ResultVersionM
 }
 
 /**
- * Validates an immutable result version and its canonical result hash.
- *
- * @param value - Untrusted stored result value.
- * @returns Whether the envelope, result, and hash agree.
+ * Validates the deterministic Analyzer facts stored beside one generated result.
+ * @param value - Untrusted input summary value.
+ * @returns Whether the value satisfies the complete persisted summary contract.
  */
-export function isStoredResultVersionV1(value: unknown): value is StoredResultVersionV1 {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ['schemaVersion', 'metadata', 'result']) &&
-    value.schemaVersion === STORED_RESULT_VERSION_SCHEMA_VERSION &&
-    isResultVersionMetadata(value.metadata) &&
-    isAIAnalysisResult(value.result) &&
-    hashCanonicalJson(value.result) === value.metadata.resultHash
-  );
+export function isResultInputSummary(value: unknown): value is ResultInputSummary {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      'username',
+      'analyzerConfig',
+      'dataQuality',
+      'userOverview',
+      'activitySummary',
+    ]) ||
+    typeof value.username !== 'string' ||
+    value.username.length === 0 ||
+    !isRecord(value.analyzerConfig) ||
+    !hasExactKeys(value.analyzerConfig, ['inactivityThresholdDays', 'nodeDistributionTopN']) ||
+    !isFiniteNumber(value.analyzerConfig.inactivityThresholdDays) ||
+    !isFiniteNumber(value.analyzerConfig.nodeDistributionTopN)
+  ) {
+    return false;
+  }
+
+  return isAnalyzerOutput({
+    schemaVersion: ANALYZER_OUTPUT_SCHEMA_VERSION,
+    dataQuality: value.dataQuality,
+    userOverview: value.userOverview,
+    summary: value.activitySummary,
+    contents: [],
+  });
+}
+
+/**
+ * Validates one immutable result version and its canonical payload hashes.
+ * @param value - Untrusted stored result value.
+ * @returns Whether the complete envelope satisfies the persisted contract.
+ */
+export function isStoredResultVersion(value: unknown): value is StoredResultVersion {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      'schemaVersion',
+      'metadata',
+      'inputSummary',
+      'inputSummaryHash',
+      'result',
+    ]) ||
+    value.schemaVersion !== STORED_RESULT_VERSION_SCHEMA_VERSION ||
+    !isResultVersionMetadata(value.metadata) ||
+    !isAIAnalysisResult(value.result) ||
+    hashCanonicalJson(value.result) !== value.metadata.resultHash
+  ) {
+    return false;
+  }
+
+  const generated = value.metadata.origin === 'analysis' || value.metadata.origin === 'resend';
+  return generated
+    ? isResultInputSummary(value.inputSummary) &&
+        isSha256Hash(value.inputSummaryHash) &&
+        hashCanonicalJson(value.inputSummary) === value.inputSummaryHash
+    : value.inputSummary === null && value.inputSummaryHash === null;
 }
 
 /**
@@ -169,7 +223,7 @@ export function isStoredResultVersionV1(value: unknown): value is StoredResultVe
  * @param value - Untrusted index value.
  * @returns Whether every index entry and sequence invariant is valid.
  */
-export function isResultVersionIndexV1(value: unknown): value is ResultVersionIndexV1 {
+export function isResultVersionIndex(value: unknown): value is ResultVersionIndex {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, [

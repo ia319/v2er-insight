@@ -14,7 +14,11 @@ import {
   hashCanonicalJson,
   type AnalysisState,
 } from '@/core/provenance';
-import type { ResultVersionMetadata, ResultVersionSource } from '@/core/result-version';
+import {
+  createResultInputSummary,
+  type ResultVersionMetadata,
+  type ResultVersionSource,
+} from '@/core/result-version';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedCleanExpiredData = vi.hoisted(() => vi.fn());
@@ -244,6 +248,10 @@ function createAiResult(summary = 'Saved result'): AIAnalysisResult {
   };
 }
 
+function createInputSummaryHash(analyzed = createAnalyzedData()): string {
+  return hashCanonicalJson(createResultInputSummary('testuser', analyzed));
+}
+
 function createAnalysisState(analyzed: AnalyzerOutput): AnalysisState {
   const analysisConfigHash = computeAnalysisConfigHash();
   return {
@@ -342,6 +350,7 @@ function setPendingGeminiDelivery(
     }),
     analysisFingerprint: state.analyzed.analysisFingerprint,
     payloadHash: state.analyzed.payloadHash,
+    inputSummaryHash: createInputSummaryHash(),
     basedOnPartial: false,
     deliveryMode: 'change',
     resultVersionId,
@@ -360,6 +369,7 @@ function setPendingCodexDelivery(
     providerKey: CODEX_PROVIDER_KEY,
     analysisFingerprint: state.analyzed.analysisFingerprint,
     payloadHash: state.analyzed.payloadHash,
+    inputSummaryHash: createInputSummaryHash(),
     basedOnPartial: false,
     deliveryMode: 'change',
     resultVersionId,
@@ -813,6 +823,13 @@ describe('runAi', () => {
         warningCount: 0,
         appVersion: packageJson.version,
       }),
+      {
+        username: 'testuser',
+        analyzerConfig: { inactivityThresholdDays: 60, nodeDistributionTopN: 3 },
+        dataQuality: createAnalyzedData().dataQuality,
+        userOverview: createAnalyzedData().userOverview,
+        activitySummary: createAnalyzedData().summary,
+      },
     );
     expect(mockedUpdateAnalysisState).toHaveBeenCalledTimes(3);
     expect(mockedCompleteGeminiAnalysisSession).toHaveBeenCalledWith({
@@ -954,6 +971,7 @@ describe('runAi', () => {
       'testuser',
       { summary: 'result' },
       expect.any(Object),
+      expect.any(Object),
     );
     expect(result.meta).toMatchObject({ resultVersionId: 'v000001' });
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
@@ -1066,6 +1084,7 @@ describe('runAi', () => {
       'testuser',
       expect.any(Object),
       expect.objectContaining({ deliveryId: pendingId }),
+      expect.any(Object),
     );
   });
 
@@ -1276,6 +1295,7 @@ describe('runAi', () => {
         externalThreadId: 'thread-1',
         threadName: 'testuser-insight',
       }),
+      expect.objectContaining({ username: 'testuser' }),
     );
     expect(complete).toHaveBeenCalledWith(
       expect.objectContaining({

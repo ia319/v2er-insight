@@ -9,13 +9,16 @@ import {
 import { hashCanonicalJson } from '@/core/provenance/canonical-json';
 import {
   formatResultVersionId,
+  isResultInputSummary,
   isResultVersionMetadata,
+  isStoredResultVersion,
   RESULT_VERSION_INDEX_SCHEMA_VERSION,
   STORED_RESULT_VERSION_SCHEMA_VERSION,
-  type ResultVersionIndexV1,
+  type ResultInputSummary,
+  type ResultVersionIndex,
   type ResultVersionMetadata,
   type ResultVersionSource,
-  type StoredResultVersionV1,
+  type StoredResultVersion,
 } from '@/core/result-version';
 import { getDataFilePath } from './paths';
 import { readDataFileResult } from './reader';
@@ -60,16 +63,16 @@ type CurrentResultState =
   | { status: 'valid'; result: AIAnalysisResult; hash: string };
 
 interface LoadedResultVersions {
-  index: ResultVersionIndexV1;
+  index: ResultVersionIndex;
   indexWasMissing: boolean;
-  versions: Map<string, StoredResultVersionV1>;
+  versions: Map<string, StoredResultVersion>;
 }
 
 function fail(code: ResultVersionSaveErrorCode, message: string): never {
   throw new ResultVersionSaveError(code, message);
 }
 
-function createEmptyIndex(updatedAt: string): ResultVersionIndexV1 {
+function createEmptyIndex(updatedAt: string): ResultVersionIndex {
   return {
     schemaVersion: RESULT_VERSION_INDEX_SCHEMA_VERSION,
     nextSequence: 1,
@@ -106,7 +109,7 @@ function loadResultVersions(username: string, now: string): LoadedResultVersions
   }
 
   const index = indexState.status === 'valid' ? indexState.index : createEmptyIndex(now);
-  const versions = new Map<string, StoredResultVersionV1>();
+  const versions = new Map<string, StoredResultVersion>();
   for (const metadata of index.versions) {
     const stored = readStoredResultVersion(username, metadata.versionId);
     if (stored.status !== 'valid' || !isDeepStrictEqual(stored.version.metadata, metadata)) {
@@ -128,7 +131,7 @@ function loadResultVersions(username: string, now: string): LoadedResultVersions
 function appendVersion(
   username: string,
   loaded: LoadedResultVersions,
-  version: StoredResultVersionV1,
+  version: StoredResultVersion,
   updatedAt: string,
 ): void {
   const metadata = version.metadata;
@@ -148,7 +151,7 @@ function appendVersion(
     return fail('RESULT_VERSION_CORRUPT', 'Result version sequence is exhausted');
   }
 
-  const index: ResultVersionIndexV1 = {
+  const index: ResultVersionIndex = {
     ...loaded.index,
     nextSequence,
     latestVersionId: metadata.versionId,
@@ -170,14 +173,23 @@ function sourceMatchesMetadata(
   );
 }
 
+function inputSummaryMatchesVersion(
+  version: StoredResultVersion,
+  inputSummaryHash: string,
+): boolean {
+  return version.inputSummaryHash === inputSummaryHash;
+}
+
 function buildGeneratedVersion(
   loaded: LoadedResultVersions,
   current: Extract<CurrentResultState, { status: 'valid' }> | { status: 'missing' },
   result: AIAnalysisResult,
   resultHash: string,
   source: ResultVersionSource,
+  inputSummary: ResultInputSummary,
+  inputSummaryHash: string,
   savedAt: string,
-): StoredResultVersionV1 {
+): StoredResultVersion {
   const sequence = loaded.index.nextSequence;
   const metadata: ResultVersionMetadata = {
     versionId: formatResultVersionId(sequence),
@@ -205,11 +217,17 @@ function buildGeneratedVersion(
   if (!isResultVersionMetadata(metadata)) {
     throw new TypeError('Result version source is invalid');
   }
-  return {
+  const version: StoredResultVersion = {
     schemaVersion: STORED_RESULT_VERSION_SCHEMA_VERSION,
     metadata,
+    inputSummary,
+    inputSummaryHash,
     result,
   };
+  if (!isStoredResultVersion(version)) {
+    throw new TypeError('Generated result version is invalid');
+  }
+  return version;
 }
 
 function buildProtectedVersion(
@@ -218,7 +236,7 @@ function buildProtectedVersion(
   current: Extract<CurrentResultState, { status: 'valid' }>,
   origin: Extract<ResultVersionMetadata['origin'], 'legacy' | 'untracked-current'>,
   savedAt: string,
-): StoredResultVersionV1 {
+): StoredResultVersion {
   const sequence = loaded.index.nextSequence;
   const metadata: ResultVersionMetadata = {
     versionId: formatResultVersionId(sequence),
@@ -246,6 +264,8 @@ function buildProtectedVersion(
   return {
     schemaVersion: STORED_RESULT_VERSION_SCHEMA_VERSION,
     metadata,
+    inputSummary: null,
+    inputSummaryHash: null,
     result: current.result,
   };
 }
@@ -253,7 +273,7 @@ function buildProtectedVersion(
 function recoverProtectedCandidate(
   username: string,
   loaded: LoadedResultVersions,
-  candidate: StoredResultVersionV1,
+  candidate: StoredResultVersion,
   current: CurrentResultState,
   now: string,
 ): void {
@@ -283,15 +303,19 @@ function recoverProtectedCandidate(
 function recoverGeneratedCandidate(
   username: string,
   loaded: LoadedResultVersions,
-  candidate: StoredResultVersionV1,
+  candidate: StoredResultVersion,
   current: CurrentResultState,
   result: AIAnalysisResult,
   resultHash: string,
   source: ResultVersionSource,
+  inputSummaryHash: string,
   now: string,
 ): ResultVersionMetadata {
   const metadata = candidate.metadata;
-  if (!sourceMatchesMetadata(source, metadata, resultHash)) {
+  if (
+    !sourceMatchesMetadata(source, metadata, resultHash) ||
+    !inputSummaryMatchesVersion(candidate, inputSummaryHash)
+  ) {
     return fail(
       'RESULT_DELIVERY_CONFLICT',
       `Delivery "${source.deliveryId}" conflicts with candidate result version "${metadata.versionId}"`,
@@ -323,7 +347,7 @@ function recoverGeneratedCandidate(
 function readUnindexedCandidate(
   username: string,
   loaded: LoadedResultVersions,
-): StoredResultVersionV1 | null {
+): StoredResultVersion | null {
   const indexedIds = new Set(loaded.index.versions.map((metadata) => metadata.versionId));
   const candidateIds = listStoredResultVersionIds(username).filter(
     (versionId) => !indexedIds.has(versionId),
@@ -361,6 +385,7 @@ function recoverCandidate(
   result: AIAnalysisResult,
   resultHash: string,
   source: ResultVersionSource,
+  inputSummaryHash: string,
   now: string,
 ): ResultVersionMetadata | null {
   const candidate = readUnindexedCandidate(username, loaded);
@@ -384,6 +409,7 @@ function recoverCandidate(
     result,
     resultHash,
     source,
+    inputSummaryHash,
     now,
   );
 }
@@ -394,13 +420,18 @@ function recoverCommittedDelivery(
   current: CurrentResultState,
   resultHash: string,
   source: ResultVersionSource,
+  inputSummaryHash: string,
 ): ResultVersionMetadata | null {
   const metadata = loaded.index.versions.find(
     (version) => version.deliveryId === source.deliveryId,
   );
   if (!metadata) return null;
   const stored = loaded.versions.get(metadata.versionId);
-  if (!stored || !sourceMatchesMetadata(source, metadata, resultHash)) {
+  if (
+    !stored ||
+    !sourceMatchesMetadata(source, metadata, resultHash) ||
+    !inputSummaryMatchesVersion(stored, inputSummaryHash)
+  ) {
     return fail(
       'RESULT_DELIVERY_CONFLICT',
       `Delivery "${source.deliveryId}" conflicts with its saved result version`,
@@ -509,6 +540,7 @@ function recoverResultVersionDeliveryUnderLock(
       current,
       indexedMetadata.resultHash,
       source,
+      pending.inputSummaryHash,
     );
     if (!recovered) {
       return fail(
@@ -550,6 +582,7 @@ function recoverResultVersionDeliveryUnderLock(
     candidate.result,
     candidate.metadata.resultHash,
     source,
+    pending.inputSummaryHash,
     now,
   );
   return { status: 'recovered', metadata, result: candidate.result };
@@ -586,15 +619,25 @@ function protectCurrentResult(
   return current;
 }
 
+function validateInputSummary(username: string, inputSummary: ResultInputSummary): string {
+  if (!isResultInputSummary(inputSummary) || inputSummary.username !== username) {
+    throw new TypeError('Result input summary is invalid');
+  }
+  return hashCanonicalJson(inputSummary);
+}
+
 function validateSaveInput(
+  username: string,
   result: AIAnalysisResult,
   source: ResultVersionSource,
+  inputSummary: ResultInputSummary,
   now: string,
-): string {
+): { resultHash: string; inputSummaryHash: string } {
   if (!isAIAnalysisResult(result)) {
     throw new TypeError('AI result is invalid');
   }
   const resultHash = hashCanonicalJson(result);
+  const inputSummaryHash = validateInputSummary(username, inputSummary);
   buildGeneratedVersion(
     {
       index: createEmptyIndex(now),
@@ -605,9 +648,11 @@ function validateSaveInput(
     result,
     resultHash,
     source,
+    inputSummary,
+    inputSummaryHash,
     now,
   );
-  return resultHash;
+  return { resultHash, inputSummaryHash };
 }
 
 function saveResultVersionUnderLock(
@@ -615,20 +660,47 @@ function saveResultVersionUnderLock(
   result: AIAnalysisResult,
   resultHash: string,
   source: ResultVersionSource,
+  inputSummary: ResultInputSummary,
+  inputSummaryHash: string,
   now: string,
 ): ResultVersionMetadata {
   const loaded = loadResultVersions(username, now);
   let current = readCurrentResult(username);
 
-  const committed = recoverCommittedDelivery(username, loaded, current, resultHash, source);
+  const committed = recoverCommittedDelivery(
+    username,
+    loaded,
+    current,
+    resultHash,
+    source,
+    inputSummaryHash,
+  );
   if (committed) return committed;
 
-  const recovered = recoverCandidate(username, loaded, current, result, resultHash, source, now);
+  const recovered = recoverCandidate(
+    username,
+    loaded,
+    current,
+    result,
+    resultHash,
+    source,
+    inputSummaryHash,
+    now,
+  );
   if (recovered) return recovered;
 
   current = readCurrentResult(username);
   const protectedCurrent = protectCurrentResult(username, loaded, current, now);
-  const version = buildGeneratedVersion(loaded, protectedCurrent, result, resultHash, source, now);
+  const version = buildGeneratedVersion(
+    loaded,
+    protectedCurrent,
+    result,
+    resultHash,
+    source,
+    inputSummary,
+    inputSummaryHash,
+    now,
+  );
 
   writeStoredResultVersion(username, version);
   writeDataFile(username, 'result', result);
@@ -642,20 +714,36 @@ function saveResultVersionUnderLock(
  * @param username - V2EX username that owns the result.
  * @param result - Complete validated AI analysis result.
  * @param source - Stable provider delivery and provenance metadata.
+ * @param inputSummary - Version-bound Analyzer facts used for this result.
  * @returns The committed or idempotently recovered version metadata.
  * @throws {ResultVersionSaveError} When persisted state cannot advance safely.
- * @throws {TypeError} When the result or source is invalid.
+ * @throws {TypeError} When the result, source, or input summary is invalid.
  * @throws A lock, serialization, or filesystem error.
  */
 export function saveResultVersion(
   username: string,
   result: AIAnalysisResult,
   source: ResultVersionSource,
+  inputSummary: ResultInputSummary,
 ): ResultVersionMetadata {
   const now = new Date().toISOString();
-  const resultHash = validateSaveInput(result, source, now);
+  const { resultHash, inputSummaryHash } = validateSaveInput(
+    username,
+    result,
+    source,
+    inputSummary,
+    now,
+  );
   return withResultVersionLock(username, () =>
-    saveResultVersionUnderLock(username, result, resultHash, source, now),
+    saveResultVersionUnderLock(
+      username,
+      result,
+      resultHash,
+      source,
+      inputSummary,
+      inputSummaryHash,
+      now,
+    ),
   );
 }
 

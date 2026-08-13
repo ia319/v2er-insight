@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createAIAnalysisResultFixture } from '@/core/ai/__tests__/result-fixture';
 import { hashCanonicalJson } from '@/core/provenance/canonical-json';
-import {
-  isResultVersionIndexV1,
-  isResultVersionMetadata,
-  isStoredResultVersionV1,
-} from '../validator';
-import type { ResultVersionMetadata } from '../types';
+import { isResultVersionIndex, isResultVersionMetadata, isStoredResultVersion } from '../validator';
+import type { ResultInputSummary, ResultVersionMetadata } from '../types';
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
@@ -39,22 +35,55 @@ function createMetadata(sequence = 1): ResultVersionMetadata {
   };
 }
 
+function createInputSummary(): ResultInputSummary {
+  return {
+    username: 'alice',
+    analyzerConfig: { inactivityThresholdDays: 60, nodeDistributionTopN: 3 },
+    dataQuality: {
+      capturedAt: SAVED_AT,
+      topics: { status: 'complete', totalExpected: 1, fetchedCount: 1, failedCount: 0 },
+      replies: { status: 'complete', totalExpected: 1, fetchedCount: 1, failedCount: 0 },
+    },
+    userOverview: {
+      joinDate: '2020-01-01',
+      lastActiveTime: '2026-07-26',
+      topicReplyRatio: 1,
+      totalTopics: 1,
+      totalReplies: 1,
+      isTopicsHidden: false,
+      dailyRanking: null,
+    },
+    activitySummary: { totalPeriods: 0, periods: [] },
+  };
+}
+
 describe('result version validation', () => {
-  it('accepts generated metadata and a matching result envelope', () => {
+  it('accepts a generated envelope only when both payload hashes match', () => {
     const result = createAIAnalysisResultFixture();
     const metadata = createMetadata();
+    const inputSummary = createInputSummary();
+    const envelope = {
+      schemaVersion: 1,
+      metadata,
+      inputSummary,
+      inputSummaryHash: hashCanonicalJson(inputSummary),
+      result,
+    };
 
     expect(isResultVersionMetadata(metadata)).toBe(true);
+    expect(isStoredResultVersion(envelope)).toBe(true);
     expect(
-      isStoredResultVersionV1({
-        schemaVersion: 1,
-        metadata,
-        result,
+      isStoredResultVersion({
+        ...envelope,
+        inputSummary: {
+          ...inputSummary,
+          analyzerConfig: { inactivityThresholdDays: 30, nodeDistributionTopN: 3 },
+        },
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it('accepts protected current metadata without invented provenance', () => {
+  it('accepts protected current data without invented provenance or input facts', () => {
     const metadata: ResultVersionMetadata = {
       ...createMetadata(),
       origin: 'legacy',
@@ -73,6 +102,15 @@ describe('result version validation', () => {
     };
 
     expect(isResultVersionMetadata(metadata)).toBe(true);
+    expect(
+      isStoredResultVersion({
+        schemaVersion: 1,
+        metadata,
+        inputSummary: null,
+        inputSummaryHash: null,
+        result: createAIAnalysisResultFixture(),
+      }),
+    ).toBe(true);
   });
 
   it('rejects an envelope whose result differs from its hash', () => {
@@ -81,9 +119,11 @@ describe('result version validation', () => {
     result.summary = 'Changed';
 
     expect(
-      isStoredResultVersionV1({
+      isStoredResultVersion({
         schemaVersion: 1,
         metadata,
+        inputSummary: createInputSummary(),
+        inputSummaryHash: hashCanonicalJson(createInputSummary()),
         result,
       }),
     ).toBe(false);
@@ -103,13 +143,13 @@ describe('result version validation', () => {
       updatedAt: SAVED_AT,
     };
 
-    expect(isResultVersionIndexV1(index)).toBe(true);
+    expect(isResultVersionIndex(index)).toBe(true);
     expect(
-      isResultVersionIndexV1({
+      isResultVersionIndex({
         ...index,
         versions: [first, { ...second, deliveryId: DELIVERY_ID }],
       }),
     ).toBe(false);
-    expect(isResultVersionIndexV1({ ...index, nextSequence: 4 })).toBe(false);
+    expect(isResultVersionIndex({ ...index, nextSequence: 4 })).toBe(false);
   });
 });

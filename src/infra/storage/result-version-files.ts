@@ -1,11 +1,11 @@
 import fs from 'fs';
 import {
   isResultVersionId,
-  isResultVersionIndexV1,
-  isStoredResultVersionV1,
+  isResultVersionIndex,
+  isStoredResultVersion,
   parseResultVersionId,
-  type ResultVersionIndexV1,
-  type StoredResultVersionV1,
+  type ResultVersionIndex,
+  type StoredResultVersion,
 } from '@/core/result-version';
 import { readJsonFileResult } from './reader';
 import {
@@ -18,12 +18,12 @@ import { writeJsonFileAtomically, writeJsonFileExclusively } from './writer';
 export type ResultVersionIndexReadResult =
   | { status: 'missing' }
   | { status: 'invalid' }
-  | { status: 'valid'; index: ResultVersionIndexV1 };
+  | { status: 'valid'; index: ResultVersionIndex };
 
 export type StoredResultVersionReadResult =
   | { status: 'missing' }
   | { status: 'invalid' }
-  | { status: 'valid'; version: StoredResultVersionV1 };
+  | { status: 'valid'; version: StoredResultVersion };
 
 function hasErrorCode(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code;
@@ -38,7 +38,7 @@ function hasErrorCode(error: unknown, code: string): boolean {
 export function readResultVersionIndex(username: string): ResultVersionIndexReadResult {
   const result = readJsonFileResult(getResultVersionIndexPath(username));
   if (result.status !== 'success') return result;
-  return isResultVersionIndexV1(result.data)
+  return isResultVersionIndex(result.data)
     ? { status: 'valid', index: result.data }
     : { status: 'invalid' };
 }
@@ -56,9 +56,13 @@ export function readStoredResultVersion(
 ): StoredResultVersionReadResult {
   const result = readJsonFileResult(getResultVersionFilePath(username, versionId));
   if (result.status !== 'success') return result;
-  return isStoredResultVersionV1(result.data) && result.data.metadata.versionId === versionId
-    ? { status: 'valid', version: result.data }
-    : { status: 'invalid' };
+  if (!isStoredResultVersion(result.data) || result.data.metadata.versionId !== versionId) {
+    return { status: 'invalid' };
+  }
+  if (result.data.inputSummary !== null && result.data.inputSummary.username !== username) {
+    return { status: 'invalid' };
+  }
+  return { status: 'valid', version: result.data };
 }
 
 /**
@@ -96,8 +100,8 @@ export function listStoredResultVersionIds(username: string): string[] {
  * @throws {TypeError} When the index violates its runtime contract.
  * @throws A filesystem or serialization error.
  */
-export function writeResultVersionIndex(username: string, index: ResultVersionIndexV1): void {
-  if (!isResultVersionIndexV1(index)) {
+export function writeResultVersionIndex(username: string, index: ResultVersionIndex): void {
+  if (!isResultVersionIndex(index)) {
     throw new TypeError('Result version index is invalid');
   }
   writeJsonFileAtomically(getResultVersionIndexPath(username), index);
@@ -111,8 +115,11 @@ export function writeResultVersionIndex(username: string, index: ResultVersionIn
  * @throws {TypeError} When the envelope violates its runtime contract.
  * @throws A filesystem or serialization error, including an existing target.
  */
-export function writeStoredResultVersion(username: string, version: StoredResultVersionV1): void {
-  if (!isStoredResultVersionV1(version)) {
+export function writeStoredResultVersion(username: string, version: StoredResultVersion): void {
+  if (
+    !isStoredResultVersion(version) ||
+    (version.inputSummary !== null && version.inputSummary.username !== username)
+  ) {
     throw new TypeError('Stored result version is invalid');
   }
   writeJsonFileExclusively(getResultVersionFilePath(username, version.metadata.versionId), version);

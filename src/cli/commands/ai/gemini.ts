@@ -39,6 +39,7 @@ export interface ExecuteGeminiAnalysisOptions {
   request: AnalysisRequest;
   analysisState: AnalysisState;
   provenance: ValidAnalyzedProvenance;
+  inputSummaryHash: string;
   savedResult: unknown;
   model?: string;
   thinkingLevel?: string;
@@ -138,6 +139,7 @@ export async function executeGeminiAnalysis(
       providerKey,
       analysisFingerprint: options.provenance.analysisFingerprint,
       payloadHash: options.provenance.payloadHash,
+      inputSummaryHash: options.inputSummaryHash,
       basedOnPartial: options.provenance.basedOnPartial,
       deliveryMode: options.resend ? 'resend' : 'change',
     };

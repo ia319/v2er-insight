@@ -27,6 +27,7 @@ export interface ResultDeliveryTarget {
   providerKey: string;
   analysisFingerprint: string;
   payloadHash: string;
+  inputSummaryHash: string;
   basedOnPartial: boolean;
   deliveryMode: ResultDeliveryMode;
 }
@@ -46,6 +47,7 @@ export function matchesResultDeliveryTarget(
     pending.providerKey === target.providerKey &&
     pending.analysisFingerprint === target.analysisFingerprint &&
     pending.payloadHash === target.payloadHash &&
+    pending.inputSummaryHash === target.inputSummaryHash &&
     pending.basedOnPartial === target.basedOnPartial &&
     pending.deliveryMode === target.deliveryMode
   );

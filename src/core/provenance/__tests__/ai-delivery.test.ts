@@ -79,6 +79,7 @@ function createDeliveryTarget(state: AnalysisState) {
     providerKey: `gemini:${'c'.repeat(64)}`,
     analysisFingerprint: state.analyzed.analysisFingerprint,
     payloadHash: state.analyzed.payloadHash,
+    inputSummaryHash: 'f'.repeat(64),
     basedOnPartial: false,
     deliveryMode: 'change' as const,
   };

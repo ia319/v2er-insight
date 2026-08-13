@@ -6,17 +6,20 @@ export {
   parseResultVersionId,
 } from './identifiers';
 export {
-  isResultVersionIndexV1,
+  isResultInputSummary,
+  isResultVersionIndex,
   isResultVersionMetadata,
-  isStoredResultVersionV1,
+  isStoredResultVersion,
 } from './validator';
+export { createResultInputSummary } from './input-summary';
 export { RESULT_VERSION_INDEX_SCHEMA_VERSION, STORED_RESULT_VERSION_SCHEMA_VERSION } from './types';
 export type {
+  ResultInputSummary,
   ResultVersionDataQuality,
-  ResultVersionIndexV1,
+  ResultVersionIndex,
   ResultVersionMetadata,
   ResultVersionOrigin,
   ResultVersionProvider,
   ResultVersionSource,
-  StoredResultVersionV1,
+  StoredResultVersion,
 } from './types';
