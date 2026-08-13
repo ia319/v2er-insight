@@ -248,10 +248,6 @@ function createAiResult(summary = 'Saved result'): AIAnalysisResult {
   };
 }
 
-function createInputSummaryHash(analyzed = createAnalyzedData()): string {
-  return hashCanonicalJson(createResultInputSummary('testuser', analyzed));
-}
-
 function createAnalysisState(analyzed: AnalyzerOutput): AnalysisState {
   const analysisConfigHash = computeAnalysisConfigHash();
   return {
@@ -280,6 +276,7 @@ function createAnalysisState(analyzed: AnalyzerOutput): AnalysisState {
 
 interface MockInputContext {
   getState(): AnalysisState;
+  inputSummaryHash: string;
 }
 
 function mockInput(analyzed = createAnalyzedData(), result: unknown = null): MockInputContext {
@@ -296,7 +293,10 @@ function mockInput(analyzed = createAnalyzedData(), result: unknown = null): Moc
       return state;
     },
   );
-  return { getState: () => state };
+  return {
+    getState: () => state,
+    inputSummaryHash: hashCanonicalJson(createResultInputSummary('testuser', analyzed)),
+  };
 }
 
 function markDelivered(state: AnalysisState): void {
@@ -334,6 +334,7 @@ function markDelivered(state: AnalysisState): void {
 
 function setPendingGeminiDelivery(
   state: AnalysisState,
+  inputSummaryHash: string,
   resultVersionId: string | null = null,
 ): void {
   if (!state.analyzed) {
@@ -350,7 +351,7 @@ function setPendingGeminiDelivery(
     }),
     analysisFingerprint: state.analyzed.analysisFingerprint,
     payloadHash: state.analyzed.payloadHash,
-    inputSummaryHash: createInputSummaryHash(),
+    inputSummaryHash,
     basedOnPartial: false,
     deliveryMode: 'change',
     resultVersionId,
@@ -359,6 +360,7 @@ function setPendingGeminiDelivery(
 
 function setPendingCodexDelivery(
   state: AnalysisState,
+  inputSummaryHash: string,
   resultVersionId: string | null = null,
 ): void {
   if (!state.analyzed) {
@@ -369,7 +371,7 @@ function setPendingCodexDelivery(
     providerKey: CODEX_PROVIDER_KEY,
     analysisFingerprint: state.analyzed.analysisFingerprint,
     payloadHash: state.analyzed.payloadHash,
-    inputSummaryHash: createInputSummaryHash(),
+    inputSummaryHash,
     basedOnPartial: false,
     deliveryMode: 'change',
     resultVersionId,
@@ -533,7 +535,7 @@ describe('runAi', () => {
     const recoveredResult = createAiResult('Recovered result');
     const context = mockInput();
     const state = context.getState();
-    setPendingGeminiDelivery(state);
+    setPendingGeminiDelivery(state, context.inputSummaryHash);
     const pending = state.pendingResultDelivery;
     if (!pending) throw new Error('Expected pending Gemini delivery');
     const metadata = createSavedMetadata({
@@ -587,7 +589,7 @@ describe('runAi', () => {
     const recoveredResult = createAiResult('Recovered result');
     const context = mockInput();
     const state = context.getState();
-    setPendingGeminiDelivery(state);
+    setPendingGeminiDelivery(state, context.inputSummaryHash);
     const pending = state.pendingResultDelivery;
     if (!pending) throw new Error('Expected pending Gemini delivery');
     const metadata = createSavedMetadata({
@@ -632,7 +634,7 @@ describe('runAi', () => {
 
   it('should block Gemini while an accepted Codex delivery remains incomplete', async () => {
     const context = mockInput();
-    setPendingCodexDelivery(context.getState());
+    setPendingCodexDelivery(context.getState(), context.inputSummaryHash);
 
     const result = await runAi('testuser', {});
 
@@ -1497,7 +1499,7 @@ describe('runAi', () => {
     const state = input.getState();
     const analyzedState = state.analyzed;
     if (!analyzedState) throw new Error('Expected analyzed provenance');
-    setPendingCodexDelivery(state, 'v000001');
+    setPendingCodexDelivery(state, input.inputSummaryHash, 'v000001');
     const metadata = createSavedMetadata(
       {
         deliveryId: DELIVERY_ID,
@@ -1552,7 +1554,7 @@ describe('runAi', () => {
     const state = input.getState();
     const analyzedState = state.analyzed;
     if (!analyzedState) throw new Error('Expected analyzed provenance');
-    setPendingCodexDelivery(state, 'v000001');
+    setPendingCodexDelivery(state, input.inputSummaryHash, 'v000001');
     const metadata = createSavedMetadata(
       {
         deliveryId: DELIVERY_ID,
