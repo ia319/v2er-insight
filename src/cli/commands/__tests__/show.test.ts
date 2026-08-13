@@ -1,16 +1,16 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AIAnalysisResult } from '@/core/ai';
+import type { SelectedResult } from '@/infra/storage';
 
-const mockedReadDataFile = vi.hoisted(() => vi.fn());
-const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
+const mockedQueryCurrentResult = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
+  debug: vi.fn(),
 }));
 
 vi.mock('@/infra/storage', () => ({
-  readDataFile: mockedReadDataFile,
-  readAnalysisState: mockedReadAnalysisState,
+  queryCurrentResult: mockedQueryCurrentResult,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -63,17 +63,38 @@ function createMockResult(overrides?: Partial<AIAnalysisResult>): AIAnalysisResu
   };
 }
 
+function createSelection(
+  result: AIAnalysisResult,
+  overrides: Partial<SelectedResult> = {},
+): SelectedResult {
+  return {
+    username: 'testuser',
+    source: 'legacy',
+    result,
+    metadata: null,
+    inputSummary: null,
+    archiveState: 'legacy-current',
+    provenanceState: 'legacy-missing',
+    verifiedCurrentResult: null,
+    isCurrent: true,
+    ...overrides,
+  };
+}
+
 describe('runShow', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedReadAnalysisState.mockReturnValue({ status: 'missing' });
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(createMockResult()),
+    });
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   it('should show error when result data is missing', async () => {
-    mockedReadDataFile.mockReturnValue(null);
+    mockedQueryCurrentResult.mockReturnValue({ status: 'missing', latestVersionId: null });
 
     const outcome = await runShow('testuser', {});
 
@@ -83,7 +104,7 @@ describe('runShow', () => {
   });
 
   it('should reject a result that does not satisfy the persisted contract', async () => {
-    mockedReadDataFile.mockReturnValue({ summary: 'Incomplete result' });
+    mockedQueryCurrentResult.mockReturnValue({ status: 'invalid', reason: 'contract' });
 
     const outcome = await runShow('testuser', {});
 
@@ -93,7 +114,10 @@ describe('runShow', () => {
 
   it('should output raw JSON with --json flag', async () => {
     const result = createMockResult();
-    mockedReadDataFile.mockReturnValue(result);
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result),
+    });
 
     await runShow('testuser', { json: true });
 
@@ -102,17 +126,20 @@ describe('runShow', () => {
 
   it('should return stale and partial notices from valid result provenance', async () => {
     const result = createMockResult();
-    mockedReadDataFile.mockReturnValue(result);
-    mockedReadAnalysisState.mockReturnValue({
-      status: 'valid',
-      state: {
-        schemaVersion: 1,
-        currentResult: {
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result, {
+        source: 'current',
+        archiveState: 'verified-current',
+        provenanceState: 'verified',
+        verifiedCurrentResult: {
           analysisFingerprint: 'a'.repeat(64),
           stale: true,
           basedOnPartial: true,
+          deliveryMode: 'change',
+          resultVersionId: 'v000001',
         },
-      },
+      }),
     });
 
     const outcome = await runShow('testuser', { json: true });
@@ -125,19 +152,23 @@ describe('runShow', () => {
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
   });
 
-  it('should display legacy results without guessing provenance notices', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
-    mockedReadAnalysisState.mockReturnValue({ status: 'invalid' });
-
+  it('should identify a legacy result without guessing provenance', async () => {
     const outcome = await runShow('testuser', {});
 
     expect(outcome.status).toBe('success');
-    expect(outcome.notices).toEqual([]);
+    expect(outcome.notices?.map((notice) => notice.code)).toEqual(['RESULT_LEGACY_CURRENT']);
+  });
+
+  it('should stop when the result snapshot keeps changing', async () => {
+    mockedQueryCurrentResult.mockReturnValue({ status: 'busy' });
+
+    const outcome = await runShow('testuser', {});
+
+    expect(outcome.reasonCode).toBe('RESULT_VERSION_BUSY');
+    expect(consoleSpy).not.toHaveBeenCalled();
   });
 
   it('should output brief format with --brief flag', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
-
     await runShow('testuser', { brief: true });
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
@@ -147,8 +178,6 @@ describe('runShow', () => {
   });
 
   it('should output full format by default', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
-
     await runShow('testuser', {});
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
@@ -161,8 +190,6 @@ describe('runShow', () => {
   });
 
   it('should render OCEAN score bars in full output', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
-
     await runShow('testuser', {});
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
@@ -170,9 +197,11 @@ describe('runShow', () => {
   });
 
   it('should display risk level with color coding', async () => {
-    mockedReadDataFile.mockReturnValue(
-      createMockResult({ risk: { level: 'high_risk', reason: 'Spam detected' } }),
-    );
+    const result = createMockResult({ risk: { level: 'high_risk', reason: 'Spam detected' } });
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result),
+    });
 
     await runShow('testuser', {});
 

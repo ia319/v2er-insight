@@ -520,6 +520,13 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '重新生成结构完整的 result.json',
     },
   ],
+  RESULT_VERSION_BUSY: [
+    {
+      type: 'instruction',
+      content: '等待同一用户的结果写入完成后重试',
+      description: '查询期间结果版本仍在变化，当前读取未被当作稳定快照',
+    },
+  ],
   UNKNOWN_ERROR: [],
 };
 

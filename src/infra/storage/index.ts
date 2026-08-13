@@ -31,6 +31,13 @@ export {
   withResultVersionLock,
 } from './result-version-lock';
 export type {
+  CurrentResultQueryResult,
+  ResultArchiveState,
+  ResultProvenanceState,
+  SelectedResult,
+} from './result-query';
+export { queryCurrentResult } from './result-query';
+export type {
   ResultVersionDeliveryRecovery,
   ResultVersionSaveErrorCode,
 } from './save-result-version';

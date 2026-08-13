@@ -5,14 +5,14 @@
  * 支持 --json 原始输出和 --brief 简略版。
  */
 
-import { isAIAnalysisResult, type AIAnalysisResult, type PsychologicalProfile } from '@/core/ai';
-import { readAnalysisState, readDataFile } from '@/infra/storage';
+import { type AIAnalysisResult, type PsychologicalProfile } from '@/core/ai';
+import { queryCurrentResult } from '@/infra/storage';
 import { logger } from '@/infra/logger';
 import { COLORS } from '@/infra/logger/colors';
 import type { ShowCommandOptions } from '../types';
 import { getRecoveryActions } from '../workflow/recovery';
 import type { StepRunResult } from '../workflow/types';
-import { createResultStateNotices } from '../workflow/result-state-notices';
+import { createResultQueryNotices } from '../workflow/result-query-notices';
 
 // -- 格式化工具 --------------------------------------------------------------
 
@@ -134,9 +134,9 @@ export async function runShow(
   username: string,
   options: ShowCommandOptions,
 ): Promise<StepRunResult> {
-  const resultValue = readDataFile<unknown>(username, 'result');
+  const query = queryCurrentResult(username);
 
-  if (resultValue === null) {
+  if (query.status === 'missing') {
     logger.error(`未找到 ${username} 的分析结果`);
     logger.info('请先运行: v2er ai <username>');
     return {
@@ -149,24 +149,43 @@ export async function runShow(
     };
   }
 
-  if (!isAIAnalysisResult(resultValue)) {
-    logger.error(`${username} 的 result.json 格式无效或不受支持`);
+  if (query.status === 'invalid') {
+    if (query.reason === 'unreadable') {
+      logger.debug(
+        `result.json 读取失败: ${query.error instanceof Error ? query.error.message : String(query.error)}`,
+      );
+    }
+    logger.error(`${username} 的 result.json 无法读取、格式无效或不受支持`);
     return {
       step: 'show',
       status: 'failed',
       reasonCode: 'SHOW_RESULT_INVALID',
-      message: 'result.json 格式无效或不受支持，无法展示报告',
+      message: 'result.json 无法读取、格式无效或不受支持，无法展示报告',
       recoverable: true,
       recoverActions: getRecoveryActions('SHOW_RESULT_INVALID', { username }),
     };
   }
-  const result = resultValue;
 
-  const analysisState = readAnalysisState(username);
-  const notices =
-    analysisState.status === 'valid'
-      ? createResultStateNotices(username, analysisState.state.currentResult)
-      : [];
+  if (query.status === 'busy') {
+    logger.error(`${username} 的结果版本正在更新，请稍后重试`);
+    return {
+      step: 'show',
+      status: 'failed',
+      reasonCode: 'RESULT_VERSION_BUSY',
+      message: '查询期间结果版本仍在变化，未输出可能混合的数据',
+      recoverable: true,
+      recoverActions: getRecoveryActions('RESULT_VERSION_BUSY', { username }),
+    };
+  }
+
+  const { selection } = query;
+  const result = selection.result;
+  const notices = createResultQueryNotices(username, selection);
+  const resultMeta = {
+    archiveState: selection.archiveState,
+    provenanceState: selection.provenanceState,
+    versionId: selection.metadata?.versionId ?? null,
+  };
 
   // --json: 原始 JSON 输出
   if (options.json) {
@@ -175,7 +194,7 @@ export async function runShow(
       step: 'show',
       status: 'success',
       message: '已输出 JSON 结果',
-      meta: { mode: 'json' },
+      meta: { mode: 'json', ...resultMeta },
       notices,
     };
   }
@@ -187,7 +206,7 @@ export async function runShow(
       step: 'show',
       status: 'success',
       message: '已输出简略报告',
-      meta: { mode: 'brief' },
+      meta: { mode: 'brief', ...resultMeta },
       notices,
     };
   }
@@ -198,7 +217,7 @@ export async function runShow(
     step: 'show',
     status: 'success',
     message: '已输出完整报告',
-    meta: { mode: 'full' },
+    meta: { mode: 'full', ...resultMeta },
     notices,
   };
 }
