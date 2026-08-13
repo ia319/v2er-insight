@@ -38,7 +38,7 @@ export interface ResultVersionSummary {
   dataQuality: ResultVersionDataQuality;
   warningCount: number | null;
   inputSummaryAvailable: boolean;
-  isCurrent: boolean;
+  isLatest: boolean;
   virtual: boolean;
 }
 
@@ -183,7 +183,7 @@ function createVersionSummary(
     dataQuality: metadata.dataQuality,
     warningCount: metadata.warningCount,
     inputSummaryAvailable: envelope.inputSummary !== null,
-    isCurrent: metadata.versionId === latestVersionId,
+    isLatest: metadata.versionId === latestVersionId,
     virtual: false,
   };
 }
@@ -202,7 +202,7 @@ function createLegacySummary(): ResultVersionSummary {
     dataQuality: 'unknown',
     warningCount: null,
     inputSummaryAvailable: false,
-    isCurrent: true,
+    isLatest: true,
     virtual: true,
   };
 }
@@ -296,7 +296,7 @@ function classifyVersionSnapshot(
         archiveState: 'legacy-current',
         provenanceState: 'legacy-missing',
         verifiedCurrentResult: null,
-        isCurrent: true,
+        isLatest: true,
       },
     };
   }
@@ -330,7 +330,7 @@ function classifyVersionSnapshot(
           ? 'legacy-missing'
           : 'missing',
       verifiedCurrentResult: null,
-      isCurrent: metadata.versionId === archive.index.latestVersionId,
+      isLatest: metadata.versionId === archive.index.latestVersionId,
     },
   };
 }

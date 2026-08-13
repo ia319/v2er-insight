@@ -30,7 +30,7 @@ const HISTORY_COLUMNS: HistoryColumn[] = [
     width: 6,
     value: ({ warningCount }) => (warningCount === null ? '?' : String(warningCount)),
   },
-  { title: '当前', width: 4, value: ({ isCurrent }) => (isCurrent ? '*' : '') },
+  { title: '最新', width: 4, value: ({ isLatest }) => (isLatest ? '*' : '') },
 ];
 
 const WIDE_TERMINAL_CHARACTER =
@@ -121,7 +121,7 @@ function renderResultInfo(selection: SelectedResult): string[] {
     `  数据质量: ${metadata?.dataQuality ?? 'unknown'}`,
     `  归档状态: ${selection.archiveState}`,
     `  Provenance: ${selection.provenanceState}`,
-    `  当前版本: ${selection.isCurrent === null ? 'unknown' : selection.isCurrent ? '是' : '否'}`,
+    `  归档最新版本: ${selection.isLatest === null ? 'unknown' : selection.isLatest ? '是' : '否'}`,
   ];
 }
 

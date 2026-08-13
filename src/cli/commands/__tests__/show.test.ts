@@ -83,7 +83,7 @@ function createSelection(
     archiveState: 'legacy-current',
     provenanceState: 'legacy-missing',
     verifiedCurrentResult: null,
-    isCurrent: true,
+    isLatest: true,
     ...overrides,
   };
 }
@@ -176,7 +176,7 @@ function createHistorySummary(versionId = 'v000001'): ResultVersionSummary {
     dataQuality: 'complete',
     warningCount: 0,
     inputSummaryAvailable: true,
-    isCurrent: true,
+    isLatest: true,
     virtual: false,
   };
 }
@@ -329,7 +329,7 @@ describe('runShow', () => {
   it('should output stable history summaries as JSON or a table', async () => {
     const summaries = [
       createHistorySummary('v000002'),
-      { ...createHistorySummary('v000001'), isCurrent: false },
+      { ...createHistorySummary('v000001'), isLatest: false },
     ];
     mockedQueryResultHistory.mockReturnValue({ status: 'success', summaries });
 
@@ -369,7 +369,7 @@ describe('runShow', () => {
         archiveState: 'verified-history',
         metadata: createMetadata({ dataQuality: 'partial', warningCount: 2 }),
         inputSummary: createInputSummary(true),
-        isCurrent: true,
+        isLatest: true,
       }),
     });
 
@@ -419,7 +419,7 @@ describe('runShow', () => {
         inputSummary: createInputSummary(),
         archiveState: 'verified-current',
         provenanceState: 'verified',
-        isCurrent: true,
+        isLatest: true,
       }),
     });
 

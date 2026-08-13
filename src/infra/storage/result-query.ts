@@ -50,7 +50,7 @@ export interface SelectedResult {
   archiveState: ResultArchiveState;
   provenanceState: ResultProvenanceState;
   verifiedCurrentResult: CurrentResultState | null;
-  isCurrent: boolean | null;
+  isLatest: boolean | null;
 }
 
 export type CurrentResultQueryResult =
@@ -229,7 +229,7 @@ function createSelection(
     inputSummary,
     archiveState,
     ...provenance,
-    isCurrent:
+    isLatest:
       archiveState === 'verified-current' || archiveState === 'legacy-current'
         ? true
         : archiveState === 'tracked-current-diverged'

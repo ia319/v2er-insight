@@ -215,7 +215,7 @@ describe('queryCurrentResult', () => {
     expect(query.selection).toMatchObject({
       archiveState: 'verified-current',
       provenanceState: 'verified',
-      isCurrent: true,
+      isLatest: true,
       metadata: { versionId: 'v000001' },
       inputSummary: { username: 'alice' },
       verifiedCurrentResult: { stale: true, resultVersionId: 'v000001' },
@@ -322,8 +322,8 @@ describe('queryCurrentResult', () => {
     expect(query).toMatchObject({
       status: 'success',
       summaries: [
-        { versionId: 'v000002', isCurrent: true, inputSummaryAvailable: true },
-        { versionId: 'v000001', isCurrent: false, inputSummaryAvailable: true },
+        { versionId: 'v000002', isLatest: true, inputSummaryAvailable: true },
+        { versionId: 'v000001', isLatest: false, inputSummaryAvailable: true },
       ],
     });
     const paths = mocks.readJson.mock.calls.map(([path]) => path);
@@ -344,7 +344,7 @@ describe('queryCurrentResult', () => {
         source: 'version',
         archiveState: 'verified-history',
         metadata: { versionId: 'v000001' },
-        isCurrent: false,
+        isLatest: false,
       },
     });
     const paths = mocks.readJson.mock.calls.map(([path]) => path);
