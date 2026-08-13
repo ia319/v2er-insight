@@ -65,6 +65,34 @@ export function createResultQueryNotices(
     });
   }
 
+  if (selection.source === 'version' && selection.metadata?.dataQuality === 'partial') {
+    notices.push({
+      code: 'DATA_SNAPSHOT_PARTIAL',
+      severity: 'warning',
+      summary: '该结果版本基于不完整抓取数据',
+      details: ['缺失记录状态未知；相关结论置信度降低。'],
+    });
+  }
+
+  const warningCount = selection.metadata?.warningCount ?? 0;
+  if (warningCount > 0) {
+    notices.push({
+      code: 'RESULT_RESPONSE_NORMALIZED',
+      severity: 'warning',
+      summary: `该结果保存前记录了 ${warningCount} 个响应警告`,
+      details: ['具体警告内容未持久化，无法从当前版本重建。'],
+    });
+  }
+
+  if (selection.inputSummary === null) {
+    notices.push({
+      code: 'RESULT_INPUT_SUMMARY_UNAVAILABLE',
+      severity: 'info',
+      summary: '该结果没有版本绑定的账号与活动事实',
+      details: ['报告仍可查看；不会使用当前源数据补写历史输入。'],
+    });
+  }
+
   if (selection.verifiedCurrentResult) {
     notices.push(...createResultStateNotices(username, selection.verifiedCurrentResult));
   }

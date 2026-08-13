@@ -89,6 +89,8 @@ export type NoticeCode =
   | 'RESULT_CURRENT_UNTRACKED'
   | 'RESULT_ARCHIVE_UNAVAILABLE'
   | 'RESULT_PROVENANCE_UNAVAILABLE'
+  | 'RESULT_RESPONSE_NORMALIZED'
+  | 'RESULT_INPUT_SUMMARY_UNAVAILABLE'
   | 'SESSION_SOURCE_DATA_MISSING'
   | 'SESSION_CONTEXT_NEAR_LIMIT';
 export type NoticeSeverity = 'info' | 'warning';
@@ -121,6 +123,8 @@ export interface StepRunResult {
   meta?: Record<string, unknown>;
   /** Structured user impact for a continuing workflow step. */
   notices?: UserNotice[];
+  /** Prevents callers from rendering notices already emitted before command output. */
+  noticesRendered?: boolean;
 }
 
 /** 本地中间产物状态 */

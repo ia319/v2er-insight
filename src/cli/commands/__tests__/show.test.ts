@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AIAnalysisResult } from '@/core/ai';
+import type { ResultInputSummary, ResultVersionMetadata } from '@/core/result-version';
 import type { ResultVersionSummary, SelectedResult } from '@/infra/storage';
 
 const mockedQueryCurrentResult = vi.hoisted(() => vi.fn());
@@ -9,6 +10,8 @@ const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
   debug: vi.fn(),
+  warn: vi.fn(),
+  diagnostic: vi.fn(),
 }));
 
 vi.mock('@/infra/storage', () => ({
@@ -85,6 +88,80 @@ function createSelection(
   };
 }
 
+function createInputSummary(partial = false): ResultInputSummary {
+  return {
+    username: 'testuser',
+    analyzerConfig: { inactivityThresholdDays: 60, nodeDistributionTopN: 3 },
+    dataQuality: {
+      capturedAt: '2026-08-13T02:00:00.000Z',
+      topics: { status: 'complete', totalExpected: 2, fetchedCount: 2, failedCount: 0 },
+      replies: {
+        status: partial ? 'partial' : 'complete',
+        totalExpected: 4,
+        fetchedCount: partial ? 3 : 4,
+        failedCount: partial ? 1 : 0,
+      },
+    },
+    userOverview: {
+      joinDate: '2020-01-01T00:00:00.000Z',
+      lastActiveTime: '2026-08-10T02:00:00.000Z',
+      topicReplyRatio: 2 / 3,
+      totalTopics: 2,
+      totalReplies: 3,
+      isTopicsHidden: false,
+      dailyRanking: 42,
+    },
+    activitySummary: {
+      totalPeriods: 1,
+      periods: [
+        {
+          timeRange: '2026-08-01 to 2026-08-10',
+          topicCount: 2,
+          avgTopicReplyCount: 2,
+          avgTopicClickCount: 10,
+          avgTopicLifecycleDays: 1,
+          topicInteractionRatio: 0.2,
+          topicHourDistribution: { 9: 2 },
+          topicNodeDistribution: { qna: 2 },
+          replyCount: 3,
+          avgReplyLength: 20,
+          directReplyRatio: 0.5,
+          avgRepliedTopicHeat: 4,
+          replyWeekdayDistribution: { 周一: 1 },
+          replyNodeDistribution: { programming: 3 },
+        },
+      ],
+    },
+  };
+}
+
+function createMetadata(overrides: Partial<ResultVersionMetadata> = {}): ResultVersionMetadata {
+  return {
+    versionId: 'v000001',
+    sequence: 1,
+    origin: 'analysis',
+    deliveryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    previousLatestVersionId: null,
+    previousCurrentHash: null,
+    createdAt: '2026-08-13T02:00:00.000Z',
+    savedAt: '2026-08-13T02:00:01.000Z',
+    provider: 'gemini',
+    model: 'gemini-test',
+    reasoningLevel: 'high',
+    localSessionId: 'session-1',
+    externalThreadId: null,
+    threadName: null,
+    promptHash: 'a'.repeat(64),
+    analysisFingerprint: 'a'.repeat(64),
+    payloadHash: 'a'.repeat(64),
+    resultHash: 'a'.repeat(64),
+    dataQuality: 'complete',
+    warningCount: 0,
+    appVersion: '1.2.0',
+    ...overrides,
+  };
+}
+
 function createHistorySummary(versionId = 'v000001'): ResultVersionSummary {
   return {
     versionId,
@@ -102,6 +179,16 @@ function createHistorySummary(versionId = 'v000001'): ResultVersionSummary {
     isCurrent: true,
     virtual: false,
   };
+}
+
+function expectWarningsBeforeOutput(consoleSpy: ReturnType<typeof vi.spyOn>): void {
+  const warningOrders = mockLogger.warn.mock.invocationCallOrder;
+  const warningOrder = warningOrders[warningOrders.length - 1];
+  const outputOrder = consoleSpy.mock.invocationCallOrder[0];
+  if (warningOrder === undefined || outputOrder === undefined) {
+    throw new Error('Expected warning and output calls');
+  }
+  expect(warningOrder).toBeLessThan(outputOrder);
 }
 
 describe('runShow', () => {
@@ -180,6 +267,8 @@ describe('runShow', () => {
         source: 'current',
         archiveState: 'verified-current',
         provenanceState: 'verified',
+        metadata: createMetadata({ dataQuality: 'partial' }),
+        inputSummary: createInputSummary(true),
         verifiedCurrentResult: {
           analysisFingerprint: 'a'.repeat(64),
           stale: true,
@@ -198,13 +287,18 @@ describe('runShow', () => {
     ]);
     expect(consoleSpy).toHaveBeenCalledTimes(1);
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+    expect(outcome.noticesRendered).toBe(true);
+    expectWarningsBeforeOutput(consoleSpy);
   });
 
   it('should identify a legacy result without guessing provenance', async () => {
     const outcome = await runShow('testuser', {});
 
     expect(outcome.status).toBe('success');
-    expect(outcome.notices?.map((notice) => notice.code)).toEqual(['RESULT_LEGACY_CURRENT']);
+    expect(outcome.notices?.map((notice) => notice.code)).toEqual([
+      'RESULT_LEGACY_CURRENT',
+      'RESULT_INPUT_SUMMARY_UNAVAILABLE',
+    ]);
   });
 
   it('should stop when the result snapshot keeps changing', async () => {
@@ -267,6 +361,27 @@ describe('runShow', () => {
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
   });
 
+  it('should render saved quality warnings before an immutable version', async () => {
+    mockedQueryResultVersion.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(createMockResult(), {
+        source: 'version',
+        archiveState: 'verified-history',
+        metadata: createMetadata({ dataQuality: 'partial', warningCount: 2 }),
+        inputSummary: createInputSummary(true),
+        isCurrent: true,
+      }),
+    });
+
+    const outcome = await runShow('testuser', { version: 'v000001', brief: true });
+
+    expect(outcome.notices?.map(({ code }) => code)).toEqual([
+      'DATA_SNAPSHOT_PARTIAL',
+      'RESULT_RESPONSE_NORMALIZED',
+    ]);
+    expectWarningsBeforeOutput(consoleSpy);
+  });
+
   it('should map empty, missing-version, and corrupt archives to stable reasons', async () => {
     mockedQueryResultHistory.mockReturnValue({ status: 'empty' });
     expect((await runShow('testuser', { history: true })).reasonCode).toBe('SHOW_HISTORY_EMPTY');
@@ -289,12 +404,36 @@ describe('runShow', () => {
     expect(output).toContain('用户画像摘要');
     expect(output).toContain('Full-stack');
     expect(output).toContain('Career growth');
+    expect(output).toContain('风险理由: Normal activity');
   });
 
-  it('should output full format by default', async () => {
+  it('should use verified result context in the full report', async () => {
+    const result = createMockResult();
+    result.professional.tech_stack = [];
+    result.personal.hobbies = [];
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result, {
+        source: 'current',
+        metadata: createMetadata(),
+        inputSummary: createInputSummary(),
+        archiveState: 'verified-current',
+        provenanceState: 'verified',
+        isCurrent: true,
+      }),
+    });
+
     await runShow('testuser', {});
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
+    expect(output).toContain('版本: v000001');
+    expect(output).toContain('用户名: testuser');
+    expect(output).toContain('[抓取覆盖]');
+    expect(output).toContain('2026-08-01 to 2026-08-10');
+    expect(output).toContain('主要发帖节点: qna (2)');
+    expect(output).toContain('演变概述: Grew');
+    expect(output).toContain('技术栈: 未提供');
+    expect(output).toContain('兴趣爱好: 未提供');
     expect(output).toContain('用户画像分析');
     expect(output).toContain('职业画像');
     expect(output).toContain('个人生活');

@@ -72,7 +72,7 @@ export async function runWorkflow(options: RunWorkflowOptions): Promise<RunOutco
       results.push(result);
 
       printStepLine(result, index, plan.length);
-      renderNotices(result.notices);
+      if (!result.noticesRendered) renderNotices(result.notices);
 
       if (result.status === 'partial') {
         hasPartial = true;
