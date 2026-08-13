@@ -7,7 +7,7 @@
 
 import { isAnalyzerOutput, type AnalyzerOutput } from '@/core/analyzer';
 import { buildAnalysisRequest } from '@/core/ai';
-import type { AIAnalysisResult, ValidationResult } from '@/core/ai';
+import { AIResultParseError, type AIAnalysisResult, type ValidationResult } from '@/core/ai';
 import {
   checkAnalyzedProvenance,
   completeResultDelivery,
@@ -69,6 +69,7 @@ function classifyGeminiSessionFailure(
   error: unknown,
   fallback: ReasonCode = 'AI_PROVIDER_FAILED',
 ): ReasonCode {
+  if (error instanceof AIResultParseError) return 'AI_GEMINI_OUTPUT_INVALID';
   if (error instanceof AISessionMigrationConflictError) return 'SESSION_MIGRATION_CONFLICT';
   if (error instanceof AISessionMigrationFailedError) return 'SESSION_MIGRATION_FAILED';
   if (error instanceof AISessionLockBusyError || error instanceof AISessionIndexLockBusyError) {

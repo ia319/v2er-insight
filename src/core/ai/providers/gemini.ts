@@ -9,6 +9,8 @@ import {
   type Content,
 } from '@google/genai';
 import type { ThinkingLevel } from '@/config/types/ai';
+import { AIResultParseError } from '../result-parser';
+import type { AIResultJsonSchema } from '../result-schema';
 import type { ProviderNeutralMessage } from '../sessions/types';
 import type { IAIProvider, SessionOptions } from '../types';
 
@@ -44,6 +46,13 @@ export type GeminiContextInspection =
       status: 'unverified';
       reason: 'model_metadata_or_token_count_unavailable';
     };
+
+export interface GeminiStructuredMessageOptions {
+  systemInstruction: string;
+  thinkingLevel: ThinkingLevel;
+  timeout: number;
+  responseJsonSchema: AIResultJsonSchema;
+}
 
 /** 将项目 ThinkingLevel 转为 SDK 枚举值 */
 function toSdkThinkingLevel(level?: ThinkingLevel): SdkThinkingLevel | undefined {
@@ -169,6 +178,40 @@ export class GeminiProvider implements IAIProvider {
 
     if (!response.text) {
       throw new Error('Empty response from Gemini API');
+    }
+
+    return response.text;
+  }
+
+  /**
+   * Sends one analysis turn with a strict request-level JSON response contract.
+   * @param content - Complete Analyzer payload for the analysis turn.
+   * @param options - Complete request config and expected response schema.
+   * @returns The structured response text for strict runtime validation.
+   * @throws {AIResultParseError} When Gemini returns no structured response text.
+   */
+  async sendStructuredMessage(
+    content: string,
+    options: GeminiStructuredMessageOptions,
+  ): Promise<string> {
+    if (!this.chat) {
+      throw new Error('Chat session not created. Call createSession() first.');
+    }
+
+    // Gemini request config replaces the chat config, so copy every analysis setting explicitly.
+    const response = await this.chat.sendMessage({
+      message: content,
+      config: {
+        systemInstruction: options.systemInstruction,
+        httpOptions: { timeout: options.timeout },
+        thinkingConfig: { thinkingLevel: toSdkThinkingLevel(options.thinkingLevel) },
+        responseMimeType: 'application/json',
+        responseJsonSchema: options.responseJsonSchema,
+      },
+    });
+
+    if (!response.text) {
+      throw new AIResultParseError('invalid_result', 'Gemini returned an empty analysis result');
     }
 
     return response.text;

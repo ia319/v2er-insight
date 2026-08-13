@@ -1,6 +1,10 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AnalyzerOutput } from '@/core/analyzer';
-import type { AIAnalysisResult } from '@/core/ai';
+import {
+  AI_ANALYSIS_RESULT_JSON_SCHEMA,
+  AIResultParseError,
+  type AIAnalysisResult,
+} from '@/core/ai';
 import type { ThinkingLevel } from '@/config';
 import {
   computeAnalysisConfigHash,
@@ -41,7 +45,11 @@ const mockSendMessage = vi.hoisted(() => vi.fn());
 
 const MockGeminiProvider = vi.hoisted(() => {
   return vi.fn().mockImplementation(function () {
-    return { createSession: mockCreateSession, sendMessage: mockSendMessage };
+    return {
+      createSession: mockCreateSession,
+      sendMessage: mockSendMessage,
+      sendStructuredMessage: mockSendMessage,
+    };
   });
 });
 
@@ -85,6 +93,8 @@ vi.mock('@/core/ai', async (importOriginal) => {
     GeminiProvider: MockGeminiProvider,
     buildAnalysisRequest: mockedBuildAnalysisRequest,
     parseResponse: mockedParseResponse,
+    parseAIAnalysisResult: (rawText: string) =>
+      (mockedParseResponse(rawText) as { data: AIAnalysisResult }).data,
     resolveApiKey: mockedResolveApiKey,
     withRetry: mockedWithRetry,
   };
@@ -761,7 +771,12 @@ describe('runAi', () => {
       history: [],
     });
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
-    expect(mockSendMessage).toHaveBeenCalledWith(request.payload);
+    expect(mockSendMessage).toHaveBeenCalledWith(request.payload, {
+      systemInstruction: request.systemPrompt,
+      thinkingLevel: 'high',
+      timeout: 60_000,
+      responseJsonSchema: AI_ANALYSIS_RESULT_JSON_SCHEMA,
+    });
     const [createSessionOrder] = mockCreateSession.mock.invocationCallOrder;
     const [sendMessageOrder] = mockSendMessage.mock.invocationCallOrder;
     if (createSessionOrder === undefined || sendMessageOrder === undefined) {
@@ -1054,7 +1069,8 @@ describe('runAi', () => {
     );
   });
 
-  it('should not persist or clean data when response parsing fails', async () => {
+  it('should reject invalid Gemini output without advancing delivery state', async () => {
+    const context = mockInput();
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
@@ -1065,7 +1081,7 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('invalid response');
     mockedParseResponse.mockImplementation(() => {
-      throw new Error('Invalid response JSON');
+      throw new AIResultParseError('invalid_json', 'Invalid response JSON');
     });
 
     const result = await runAi('testuser', {});
@@ -1073,8 +1089,17 @@ describe('runAi', () => {
     expect(mockedParseResponse).toHaveBeenCalledOnce();
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
+    expect(mockedCompleteGeminiAnalysisSession).not.toHaveBeenCalled();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
-    expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
+    expect(context.getState().pendingResultDelivery).toMatchObject({
+      providerKey: expect.stringMatching(/^gemini:/),
+      resultVersionId: null,
+    });
+    expect(context.getState().providers).toBeUndefined();
+    expect(result.reasonCode).toBe('AI_GEMINI_OUTPUT_INVALID');
+    expect(result.recoverActions).toContainEqual(
+      expect.objectContaining({ content: 'v2er ai testuser --provider gemini' }),
+    );
   });
 
   it('should report failure when the single payload cannot be sent', async () => {
@@ -1098,7 +1123,7 @@ describe('runAi', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
   });
 
-  it('should log warnings from AI response', async () => {
+  it('should persist strict Gemini output without normalization warnings', async () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
@@ -1109,14 +1134,15 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({
-      data: { summary: 'result' },
+      data: createAiResult('Strict result'),
       warnings: ['Missing field: social'],
     });
     mockedCleanExpiredData.mockReturnValue(noCleanupResult);
 
-    await runAi('testuser', {});
+    const result = await runAi('testuser', {});
 
-    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Missing field'));
+    expect(result).toMatchObject({ status: 'success', meta: { warningCount: 0 } });
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Missing field'));
   });
 
   it('should suppress success detail logs in pipeline mode', async () => {

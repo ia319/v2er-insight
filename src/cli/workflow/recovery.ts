@@ -131,6 +131,18 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '完成 API Key 配置后重试 AI 步骤',
     },
   ],
+  AI_GEMINI_OUTPUT_INVALID: [
+    {
+      type: 'instruction',
+      content: '检查 Gemini 返回的最终分析内容和模型可用性',
+      description: 'Gemini 返回为空、JSON 无效或不符合完整画像结果契约，结果未保存',
+    },
+    {
+      type: 'command',
+      content: 'v2er ai <username> --provider gemini',
+      description: '使用相同 Provider 重新执行严格结构化分析',
+    },
+  ],
   AI_INVALID_THINKING_LEVEL: [
     {
       type: 'instruction',
