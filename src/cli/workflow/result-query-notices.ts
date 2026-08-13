@@ -53,7 +53,7 @@ export function createResultQueryNotices(
   }
 
   if (
-    selection.source !== 'legacy' &&
+    selection.source === 'current' &&
     selection.provenanceState !== 'verified' &&
     selection.provenanceState !== 'legacy-missing'
   ) {

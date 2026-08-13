@@ -6,8 +6,6 @@ import {
   type CurrentResultState,
 } from '@/core/provenance';
 import {
-  isResultVersionIndex,
-  isStoredResultVersion,
   type ResultInputSummary,
   type ResultVersionIndex,
   type ResultVersionMetadata,
@@ -15,12 +13,22 @@ import {
 } from '@/core/result-version';
 import { getDataFilePath } from './paths';
 import { readJsonFileSnapshot, type JsonFileSnapshot, type ReadState } from './read-state';
-import { listStoredResultVersionIds } from './result-version-files';
-import { readResultVersionLock, type ResultVersionLockState } from './result-version-lock';
-import { getResultVersionFilePath, getResultVersionIndexPath } from './result-version-paths';
+import {
+  hasResultWriteLock,
+  readResultCandidateIdsSnapshot,
+  readResultLockSnapshot,
+  readResultVersionIndexSnapshot,
+  readStableResultSnapshot,
+  readStoredResultVersionSnapshot,
+  resultCandidateIdsMatchIndex,
+  resultVersionMetadataMatches,
+  type ResultCandidateIdsSnapshot,
+  type ResultLockSnapshot,
+} from './result-query-shared';
 
 export type ResultArchiveState =
   | 'verified-current'
+  | 'verified-history'
   | 'legacy-current'
   | 'tracked-current-diverged'
   | 'untracked-current'
@@ -35,7 +43,7 @@ export type ResultProvenanceState =
 
 export interface SelectedResult {
   username: string;
-  source: 'current' | 'legacy';
+  source: 'current' | 'version' | 'legacy';
   result: AIAnalysisResult;
   metadata: ResultVersionMetadata | null;
   inputSummary: ResultInputSummary | null;
@@ -52,22 +60,14 @@ export type CurrentResultQueryResult =
   | { status: 'busy' }
   | { status: 'selected'; selection: SelectedResult };
 
-type CandidateIdsSnapshot = JsonFileSnapshot<string[]>;
-type LockSnapshotState = ResultVersionLockState | { status: 'unreadable'; error: unknown };
-
-interface LockSnapshot {
-  state: LockSnapshotState;
-  identity: string;
-}
-
 interface CurrentQuerySnapshot {
   current: JsonFileSnapshot<AIAnalysisResult>;
   index: JsonFileSnapshot<ResultVersionIndex>;
-  candidateIds: CandidateIdsSnapshot;
+  candidateIds: ResultCandidateIdsSnapshot;
   analysisState: JsonFileSnapshot<AnalysisState>;
   envelopes: Map<string, JsonFileSnapshot<StoredResultVersion>>;
   associatedVersionId: string | null;
-  lock: LockSnapshot;
+  lock: ResultLockSnapshot;
   identity: string;
 }
 
@@ -80,62 +80,18 @@ function parseAnalysisState(value: unknown): AnalysisState | undefined {
   return isAnalysisStateV2(value) ? value : undefined;
 }
 
-function parseStoredResultVersion(
-  username: string,
-  versionId: string,
-  value: unknown,
-): StoredResultVersion | undefined {
-  if (!isStoredResultVersion(value) || value.metadata.versionId !== versionId) return undefined;
-  if (value.inputSummary !== null && value.inputSummary.username !== username) return undefined;
-  return value;
-}
-
-function readCandidateIdsSnapshot(username: string): CandidateIdsSnapshot {
-  try {
-    const value = listStoredResultVersionIds(username);
-    return {
-      state: { status: 'valid', value },
-      identity: hashCanonicalJson(value),
-    };
-  } catch (error) {
-    return {
-      state: { status: 'unreadable', error },
-      identity: `unreadable:${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
-
-function readLockSnapshot(username: string): LockSnapshot {
-  try {
-    const state = readResultVersionLock(username);
-    return {
-      state,
-      identity: state.status === 'locked' ? hashCanonicalJson(state.owner) : state.status,
-    };
-  } catch (error) {
-    return {
-      state: { status: 'unreadable', error },
-      identity: `unreadable:${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
-
 function readCurrentQuerySnapshot(username: string): CurrentQuerySnapshot {
   const current = readJsonFileSnapshot(getDataFilePath(username, 'result'), (value) =>
     isAIAnalysisResult(value) ? value : undefined,
   );
-  const index = readJsonFileSnapshot(getResultVersionIndexPath(username), (value) =>
-    isResultVersionIndex(value) ? value : undefined,
-  );
-  const candidateIds = readCandidateIdsSnapshot(username);
+  const index = readResultVersionIndexSnapshot(username);
+  const candidateIds = readResultCandidateIdsSnapshot(username);
   const envelopes = new Map<string, JsonFileSnapshot<StoredResultVersion>>();
 
   const readEnvelope = (versionId: string): JsonFileSnapshot<StoredResultVersion> => {
     const existing = envelopes.get(versionId);
     if (existing) return existing;
-    const snapshot = readJsonFileSnapshot(getResultVersionFilePath(username, versionId), (value) =>
-      parseStoredResultVersion(username, versionId, value),
-    );
+    const snapshot = readStoredResultVersionSnapshot(username, versionId);
     envelopes.set(versionId, snapshot);
     return snapshot;
   };
@@ -173,7 +129,7 @@ function readCurrentQuerySnapshot(username: string): CurrentQuerySnapshot {
     if (associatedVersionId !== null) readEnvelope(associatedVersionId);
   }
 
-  const lock = readLockSnapshot(username);
+  const lock = readResultLockSnapshot(username);
   const envelopeIdentities = [...envelopes.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([versionId, snapshot]) => [versionId, snapshot.identity]);
@@ -198,26 +154,13 @@ function readCurrentQuerySnapshot(username: string): CurrentQuerySnapshot {
   };
 }
 
-function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function metadataMatches(envelope: StoredResultVersion, metadata: ResultVersionMetadata): boolean {
-  return hashCanonicalJson(envelope.metadata) === hashCanonicalJson(metadata);
-}
-
 function hasCoherentArchive(snapshot: CurrentQuerySnapshot): boolean {
   if (snapshot.index.state.status !== 'valid' || snapshot.candidateIds.state.status !== 'valid') {
     return false;
   }
 
   const index = snapshot.index.state.value;
-  if (
-    !arraysEqual(
-      snapshot.candidateIds.state.value,
-      index.versions.map(({ versionId }) => versionId),
-    )
-  ) {
+  if (!resultCandidateIdsMatchIndex(snapshot.candidateIds.state.value, index)) {
     return false;
   }
   if (index.latestVersionId === null) return true;
@@ -227,7 +170,7 @@ function hasCoherentArchive(snapshot: CurrentQuerySnapshot): boolean {
   return (
     latestMetadata !== undefined &&
     latestEnvelope?.status === 'valid' &&
-    metadataMatches(latestEnvelope.value, latestMetadata)
+    resultVersionMetadataMatches(latestEnvelope.value, latestMetadata)
   );
 }
 
@@ -365,7 +308,7 @@ function classifyCurrentSnapshot(
   if (
     associatedMetadata !== null &&
     (associatedEnvelope?.status !== 'valid' ||
-      !metadataMatches(associatedEnvelope.value, associatedMetadata))
+      !resultVersionMetadataMatches(associatedEnvelope.value, associatedMetadata))
   ) {
     const selection = createSelection(username, snapshot, result, 'unavailable', null, null);
     return { result: { status: 'selected', selection }, associationComplete: false };
@@ -389,10 +332,6 @@ function classifyCurrentSnapshot(
   };
 }
 
-function hasResultWriteLock(snapshot: CurrentQuerySnapshot): boolean {
-  return snapshot.lock.state.status !== 'missing';
-}
-
 /**
  * Resolves the current result from a bounded, read-only storage snapshot.
  *
@@ -400,18 +339,11 @@ function hasResultWriteLock(snapshot: CurrentQuerySnapshot): boolean {
  * @returns A selected result or an explicit missing, invalid, or busy state.
  */
 export function queryCurrentResult(username: string): CurrentResultQueryResult {
-  const first = readCurrentQuerySnapshot(username);
-  const second = readCurrentQuerySnapshot(username);
-  let stable = second;
+  const stable = readStableResultSnapshot(() => readCurrentQuerySnapshot(username));
+  if (stable.status === 'busy') return stable;
 
-  if (first.identity !== second.identity) {
-    const retry = readCurrentQuerySnapshot(username);
-    if (second.identity !== retry.identity) return { status: 'busy' };
-    stable = retry;
-  }
-
-  const classified = classifyCurrentSnapshot(username, stable);
-  return !classified.associationComplete && hasResultWriteLock(stable)
+  const classified = classifyCurrentSnapshot(username, stable.snapshot);
+  return !classified.associationComplete && hasResultWriteLock(stable.snapshot.lock)
     ? { status: 'busy' }
     : classified.result;
 }

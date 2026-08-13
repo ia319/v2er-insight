@@ -520,11 +520,39 @@ const RECOVERY_MAP: Record<ReasonCode, RecoveryAction[]> = {
       description: '重新生成结构完整的 result.json',
     },
   ],
+  SHOW_HISTORY_EMPTY: [
+    {
+      type: 'command',
+      content: 'v2er ai <username>',
+      description: '先生成一个分析结果版本，再查看历史',
+    },
+  ],
+  SHOW_VERSION_NOT_FOUND: [
+    {
+      type: 'command',
+      content: 'v2er show <username> --history',
+      description: '列出可用的正式版本 ID',
+    },
+  ],
+  SHOW_INVALID_OPTION_COMBINATION: [
+    {
+      type: 'instruction',
+      content: '分别使用 --json 或 --brief；--history 不与 --brief、--version 同时使用',
+      description: '修正互斥的 show 选项后重试',
+    },
+  ],
   RESULT_VERSION_BUSY: [
     {
       type: 'instruction',
       content: '等待同一用户的结果写入完成后重试',
       description: '查询期间结果版本仍在变化，当前读取未被当作稳定快照',
+    },
+  ],
+  RESULT_VERSION_CORRUPT: [
+    {
+      type: 'instruction',
+      content: '保留 result.json 和 results/ 目录，检查文件权限与版本文件关联',
+      description: '归档校验失败；查询不会跳过、删除或自动修复文件',
     },
   ],
   UNKNOWN_ERROR: [],

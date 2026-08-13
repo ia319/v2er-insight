@@ -28,6 +28,7 @@ vi.mock('../result-version-paths', () => ({
 }));
 
 import { queryCurrentResult } from '../result-query';
+import { queryResultHistory, queryResultVersion } from '../result-history-query';
 
 const RESULT_PATH = 'C:\\data\\alice\\result.json';
 const ANALYSIS_STATE_PATH = 'C:\\data\\alice\\analysisState.json';
@@ -309,5 +310,107 @@ describe('queryCurrentResult', () => {
       },
     });
     expect(queryCurrentResult('alice')).toEqual({ status: 'busy' });
+  });
+
+  it('lists verified history in reverse sequence order without reading current data', () => {
+    const first = createAIAnalysisResultFixture();
+    const second = { ...createAIAnalysisResultFixture(), summary: 'Second result' };
+    installArchive([first, second]);
+
+    const query = queryResultHistory('alice');
+
+    expect(query).toMatchObject({
+      status: 'success',
+      summaries: [
+        { versionId: 'v000002', isCurrent: true, inputSummaryAvailable: true },
+        { versionId: 'v000001', isCurrent: false, inputSummaryAvailable: true },
+      ],
+    });
+    const paths = mocks.readJson.mock.calls.map(([path]) => path);
+    expect(paths).not.toContain(RESULT_PATH);
+    expect(paths).not.toContain(ANALYSIS_STATE_PATH);
+  });
+
+  it('selects only indexed versions without reading current or provenance files', () => {
+    const first = createAIAnalysisResultFixture();
+    const second = { ...createAIAnalysisResultFixture(), summary: 'Second result' };
+    installArchive([first, second]);
+
+    const query = queryResultVersion('alice', 'v000001');
+
+    expect(query).toMatchObject({
+      status: 'selected',
+      selection: {
+        source: 'version',
+        archiveState: 'verified-history',
+        metadata: { versionId: 'v000001' },
+        isCurrent: false,
+      },
+    });
+    const paths = mocks.readJson.mock.calls.map(([path]) => path);
+    expect(paths).not.toContain(RESULT_PATH);
+    expect(paths).not.toContain(ANALYSIS_STATE_PATH);
+    expect(paths).not.toContain(getVersionPath('v000002'));
+  });
+
+  it('exposes a read-only virtual legacy history and version', () => {
+    const result = createAIAnalysisResultFixture();
+    files.set(RESULT_PATH, { status: 'value', value: result });
+
+    expect(queryResultHistory('alice')).toMatchObject({
+      status: 'success',
+      summaries: [
+        {
+          versionId: 'v000001',
+          origin: 'legacy',
+          provider: 'unknown',
+          virtual: true,
+          inputSummaryAvailable: false,
+        },
+      ],
+    });
+    expect(queryResultVersion('alice', 'v000001')).toMatchObject({
+      status: 'selected',
+      selection: { source: 'legacy', archiveState: 'legacy-current', result },
+    });
+  });
+
+  it('rejects a noncanonical version ID before resolving storage paths', () => {
+    expect(queryResultVersion('alice', 'v1')).toEqual({ status: 'not-found' });
+    expect(mocks.readJson).not.toHaveBeenCalled();
+    expect(mocks.listIds).not.toHaveBeenCalled();
+    expect(mocks.readLock).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for damaged or unindexed archive entries and reports an active writer', () => {
+    const result = createAIAnalysisResultFixture();
+    installArchive([result]);
+    files.delete(getVersionPath('v000001'));
+    expect(queryResultHistory('alice')).toEqual({ status: 'corrupt', reason: 'missing' });
+
+    files.set(getVersionPath('v000001'), {
+      status: 'value',
+      value: createVersion(createMetadata(1, result, null), result),
+    });
+    candidateIds = [...candidateIds, 'v000009'];
+    files.set(getVersionPath('v000009'), {
+      status: 'value',
+      value: createVersion(createMetadata(9, result, 'v000008'), result),
+    });
+    expect(queryResultVersion('alice', 'v000009')).toEqual({
+      status: 'corrupt',
+      reason: 'mismatched',
+    });
+
+    mocks.readLock.mockReturnValue({
+      status: 'locked',
+      owner: {
+        schemaVersion: 1,
+        pid: 123,
+        acquiredAt: SAVED_AT,
+        token: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+    });
+    expect(queryResultHistory('alice')).toEqual({ status: 'busy' });
   });
 });

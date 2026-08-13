@@ -34,10 +34,12 @@ if (configLogLevel) {
 // 为原生 fetch() 设置代理（AI 模块使用）
 initFetchProxy();
 
+// Keep options after a subcommand local so show can use --version for result selection.
 program
   .name('v2er')
   .description('V2EX user insight - Analysis and profiling tool')
-  .version(packageJson.version);
+  .version(packageJson.version)
+  .enablePositionalOptions();
 
 // 主命令 - 一键分析
 program
@@ -142,13 +144,18 @@ program
   .argument('<username>', 'V2EX username')
   .option('--json', 'Output raw JSON')
   .option('--brief', 'Show brief summary only')
+  .option('--history', 'List saved result versions')
+  .option('--version <id>', 'Show a saved result version')
   .option('-v, --verbose', 'Show debug output')
   .action(async (username, _options, command) => {
     const opts = command.optsWithGlobals();
     if (opts.verbose) logger.setLevel('debug');
     const result = await runShow(username, opts);
     renderNotices(result.notices);
-    if (result.status === 'failed') process.exitCode = 1;
+    if (result.status === 'failed') {
+      renderRecoveryActions(result.recoverActions);
+      process.exitCode = 1;
+    }
   });
 
 // config - 配置管理

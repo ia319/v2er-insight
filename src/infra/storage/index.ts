@@ -38,6 +38,13 @@ export type {
 } from './result-query';
 export { queryCurrentResult } from './result-query';
 export type {
+  ResultArchiveCorruption,
+  ResultHistoryQueryResult,
+  ResultVersionQueryResult,
+  ResultVersionSummary,
+} from './result-history-query';
+export { queryResultHistory, queryResultVersion } from './result-history-query';
+export type {
   ResultVersionDeliveryRecovery,
   ResultVersionSaveErrorCode,
 } from './save-result-version';

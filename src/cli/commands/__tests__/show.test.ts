@@ -1,8 +1,10 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AIAnalysisResult } from '@/core/ai';
-import type { SelectedResult } from '@/infra/storage';
+import type { ResultVersionSummary, SelectedResult } from '@/infra/storage';
 
 const mockedQueryCurrentResult = vi.hoisted(() => vi.fn());
+const mockedQueryResultHistory = vi.hoisted(() => vi.fn());
+const mockedQueryResultVersion = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
@@ -11,6 +13,8 @@ const mockLogger = vi.hoisted(() => ({
 
 vi.mock('@/infra/storage', () => ({
   queryCurrentResult: mockedQueryCurrentResult,
+  queryResultHistory: mockedQueryResultHistory,
+  queryResultVersion: mockedQueryResultVersion,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -81,6 +85,25 @@ function createSelection(
   };
 }
 
+function createHistorySummary(versionId = 'v000001'): ResultVersionSummary {
+  return {
+    versionId,
+    sequence: Number(versionId.slice(1)),
+    origin: 'analysis',
+    createdAt: '2026-08-13T02:00:00.000Z',
+    savedAt: '2026-08-13T02:00:01.000Z',
+    provider: 'gemini',
+    model: 'gemini-test',
+    reasoningLevel: 'high',
+    sessionName: 'session-1',
+    dataQuality: 'complete',
+    warningCount: 0,
+    inputSummaryAvailable: true,
+    isCurrent: true,
+    virtual: false,
+  };
+}
+
 describe('runShow', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
 
@@ -89,6 +112,17 @@ describe('runShow', () => {
     mockedQueryCurrentResult.mockReturnValue({
       status: 'selected',
       selection: createSelection(createMockResult()),
+    });
+    mockedQueryResultHistory.mockReturnValue({
+      status: 'success',
+      summaries: [createHistorySummary()],
+    });
+    mockedQueryResultVersion.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(createMockResult(), {
+        source: 'version',
+        archiveState: 'verified-history',
+      }),
     });
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
@@ -101,6 +135,20 @@ describe('runShow', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('testuser'));
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('v2er ai'));
     expect(outcome.reasonCode).toBe('SHOW_RESULT_MISSING');
+  });
+
+  it('should direct a missing current result to its verified archive', async () => {
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'missing',
+      latestVersionId: 'v000003',
+    });
+
+    const outcome = await runShow('testuser', {});
+
+    expect(outcome.recoverActions?.map(({ content }) => content)).toEqual([
+      'v2er show testuser --history',
+      'v2er show testuser --version v000003',
+    ]);
   });
 
   it('should reject a result that does not satisfy the persisted contract', async () => {
@@ -166,6 +214,72 @@ describe('runShow', () => {
 
     expect(outcome.reasonCode).toBe('RESULT_VERSION_BUSY');
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it('should reject conflicting options before starting a query', async () => {
+    const invalidOptions = [
+      { json: true, brief: true },
+      { history: true, brief: true },
+      { history: true, version: 'v000001' },
+    ];
+    for (const options of invalidOptions) {
+      expect((await runShow('testuser', options)).reasonCode).toBe(
+        'SHOW_INVALID_OPTION_COMBINATION',
+      );
+    }
+    expect(mockedQueryCurrentResult).not.toHaveBeenCalled();
+    expect(mockedQueryResultHistory).not.toHaveBeenCalled();
+    expect(mockedQueryResultVersion).not.toHaveBeenCalled();
+  });
+
+  it('should output stable history summaries as JSON or a table', async () => {
+    const summaries = [
+      createHistorySummary('v000002'),
+      { ...createHistorySummary('v000001'), isCurrent: false },
+    ];
+    mockedQueryResultHistory.mockReturnValue({ status: 'success', summaries });
+
+    await runShow('testuser', { history: true, json: true });
+    expect(consoleSpy).toHaveBeenLastCalledWith(JSON.stringify(summaries, null, 2));
+
+    consoleSpy.mockClear();
+    await runShow('testuser', { history: true });
+    const output = consoleSpy.mock.calls.map((call: unknown[]) => call[0]).join('\n');
+    expect(output).toContain('结果版本历史');
+    expect(output).toContain('v000002');
+    expect(output).toContain('Provider');
+  });
+
+  it('should display the selected immutable version without querying current', async () => {
+    const result = createMockResult({ summary: 'Archived result' });
+    mockedQueryResultVersion.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result, {
+        source: 'version',
+        archiveState: 'verified-history',
+      }),
+    });
+
+    await runShow('testuser', { version: 'v000002', json: true });
+
+    expect(mockedQueryResultVersion).toHaveBeenCalledWith('testuser', 'v000002');
+    expect(mockedQueryCurrentResult).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+  });
+
+  it('should map empty, missing-version, and corrupt archives to stable reasons', async () => {
+    mockedQueryResultHistory.mockReturnValue({ status: 'empty' });
+    expect((await runShow('testuser', { history: true })).reasonCode).toBe('SHOW_HISTORY_EMPTY');
+
+    mockedQueryResultVersion.mockReturnValue({ status: 'not-found' });
+    const missingVersion = await runShow('testuser', { version: 'v000009' });
+    expect(missingVersion.reasonCode).toBe('SHOW_VERSION_NOT_FOUND');
+    expect(missingVersion.recoverActions?.[0]?.content).toBe('v2er show testuser --history');
+
+    mockedQueryResultHistory.mockReturnValue({ status: 'corrupt', reason: 'mismatched' });
+    expect((await runShow('testuser', { history: true })).reasonCode).toBe(
+      'RESULT_VERSION_CORRUPT',
+    );
   });
 
   it('should output brief format with --brief flag', async () => {
