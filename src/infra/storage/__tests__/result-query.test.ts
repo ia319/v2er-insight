@@ -76,12 +76,11 @@ function createMetadata(
   previousLatestVersionId: string | null,
 ): ResultVersionMetadata {
   const versionId = `v${String(sequence).padStart(6, '0')}`;
-  const deliveryPrefix = sequence === 1 ? 'a' : 'b';
   return {
     versionId,
     sequence,
     origin: 'analysis',
-    deliveryId: `${deliveryPrefix.repeat(8)}-${deliveryPrefix.repeat(4)}-4${deliveryPrefix.repeat(3)}-8${deliveryPrefix.repeat(3)}-${deliveryPrefix.repeat(12)}`,
+    deliveryId: `00000000-0000-4000-8000-${sequence.toString(16).padStart(12, '0')}`,
     previousLatestVersionId,
     previousCurrentHash: null,
     createdAt: SAVED_AT,
@@ -271,6 +270,22 @@ describe('queryCurrentResult', () => {
     expect(queryCurrentResult('alice')).toMatchObject({
       status: 'selected',
       selection: { archiveState: 'unavailable', metadata: null },
+    });
+  });
+
+  it('treats an ambiguous indexed association as unavailable', () => {
+    const current = createAIAnalysisResultFixture();
+    const latest = { ...createAIAnalysisResultFixture(), summary: 'Latest result' };
+    files.set(RESULT_PATH, { status: 'value', value: current });
+    installArchive([current, current, latest]);
+
+    expect(queryCurrentResult('alice')).toMatchObject({
+      status: 'selected',
+      selection: {
+        archiveState: 'unavailable',
+        metadata: null,
+        isLatest: null,
+      },
     });
   });
 

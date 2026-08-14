@@ -301,14 +301,15 @@ function classifyCurrentSnapshot(
     snapshot.associatedVersionId === null
       ? null
       : (matches.find(({ versionId }) => versionId === snapshot.associatedVersionId) ?? null);
-  const associatedEnvelope =
-    associatedMetadata === null
-      ? null
-      : snapshot.envelopes.get(associatedMetadata.versionId)?.state;
+  if (associatedMetadata === null) {
+    const selection = createSelection(username, snapshot, result, 'unavailable', null, null);
+    return { result: { status: 'selected', selection }, associationComplete: false };
+  }
+
+  const associatedEnvelope = snapshot.envelopes.get(associatedMetadata.versionId)?.state;
   if (
-    associatedMetadata !== null &&
-    (associatedEnvelope?.status !== 'valid' ||
-      !resultVersionMetadataMatches(associatedEnvelope.value, associatedMetadata))
+    associatedEnvelope?.status !== 'valid' ||
+    !resultVersionMetadataMatches(associatedEnvelope.value, associatedMetadata)
   ) {
     const selection = createSelection(username, snapshot, result, 'unavailable', null, null);
     return { result: { status: 'selected', selection }, associationComplete: false };
