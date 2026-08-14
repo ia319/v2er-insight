@@ -48,7 +48,7 @@
   "engines": {
     "node": ">=20.18.1"
   },
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "@google/genai": "^1.40.0",
