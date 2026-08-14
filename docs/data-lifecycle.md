@@ -16,7 +16,7 @@
 
 `data.keepRaw=true` 是默认配置，对应源数据永久保留。`v2er config reset data` 恢复该配置。
 
-有效的 `analysis-state.json` 产生两类结果状态提示：`DATA_RESULT_STALE` 表示结果落后于当前数据，`DATA_SNAPSHOT_PARTIAL` 表示结果基于不完整抓取。每个成功结果关联不可变 version ID。对应版本文件保存生成时的用户总览、抓取质量和活跃期统计，不保存帖子或回复正文。
+有效的 `analysis-state.json` 产生两类结果状态提示：`DATA_RESULT_STALE` 表示结果落后于当前数据，`DATA_SNAPSHOT_PARTIAL` 表示结果基于不完整抓取。成功的 AI 分析写入当前 `result.json` 和一个不可变结果版本，并在 `analysis-state.json` 中关联对应 version ID。对应版本文件保存生成时的用户总览、抓取质量和活跃期统计，不保存帖子或回复正文。
 
 ## 自动清理
 
