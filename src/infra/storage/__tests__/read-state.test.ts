@@ -10,14 +10,16 @@ describe('readJsonFileSnapshot', () => {
     vi.clearAllMocks();
   });
 
-  it('preserves missing, invalid, unreadable, and valid states', () => {
+  it('preserves file states and content identities', () => {
     const missingError = Object.assign(new Error('missing'), { code: 'ENOENT' });
     vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
       throw missingError;
     });
-    expect(readJsonFileSnapshot('missing.json', () => undefined).state).toEqual({
+    const missing = readJsonFileSnapshot('missing.json', () => undefined);
+    expect(missing.state).toEqual({
       status: 'missing',
     });
+    expect(missing.identity).toBe('missing');
 
     vi.mocked(fs.readFileSync).mockReturnValueOnce('{invalid' as never);
     expect(readJsonFileSnapshot('invalid.json', () => undefined).state).toEqual({
@@ -40,11 +42,20 @@ describe('readJsonFileSnapshot', () => {
       error: unreadableError,
     });
 
-    vi.mocked(fs.readFileSync).mockReturnValueOnce('{"value":1}' as never);
-    expect(
-      readJsonFileSnapshot('valid.json', (value) =>
-        typeof value === 'object' && value !== null ? value : undefined,
-      ).state,
-    ).toEqual({ status: 'valid', value: { value: 1 } });
+    vi.mocked(fs.readFileSync).mockReturnValue('{"value":1}' as never);
+    const first = readJsonFileSnapshot('valid.json', (value) =>
+      typeof value === 'object' && value !== null ? value : undefined,
+    );
+    const same = readJsonFileSnapshot('valid.json', (value) =>
+      typeof value === 'object' && value !== null ? value : undefined,
+    );
+    expect(first.state).toEqual({ status: 'valid', value: { value: 1 } });
+    expect(same.identity).toBe(first.identity);
+
+    vi.mocked(fs.readFileSync).mockReturnValue('{"value":2}' as never);
+    const changed = readJsonFileSnapshot('valid.json', (value) =>
+      typeof value === 'object' && value !== null ? value : undefined,
+    );
+    expect(changed.identity).not.toBe(first.identity);
   });
 });

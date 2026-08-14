@@ -204,6 +204,13 @@ describe('runWorkflow', () => {
     const outcome = await runWorkflow({ username: 'alice' });
 
     expect(outcome.overallStatus).toBe('success');
+    expect(outcome.results[0]?.notices).toEqual([
+      {
+        code: 'DATA_SNAPSHOT_PARTIAL',
+        severity: 'warning',
+        summary: '结果基于不完整数据',
+      },
+    ]);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
