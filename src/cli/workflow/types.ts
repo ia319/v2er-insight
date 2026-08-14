@@ -25,6 +25,7 @@ export type ReasonCode =
   | 'AI_PROVENANCE_MISSING'
   | 'AI_SOURCE_MISMATCH'
   | 'AI_API_KEY_MISSING'
+  | 'AI_GEMINI_OUTPUT_INVALID'
   | 'AI_INVALID_THINKING_LEVEL'
   | 'AI_INVALID_PROVIDER_OPTIONS'
   | 'AI_CODEX_BUSY'
@@ -61,6 +62,11 @@ export type ReasonCode =
   | 'SESSION_CLEAR_FAILED'
   | 'SHOW_RESULT_MISSING'
   | 'SHOW_RESULT_INVALID'
+  | 'SHOW_HISTORY_EMPTY'
+  | 'SHOW_VERSION_NOT_FOUND'
+  | 'SHOW_INVALID_OPTION_COMBINATION'
+  | 'RESULT_VERSION_BUSY'
+  | 'RESULT_VERSION_CORRUPT'
   | 'UNKNOWN_ERROR';
 
 /** 步骤失败或部分成功时可提供给用户的恢复动作 */
@@ -78,6 +84,13 @@ export type NoticeCode =
   | 'DATA_FILES_CLEANED'
   | 'DATA_RESULT_STALE'
   | 'DATA_SNAPSHOT_PARTIAL'
+  | 'RESULT_LEGACY_CURRENT'
+  | 'RESULT_CURRENT_NOT_LATEST'
+  | 'RESULT_CURRENT_UNTRACKED'
+  | 'RESULT_ARCHIVE_UNAVAILABLE'
+  | 'RESULT_PROVENANCE_UNAVAILABLE'
+  | 'RESULT_RESPONSE_NORMALIZED'
+  | 'RESULT_INPUT_SUMMARY_UNAVAILABLE'
   | 'SESSION_SOURCE_DATA_MISSING'
   | 'SESSION_CONTEXT_NEAR_LIMIT';
 export type NoticeSeverity = 'info' | 'warning';
@@ -110,6 +123,8 @@ export interface StepRunResult {
   meta?: Record<string, unknown>;
   /** Structured user impact for a continuing workflow step. */
   notices?: UserNotice[];
+  /** Prevents callers from rendering notices already emitted before command output. */
+  noticesRendered?: boolean;
 }
 
 /** 本地中间产物状态 */

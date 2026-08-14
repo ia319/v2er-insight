@@ -185,4 +185,32 @@ describe('runWorkflow', () => {
     expect(outcome.overallStatus).toBe('success');
     expect(mockLogger.warn).toHaveBeenCalledWith('[DATA_FILES_CLEANED] 源数据已清理');
   });
+
+  it('does not render notices already emitted by a workflow step', async () => {
+    mockBuildExecutionPlan.mockReturnValue(['show']);
+    mockRunShow.mockResolvedValue({
+      step: 'show',
+      status: 'success',
+      noticesRendered: true,
+      notices: [
+        {
+          code: 'DATA_SNAPSHOT_PARTIAL',
+          severity: 'warning',
+          summary: '结果基于不完整数据',
+        },
+      ],
+    });
+
+    const outcome = await runWorkflow({ username: 'alice' });
+
+    expect(outcome.overallStatus).toBe('success');
+    expect(outcome.results[0]?.notices).toEqual([
+      {
+        code: 'DATA_SNAPSHOT_PARTIAL',
+        severity: 'warning',
+        summary: '结果基于不完整数据',
+      },
+    ]);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
 });

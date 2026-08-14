@@ -7,7 +7,7 @@
 
 import { isAnalyzerOutput, type AnalyzerOutput } from '@/core/analyzer';
 import { buildAnalysisRequest } from '@/core/ai';
-import type { AIAnalysisResult, ValidationResult } from '@/core/ai';
+import { AIResultParseError, type AIAnalysisResult, type ValidationResult } from '@/core/ai';
 import {
   checkAnalyzedProvenance,
   completeResultDelivery,
@@ -18,7 +18,12 @@ import {
   type PendingResultDeliveryState,
   type ResultDeliveryMode,
 } from '@/core/provenance';
-import type { ResultVersionMetadata, ResultVersionSource } from '@/core/result-version';
+import {
+  createResultInputSummary,
+  type ResultInputSummary,
+  type ResultVersionMetadata,
+  type ResultVersionSource,
+} from '@/core/result-version';
 import {
   DEFAULT_CONFIG,
   getConfig,
@@ -69,6 +74,7 @@ function classifyGeminiSessionFailure(
   error: unknown,
   fallback: ReasonCode = 'AI_PROVIDER_FAILED',
 ): ReasonCode {
+  if (error instanceof AIResultParseError) return 'AI_GEMINI_OUTPUT_INVALID';
   if (error instanceof AISessionMigrationConflictError) return 'SESSION_MIGRATION_CONFLICT';
   if (error instanceof AISessionMigrationFailedError) return 'SESSION_MIGRATION_FAILED';
   if (error instanceof AISessionLockBusyError || error instanceof AISessionIndexLockBusyError) {
@@ -213,8 +219,10 @@ async function runAiForProvider(
   }
 
   let provenance;
+  let inputSummary: ResultInputSummary;
   try {
     provenance = checkAnalyzedProvenance(analysisState.state, analyzed, config.analyzer);
+    inputSummary = createResultInputSummary(username, analyzed, config.analyzer);
   } catch (error) {
     const { message } = extractErrorDetails(error);
     logger.error(`验证 analyzed provenance 失败: ${message}`);
@@ -253,6 +261,7 @@ async function runAiForProvider(
   }
 
   const request = buildAnalysisRequest(analyzed);
+  const inputSummaryHash = hashCanonicalJson(inputSummary);
   let savedResult = readDataFile<unknown>(username, 'result');
   if (provenance.basedOnPartial) {
     logger.warn('当前分析基于不完整抓取数据；缺失记录状态未知');
@@ -444,7 +453,8 @@ async function runAiForProvider(
       }
 
       try {
-        const { deliveryId, ...deliveryTarget } = execution.delivery;
+        const { deliveryId, ...providerDeliveryTarget } = execution.delivery;
+        const deliveryTarget = { ...providerDeliveryTarget, inputSummaryHash };
         providerAnalysisState = updateAnalysisState(username, (state) => {
           assertAnalyzedProvenanceUnchanged(state);
           const prepared = prepareResultDelivery(state, deliveryTarget, () => deliveryId);
@@ -525,6 +535,7 @@ async function runAiForProvider(
         request,
         analysisState: providerAnalysisState,
         provenance,
+        inputSummaryHash,
         savedResult,
         ...(configuredModel ? { model: configuredModel } : {}),
         ...(configuredThinkingLevel ? { thinkingLevel: configuredThinkingLevel } : {}),
@@ -691,7 +702,7 @@ async function runAiForProvider(
         throw new Error('AI result is missing version source metadata');
       }
       try {
-        metadata = saveResultVersion(username, result, resultVersionSource);
+        metadata = saveResultVersion(username, result, resultVersionSource, inputSummary);
       } catch (error) {
         const { message, raw } = extractErrorDetails(error);
         logger.error(`保存 AI 分析结果版本失败: ${message}`);

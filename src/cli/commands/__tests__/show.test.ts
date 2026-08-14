@@ -1,16 +1,23 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AIAnalysisResult } from '@/core/ai';
+import type { ResultInputSummary, ResultVersionMetadata } from '@/core/result-version';
+import type { ResultVersionSummary, SelectedResult } from '@/infra/storage';
 
-const mockedReadDataFile = vi.hoisted(() => vi.fn());
-const mockedReadAnalysisState = vi.hoisted(() => vi.fn());
+const mockedQueryCurrentResult = vi.hoisted(() => vi.fn());
+const mockedQueryResultHistory = vi.hoisted(() => vi.fn());
+const mockedQueryResultVersion = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
+  debug: vi.fn(),
+  warn: vi.fn(),
+  diagnostic: vi.fn(),
 }));
 
 vi.mock('@/infra/storage', () => ({
-  readDataFile: mockedReadDataFile,
-  readAnalysisState: mockedReadAnalysisState,
+  queryCurrentResult: mockedQueryCurrentResult,
+  queryResultHistory: mockedQueryResultHistory,
+  queryResultVersion: mockedQueryResultVersion,
 }));
 
 vi.mock('@/infra/logger', () => ({
@@ -63,17 +70,152 @@ function createMockResult(overrides?: Partial<AIAnalysisResult>): AIAnalysisResu
   };
 }
 
+function createSelection(
+  result: AIAnalysisResult,
+  overrides: Partial<SelectedResult> = {},
+): SelectedResult {
+  return {
+    username: 'testuser',
+    source: 'legacy',
+    result,
+    metadata: null,
+    inputSummary: null,
+    archiveState: 'legacy-current',
+    provenanceState: 'legacy-missing',
+    verifiedCurrentResult: null,
+    isLatest: true,
+    ...overrides,
+  };
+}
+
+function createInputSummary(partial = false): ResultInputSummary {
+  return {
+    username: 'testuser',
+    analyzerConfig: { inactivityThresholdDays: 60, nodeDistributionTopN: 3 },
+    dataQuality: {
+      capturedAt: '2026-08-13T02:00:00.000Z',
+      topics: { status: 'complete', totalExpected: 2, fetchedCount: 2, failedCount: 0 },
+      replies: {
+        status: partial ? 'partial' : 'complete',
+        totalExpected: 4,
+        fetchedCount: partial ? 3 : 4,
+        failedCount: partial ? 1 : 0,
+      },
+    },
+    userOverview: {
+      joinDate: '2020-01-01T00:00:00.000Z',
+      lastActiveTime: '2026-08-10T02:00:00.000Z',
+      topicReplyRatio: 2 / 3,
+      totalTopics: 2,
+      totalReplies: 3,
+      isTopicsHidden: false,
+      dailyRanking: 42,
+    },
+    activitySummary: {
+      totalPeriods: 1,
+      periods: [
+        {
+          timeRange: '2026-08-01 to 2026-08-10',
+          topicCount: 2,
+          avgTopicReplyCount: 2,
+          avgTopicClickCount: 10,
+          avgTopicLifecycleDays: 1,
+          topicInteractionRatio: 0.2,
+          topicHourDistribution: { 9: 2 },
+          topicNodeDistribution: { qna: 2 },
+          replyCount: 3,
+          avgReplyLength: 20,
+          directReplyRatio: 0.5,
+          avgRepliedTopicHeat: 4,
+          replyWeekdayDistribution: { 周一: 1 },
+          replyNodeDistribution: { programming: 3 },
+        },
+      ],
+    },
+  };
+}
+
+function createMetadata(overrides: Partial<ResultVersionMetadata> = {}): ResultVersionMetadata {
+  return {
+    versionId: 'v000001',
+    sequence: 1,
+    origin: 'analysis',
+    deliveryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    previousLatestVersionId: null,
+    previousCurrentHash: null,
+    createdAt: '2026-08-13T02:00:00.000Z',
+    savedAt: '2026-08-13T02:00:01.000Z',
+    provider: 'gemini',
+    model: 'gemini-test',
+    reasoningLevel: 'high',
+    localSessionId: 'session-1',
+    externalThreadId: null,
+    threadName: null,
+    promptHash: 'a'.repeat(64),
+    analysisFingerprint: 'a'.repeat(64),
+    payloadHash: 'a'.repeat(64),
+    resultHash: 'a'.repeat(64),
+    dataQuality: 'complete',
+    warningCount: 0,
+    appVersion: '1.2.0',
+    ...overrides,
+  };
+}
+
+function createHistorySummary(versionId = 'v000001'): ResultVersionSummary {
+  return {
+    versionId,
+    sequence: Number(versionId.slice(1)),
+    origin: 'analysis',
+    createdAt: '2026-08-13T02:00:00.000Z',
+    savedAt: '2026-08-13T02:00:01.000Z',
+    provider: 'gemini',
+    model: 'gemini-test',
+    reasoningLevel: 'high',
+    sessionName: 'session-1',
+    dataQuality: 'complete',
+    warningCount: 0,
+    inputSummaryAvailable: true,
+    isLatest: true,
+    virtual: false,
+  };
+}
+
+function expectWarningsBeforeOutput(consoleSpy: ReturnType<typeof vi.spyOn>): void {
+  const warningOrders = mockLogger.warn.mock.invocationCallOrder;
+  const warningOrder = warningOrders[warningOrders.length - 1];
+  const outputOrder = consoleSpy.mock.invocationCallOrder[0];
+  if (warningOrder === undefined || outputOrder === undefined) {
+    throw new Error('Expected warning and output calls');
+  }
+  expect(warningOrder).toBeLessThan(outputOrder);
+}
+
 describe('runShow', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedReadAnalysisState.mockReturnValue({ status: 'missing' });
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(createMockResult()),
+    });
+    mockedQueryResultHistory.mockReturnValue({
+      status: 'success',
+      summaries: [createHistorySummary()],
+    });
+    mockedQueryResultVersion.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(createMockResult(), {
+        source: 'version',
+        archiveState: 'verified-history',
+      }),
+    });
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   it('should show error when result data is missing', async () => {
-    mockedReadDataFile.mockReturnValue(null);
+    mockedQueryCurrentResult.mockReturnValue({ status: 'missing', latestVersionId: null });
 
     const outcome = await runShow('testuser', {});
 
@@ -82,8 +224,22 @@ describe('runShow', () => {
     expect(outcome.reasonCode).toBe('SHOW_RESULT_MISSING');
   });
 
+  it('should direct a missing current result to its verified archive', async () => {
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'missing',
+      latestVersionId: 'v000003',
+    });
+
+    const outcome = await runShow('testuser', {});
+
+    expect(outcome.recoverActions?.map(({ content }) => content)).toEqual([
+      'v2er show testuser --history',
+      'v2er show testuser --version v000003',
+    ]);
+  });
+
   it('should reject a result that does not satisfy the persisted contract', async () => {
-    mockedReadDataFile.mockReturnValue({ summary: 'Incomplete result' });
+    mockedQueryCurrentResult.mockReturnValue({ status: 'invalid', reason: 'contract' });
 
     const outcome = await runShow('testuser', {});
 
@@ -93,7 +249,10 @@ describe('runShow', () => {
 
   it('should output raw JSON with --json flag', async () => {
     const result = createMockResult();
-    mockedReadDataFile.mockReturnValue(result);
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result),
+    });
 
     await runShow('testuser', { json: true });
 
@@ -102,17 +261,22 @@ describe('runShow', () => {
 
   it('should return stale and partial notices from valid result provenance', async () => {
     const result = createMockResult();
-    mockedReadDataFile.mockReturnValue(result);
-    mockedReadAnalysisState.mockReturnValue({
-      status: 'valid',
-      state: {
-        schemaVersion: 1,
-        currentResult: {
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result, {
+        source: 'current',
+        archiveState: 'verified-current',
+        provenanceState: 'verified',
+        metadata: createMetadata({ dataQuality: 'partial' }),
+        inputSummary: createInputSummary(true),
+        verifiedCurrentResult: {
           analysisFingerprint: 'a'.repeat(64),
           stale: true,
           basedOnPartial: true,
+          deliveryMode: 'change',
+          resultVersionId: 'v000001',
         },
-      },
+      }),
     });
 
     const outcome = await runShow('testuser', { json: true });
@@ -123,35 +287,153 @@ describe('runShow', () => {
     ]);
     expect(consoleSpy).toHaveBeenCalledTimes(1);
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+    expect(outcome.noticesRendered).toBe(true);
+    expectWarningsBeforeOutput(consoleSpy);
   });
 
-  it('should display legacy results without guessing provenance notices', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
-    mockedReadAnalysisState.mockReturnValue({ status: 'invalid' });
-
+  it('should identify a legacy result without guessing provenance', async () => {
     const outcome = await runShow('testuser', {});
 
     expect(outcome.status).toBe('success');
-    expect(outcome.notices).toEqual([]);
+    expect(outcome.notices?.map((notice) => notice.code)).toEqual([
+      'RESULT_LEGACY_CURRENT',
+      'RESULT_INPUT_SUMMARY_UNAVAILABLE',
+    ]);
+  });
+
+  it('should stop when the result snapshot keeps changing', async () => {
+    mockedQueryCurrentResult.mockReturnValue({ status: 'busy' });
+
+    const outcome = await runShow('testuser', {});
+
+    expect(outcome.reasonCode).toBe('RESULT_VERSION_BUSY');
+    expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it('should reject conflicting options before starting a query', async () => {
+    const invalidOptions = [
+      { json: true, brief: true },
+      { history: true, brief: true },
+      { history: true, version: 'v000001' },
+    ];
+    for (const options of invalidOptions) {
+      expect((await runShow('testuser', options)).reasonCode).toBe(
+        'SHOW_INVALID_OPTION_COMBINATION',
+      );
+    }
+    expect(mockedQueryCurrentResult).not.toHaveBeenCalled();
+    expect(mockedQueryResultHistory).not.toHaveBeenCalled();
+    expect(mockedQueryResultVersion).not.toHaveBeenCalled();
+  });
+
+  it('should output stable history summaries as JSON or a table', async () => {
+    const summaries = [
+      createHistorySummary('v000002'),
+      { ...createHistorySummary('v000001'), isLatest: false },
+    ];
+    mockedQueryResultHistory.mockReturnValue({ status: 'success', summaries });
+
+    await runShow('testuser', { history: true, json: true });
+    expect(consoleSpy).toHaveBeenLastCalledWith(JSON.stringify(summaries, null, 2));
+
+    consoleSpy.mockClear();
+    await runShow('testuser', { history: true });
+    const output = consoleSpy.mock.calls.map((call: unknown[]) => call[0]).join('\n');
+    expect(output).toContain('结果版本历史');
+    expect(output).toContain('v000002');
+    expect(output).toContain('Provider');
+  });
+
+  it('should display the selected immutable version without querying current', async () => {
+    const result = createMockResult({ summary: 'Archived result' });
+    mockedQueryResultVersion.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result, {
+        source: 'version',
+        archiveState: 'verified-history',
+      }),
+    });
+
+    await runShow('testuser', { version: 'v000002', json: true });
+
+    expect(mockedQueryResultVersion).toHaveBeenCalledWith('testuser', 'v000002');
+    expect(mockedQueryCurrentResult).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(result, null, 2));
+  });
+
+  it('should render saved quality warnings before an immutable version', async () => {
+    mockedQueryResultVersion.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(createMockResult(), {
+        source: 'version',
+        archiveState: 'verified-history',
+        metadata: createMetadata({ dataQuality: 'partial', warningCount: 2 }),
+        inputSummary: createInputSummary(true),
+        isLatest: true,
+      }),
+    });
+
+    const outcome = await runShow('testuser', { version: 'v000001', brief: true });
+
+    expect(outcome.notices?.map(({ code }) => code)).toEqual([
+      'DATA_SNAPSHOT_PARTIAL',
+      'RESULT_RESPONSE_NORMALIZED',
+    ]);
+    expectWarningsBeforeOutput(consoleSpy);
+  });
+
+  it('should map empty, missing-version, and corrupt archives to stable reasons', async () => {
+    mockedQueryResultHistory.mockReturnValue({ status: 'empty' });
+    expect((await runShow('testuser', { history: true })).reasonCode).toBe('SHOW_HISTORY_EMPTY');
+
+    mockedQueryResultVersion.mockReturnValue({ status: 'not-found' });
+    const missingVersion = await runShow('testuser', { version: 'v000009' });
+    expect(missingVersion.reasonCode).toBe('SHOW_VERSION_NOT_FOUND');
+    expect(missingVersion.recoverActions?.[0]?.content).toBe('v2er show testuser --history');
+
+    mockedQueryResultHistory.mockReturnValue({ status: 'corrupt', reason: 'mismatched' });
+    expect((await runShow('testuser', { history: true })).reasonCode).toBe(
+      'RESULT_VERSION_CORRUPT',
+    );
   });
 
   it('should output brief format with --brief flag', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
-
     await runShow('testuser', { brief: true });
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
     expect(output).toContain('用户画像摘要');
     expect(output).toContain('Full-stack');
     expect(output).toContain('Career growth');
+    expect(output).toContain('风险理由: Normal activity');
   });
 
-  it('should output full format by default', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
+  it('should use verified result context in the full report', async () => {
+    const result = createMockResult();
+    result.professional.tech_stack = [];
+    result.personal.hobbies = [];
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result, {
+        source: 'current',
+        metadata: createMetadata(),
+        inputSummary: createInputSummary(),
+        archiveState: 'verified-current',
+        provenanceState: 'verified',
+        isLatest: true,
+      }),
+    });
 
     await runShow('testuser', {});
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
+    expect(output).toContain('版本: v000001');
+    expect(output).toContain('用户名: testuser');
+    expect(output).toContain('[抓取覆盖]');
+    expect(output).toContain('2026-08-01 to 2026-08-10');
+    expect(output).toContain('主要发帖节点: qna (2)');
+    expect(output).toContain('演变概述: Grew');
+    expect(output).toContain('技术栈: 未提供');
+    expect(output).toContain('兴趣爱好: 未提供');
     expect(output).toContain('用户画像分析');
     expect(output).toContain('职业画像');
     expect(output).toContain('个人生活');
@@ -161,8 +443,6 @@ describe('runShow', () => {
   });
 
   it('should render OCEAN score bars in full output', async () => {
-    mockedReadDataFile.mockReturnValue(createMockResult());
-
     await runShow('testuser', {});
 
     const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n');
@@ -170,9 +450,11 @@ describe('runShow', () => {
   });
 
   it('should display risk level with color coding', async () => {
-    mockedReadDataFile.mockReturnValue(
-      createMockResult({ risk: { level: 'high_risk', reason: 'Spam detected' } }),
-    );
+    const result = createMockResult({ risk: { level: 'high_risk', reason: 'Spam detected' } });
+    mockedQueryCurrentResult.mockReturnValue({
+      status: 'selected',
+      selection: createSelection(result),
+    });
 
     await runShow('testuser', {});
 

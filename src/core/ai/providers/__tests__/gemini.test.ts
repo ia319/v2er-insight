@@ -21,6 +21,7 @@ vi.mock('@google/genai', () => ({
 }));
 
 import { GeminiProvider } from '../gemini';
+import { AI_ANALYSIS_RESULT_JSON_SCHEMA } from '../../result-schema';
 
 describe('GeminiProvider', () => {
   beforeEach(() => {
@@ -66,6 +67,49 @@ describe('GeminiProvider', () => {
     await expect(provider.sendMessage('new request')).rejects.toThrow(
       'Empty response from Gemini API',
     );
+  });
+
+  it('copies the complete analysis config into a structured request', async () => {
+    const provider = new GeminiProvider('secret', 'gemini-current');
+    provider.createSession('Analyze safely.', {
+      thinkingLevel: 'high',
+      timeout: 30_000,
+    });
+
+    await expect(
+      provider.sendStructuredMessage('analysis payload', {
+        systemInstruction: 'Analyze safely.',
+        thinkingLevel: 'high',
+        timeout: 30_000,
+        responseJsonSchema: AI_ANALYSIS_RESULT_JSON_SCHEMA,
+      }),
+    ).resolves.toBe('new response');
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      message: 'analysis payload',
+      config: {
+        systemInstruction: 'Analyze safely.',
+        httpOptions: { timeout: 30_000 },
+        thinkingConfig: { thinkingLevel: 'HIGH' },
+        responseMimeType: 'application/json',
+        responseJsonSchema: AI_ANALYSIS_RESULT_JSON_SCHEMA,
+      },
+    });
+  });
+
+  it('classifies an empty structured response as invalid output', async () => {
+    const provider = new GeminiProvider('secret', 'gemini-current');
+    mocks.sendMessage.mockResolvedValue({ text: '' });
+    provider.createSession('Analyze safely.');
+
+    await expect(
+      provider.sendStructuredMessage('analysis payload', {
+        systemInstruction: 'Analyze safely.',
+        thinkingLevel: 'high',
+        timeout: 30_000,
+        responseJsonSchema: AI_ANALYSIS_RESULT_JSON_SCHEMA,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_result' });
   });
 
   it('counts the complete reconstructed request before sending', async () => {

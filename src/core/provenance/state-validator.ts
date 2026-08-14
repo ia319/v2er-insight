@@ -75,6 +75,7 @@ export function isPendingResultDeliveryState(value: unknown): value is PendingRe
     /^(?:gemini|codex):[a-f0-9]{64}$/.test(value.providerKey) &&
     isSha256Hash(value.analysisFingerprint) &&
     isSha256Hash(value.payloadHash) &&
+    isSha256Hash(value.inputSummaryHash) &&
     typeof value.basedOnPartial === 'boolean' &&
     isDeliveryMode(value.deliveryMode) &&
     value.deliveryMode !== undefined &&

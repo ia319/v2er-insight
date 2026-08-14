@@ -48,6 +48,10 @@ export interface ShowCommandOptions {
   json?: boolean;
   /** 简略版输出（仅 summary + 关键指标） */
   brief?: boolean;
+  /** 列出结果版本历史 */
+  history?: boolean;
+  /** 展示指定结果版本 */
+  version?: string;
   /** 由一键流程触发时开启，供命令控制日志粒度 */
   pipeline?: boolean;
 }

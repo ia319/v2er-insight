@@ -1,18 +1,18 @@
 /**
  * AI 分析结果数据结构
  *
- * 本文件定义 AI 经过解析后返回给用户的最终结果类型。
- * 这是用户最终看到的完整画像结构。
+ * 本文件定义 AI analysis 返回并持久化的完整画像类型。
  *
  * 数据来源：
  * - AI 接收 AnalyzerOutput（见 analyzer-output/output-types.ts）作为输入
  * - 基于系统提示词（见 docs/prompt.md）进行多维分析
- * - 校验器 (parser/validator.ts) 对 AI 返回的 JSON 进行宽松校验
+ * - Gemini 和 Codex 的 analysis turn 使用同一份封闭 JSON Schema
+ * - parseAIAnalysisResult() 和 isAIAnalysisResult() 在持久化前校验运行时结构
  *
  * 校验策略：
- * - 缺失字段用默认值填充，不直接报错
- * - 心理分数钳位到 0-100 范围
- * - 校验器返回 { data: AIAnalysisResult, warnings: string[] }
+ * - 根对象和嵌套对象需要完整、精确的字段集合
+ * - 无效 JSON、字段缺失、额外字段、类型错误和无效值使整个结果失败
+ * - 心理分数必须是 0 到 100 之间的有限数字
  */
 
 // ============================================================================
@@ -26,7 +26,6 @@ export interface AIAnalysisResult {
   /**
    * 用户画像总结
    * 一段自然语言描述，概括用户的整体特征
-   * 默认值："数据缺失，无法生成摘要"
    */
   summary: string;
 
@@ -74,7 +73,7 @@ export interface AIAnalysisResult {
 
   // -------------------------
   // 心理画像 (OCEAN 大五人格模型)
-  // 所有分数范围 0-100，超出范围会被钳位
+  // 所有分数范围 0-100
   // -------------------------
 
   psychological: {

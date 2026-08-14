@@ -43,6 +43,7 @@ root
 │   ├── prompt.md             # AI system prompt template (copy)
 │   ├── data-lifecycle.md     # Source-data retention, cleanup, and recovery
 │   ├── ai-conversations.md   # Provider session persistence and history behavior
+│   ├── result-history.md     # Saved result queries, display modes, and recovery
 │   ├── codex-app-server-integration.md # Codex local-provider architecture
 │   ├── analyzer-output/      # [Analyzer -> AI] Input data schema
 │   │   ├── output-schema.md      # Field-level specification
@@ -64,7 +65,8 @@ root
 │   │       ├── ai.ts         # runAi: AI profiling
 │   │       ├── ai/           # Provider-specific AI execution boundaries
 │   │       ├── chat.ts       # runChat: Continue one persistent provider session
-│   │       ├── show.ts       # runShow: Format and display report
+│   │       ├── show.ts       # runShow: Query and display current or saved results
+│   │       ├── show/         # Pure full, brief, and history renderers
 │   │       ├── config.ts     # Config management (show/set/reset/proxy)
 │   │       ├── session.ts    # runSessionCheck: Read-only provider diagnostics
 │   │       ├── session/      # Codex diagnostic report and runtime checks
@@ -78,6 +80,7 @@ root
 │   │   │   ├── notices.ts    # Structured user-notice rendering
 │   │   │   ├── data-retention-notices.ts # Cleanup notice builders
 │   │   │   ├── result-state-notices.ts # Stale and partial result warnings
+│   │   │   ├── result-query-notices.ts # Result relationship and input-summary notices
 │   │   │   └── orchestrator.ts # runWorkflow: Step dispatch & state machine
 │   │
 │   ├── config/               # [Shared] Configuration management
@@ -153,6 +156,7 @@ root
 │   │   │   ├── index.ts          # Public result-version exports
 │   │   │   ├── types.ts          # Version metadata, envelope, and index types
 │   │   │   ├── identifiers.ts    # Canonical version and delivery identifiers
+│   │   │   ├── input-summary.ts  # Version-bound Analyzer fact projection
 │   │   │   ├── validator.ts      # Metadata, envelope, and index validation
 │   │   │   └── __tests__/        # Identifier and validator contract tests
 │   │   │
@@ -160,6 +164,8 @@ root
 │   │       ├── index.ts         # Public API exports
 │   │       ├── config.ts        # AI model constants
 │   │       ├── result-validator.ts # Persisted AIAnalysisResult validation
+│   │       ├── result-parser.ts  # Strict structured-result JSON parser
+│   │       ├── result-schema.ts  # Closed provider output schema
 │   │       ├── types/           # Type definitions
 │   │       │   ├── index.ts         # Re-exports all types
 │   │       │   ├── options.ts       # AIAnalysisInput, AnalysisOptions
@@ -179,9 +185,9 @@ root
 │   │       │   ├── summary.ts       # Provider state to index summary projection
 │   │       │   ├── types.ts         # Session index and provider state types
 │   │       │   └── validator.ts     # Cross-session and history validation
-│   │       ├── parser/          # Response parsing & validation
+│   │       ├── parser/          # Legacy tolerant response parser, excluded from analysis persistence
 │   │       │   ├── index.ts         # parseResponse()
-│   │       │   └── validator.ts     # Lenient response validator
+│   │       │   └── validator.ts     # Defaulting compatibility validator
 │   │       └── utils/           # Shared utilities
 │   │           ├── index.ts         # Re-exports utilities
 │   │           ├── api-key.ts       # API key resolution
@@ -213,6 +219,10 @@ root
 │       │   ├── result-version-files.ts # Validated index and immutable version files
 │       │   ├── result-version-lock.ts # Per-user result version write serialization
 │       │   ├── save-result-version.ts # Idempotent result save and recovery
+│       │   ├── read-state.ts # Explicit JSON missing, invalid, unreadable, and valid states
+│       │   ├── result-query.ts # Current-result relationship query
+│       │   ├── result-history-query.ts # History and selected-version queries
+│       │   ├── result-query-shared.ts # Stable read snapshots and shared validation
 │       │   ├── sessions/        # AI session paths and validated atomic files
 │       │   └── cleaner.ts    # Expired data cleanup
 │       └── logger/           # [Complete] Global logger
@@ -365,7 +375,9 @@ A hidden signal from any fetched list page clears topic URLs collected from earl
 - `v2er analyze <username>` → Validate Raw Snapshot V2 and generate statistics (analyzed.json)
 - `v2er ai <username>` → Generate a user profile and save `result.json` plus an immutable result version
 - `v2er chat <username> <message...> [--provider gemini|codex]` → Continue one existing provider session without changing profile results
-- `v2er show <username>` → Structure display of results (OCEAN bars, risk icons)
+- `v2er show <username> [--brief|--json]` → Display the current result with relationship notices
+- `v2er show <username> --history [--json]` → List verified result-version summaries
+- `v2er show <username> --version <id> [--brief|--json]` → Display one canonical saved version or the read-only legacy projection
 - `v2er session check [username] [--provider gemini|codex]` → Run read-only provider diagnostics
 - `v2er session clear <username> [--provider gemini|codex|all] [--all-versions]` → Preview, confirm, and permanently delete selected sessions
 - `v2er config show [group]` → View config (with apiKey masking)
@@ -390,6 +402,8 @@ The `ai` subcommand accepts `--provider`, `--model`, `--thinking-level`,
 
 The `chat` subcommand accepts an optional provider override and verbose diagnostics. Provider selection uses the explicit override when present and otherwise uses `lastSuccessfulAnalysisProvider`. A missing shared index with a pending legacy Codex registry selects Codex for migration. The command writes the final reply to `stdout` and diagnostics to `stderr`. Successful chat preserves profile results, result versions, analysis provenance, and `lastSuccessfulAnalysisProvider`.
 
+The `show` subcommand accepts `--brief`, `--json`, `--history`, `--version <id>`, and `--verbose`. `--json` and `--brief` are mutually exclusive; `--history` excludes `--brief` and `--version`. Current and selected-version JSON modes emit a bare `AIAnalysisResult`; history JSON emits version summaries.
+
 **Shared Logic** (`utils.ts` and `utils/error.ts`):
 
 - `createFetchEvents(label)`: Centralized progress/error reporting for fetch/ai operations.
@@ -401,7 +415,8 @@ The `chat` subcommand accepts an optional provider override and verbose diagnost
 - `UserNotice` carries a stable `NoticeCode`, severity, impact details, recovery actions, and an optional documentation path.
 - `StepRunResult.notices` keeps non-fatal effects separate from failure `ReasonCode` values.
 - `renderNotice()` and `renderNotices()` render stable notice codes and recovery details through stderr diagnostics.
-- The `NoticeCode` union includes `DATA_RETENTION_ENABLED`, `DATA_FILES_CLEANED`, `DATA_RESULT_STALE`, `DATA_SNAPSHOT_PARTIAL`, `SESSION_SOURCE_DATA_MISSING`, and `SESSION_CONTEXT_NEAR_LIMIT`.
+- Result-query notices distinguish legacy current data, current/latest divergence, untracked current data, unavailable version relationships, unavailable provenance, saved response warnings, and missing version-bound input summaries.
+- Data and session notices cover retention, deleted source files, stale or partial results, missing session source data, and near-limit context.
 - Config changes and `config show data` emit `DATA_RETENTION_ENABLED` only while cleanup is enabled.
 - Successful AI cleanup emits `DATA_FILES_CLEANED` only when source files were actually removed; subcommands and pipelines render the returned notice once.
 
@@ -433,11 +448,13 @@ The `chat` subcommand accepts an optional provider override and verbose diagnost
 - Gemini acquires the selected provider-session lease before delivery preparation, revalidates the persisted selection, and holds the lease through result-version persistence, session completion, and provenance completion.
 - Gemini provider and parse failures retain the uncommitted pending delivery; a retry to the same target reuses its delivery ID.
 - Analyzed provenance is revalidated immediately before Gemini result-version persistence.
-- Successful Gemini output enters `saveResultVersion()` with actual model, thinking level, prompt hash, capture quality, warning count, and application version.
+- Gemini analysis requests use the closed result JSON Schema at request scope and parse the final message through `parseAIAnalysisResult()`.
+- Successful Gemini output enters `saveResultVersion()` with actual model, thinking level, prompt hash, capture quality, application version, and an input summary projected from the delivered `AnalyzerOutput`.
 - Gemini records the saved version on pending/current state, appends the successful input/result pair to its provider session, publishes the session index, then advances provider hashes and clears pending state.
 - Gemini result-write failures preserve the uncommitted pending delivery; post-save state or session failures preserve the immutable version for delivery-ID recovery without another provider request.
 - Codex mirrors the App Server delivery ID into `analysis-state.json` after a parsed result and before result-version persistence.
-- Successful Codex output enters `saveResultVersion()` with actual model, reasoning effort, local session ID, external thread ID, thread name, prompt hash, capture quality, and application version.
+- Codex analysis turns use the same closed result JSON Schema and strict result parser.
+- Successful Codex output enters `saveResultVersion()` with actual model, reasoning effort, local session ID, external thread ID, thread name, prompt hash, capture quality, application version, and the same input summary identity prepared for delivery.
 - Codex records the saved version on pending/current state, completes the accepted session turn, associates the version and analysis fingerprint with the provider file, publishes the shared index, then advances provider hashes and clears pending state.
 - Saved Codex delivery recovery compares the pending identity with the owning session. A matching accepted turn reuses the saved result; a completed session advances provider provenance without another model request.
 - An unresolved Codex delivery blocks Gemini execution and remains under the per-user Codex lock until session reconciliation.
@@ -446,8 +463,10 @@ The `chat` subcommand accepts an optional provider override and verbose diagnost
 - Codex chat resumes the exact persisted thread ID and sends one ordinary turn without `outputSchema`. Provider and thread selection remain fixed when the turn fails.
 - Gemini analysis and every chat or confirmed deletion use provider-session locks. The outer per-user Codex execution lock serializes Codex analysis, chat, and deletion. Provider network calls run outside the short shared-index transaction.
 - Every high-level session index mutation publishes through `withAISessionIndexTransaction()` and merges unrelated provider projections from the current index.
-- `runShow()` accepts complete `AIAnalysisResult` values and derives stale and partial notices from valid current-result provenance.
-- Legacy results with absent sidecars retain unknown provenance; structurally invalid results produce `SHOW_RESULT_INVALID`.
+- `runShow()` selects the current result, saved history, or one canonical version through the read-only result-query layer before rendering.
+- Current-result metadata, input summaries, and stale or partial notices are used only after result, index, version, and provenance relationships validate.
+- History and ordinary selected-version queries validate saved files without reading source data, analysis provenance, or provider sessions.
+- Legacy current results expose a read-only virtual `v000001`; structurally invalid current results produce `SHOW_RESULT_INVALID`.
 - `stdout` carries JSON report content; `stderr` carries command and workflow notices.
 
 ### 6. Config Module (Complete)
@@ -588,9 +607,10 @@ Codex thread config disables web search and stable execution, browser, app, plug
   - `GeminiProvider.createSession(systemPrompt, options?)` supports
     `SessionOptions` (`thinkingLevel`, `timeout`, and completed provider-neutral `history`).
   - Gemini history is supplied once through `chats.create()`; only the new turn uses `sendMessage()`.
-- **Parser** (`parser/`):
-  - `parseResponse(text)` → Extracts JSON from AI response (prioritizes ```json blocks).
-  - `validateResponse(data)` → Lenient validator with deep merge, score clamping (0-100), and warnings.
+- **Strict Result Parser** (`result-parser.ts`):
+  - `parseAIAnalysisResult(text)` → Parses raw JSON and rejects any value outside the complete persisted result contract.
+- **Compatibility Parser** (`parser/`):
+  - `parseResponse(text)` and `validateResponse(data)` retain the tolerant defaulting API but are excluded from Gemini and Codex analysis persistence.
 - **Result Validation** (`result-validator.ts`): Complete persisted `AIAnalysisResult` shape, string-array, score-range, timeline, and risk-level validation.
 - **Utils** (`utils/`):
   - `resolveApiKey()` → API key resolution (explicit > config > GOOGLE_API_KEY > GEMINI_API_KEY).
@@ -607,13 +627,15 @@ Codex thread config disables web search and stable execution, browser, app, plug
 
 **Saved Result Version Contract** (`src/core/result-version/`):
 
-- `ResultVersionMetadata`, `StoredResultVersionV1`, and `ResultVersionIndexV1` define version metadata, stored result envelopes, and ordered index entries.
+- `ResultVersionMetadata`, `ResultInputSummary`, `StoredResultVersion`, and `ResultVersionIndex` define generated context, immutable version files, and ordered index entries.
+- `createResultInputSummary(username, output, config)` projects the delivered Analyzer data quality, user overview, activity summary, and semantic Analyzer configuration without copying content chunks.
 - `formatResultVersionId(sequence)` produces zero-padded identifiers such as `v000001`.
 - `parseResultVersionId(versionId)` accepts canonical positive identifiers only.
 - `createResultDeliveryId()` produces UUID v4 delivery identifiers.
 - `isResultVersionMetadata(value)` enforces exact metadata keys and separates generated provenance from protected legacy or untracked results.
-- `isStoredResultVersionV1(value)` requires a complete `AIAnalysisResult` and a matching canonical SHA-256 result hash.
-- `isResultVersionIndexV1(value)` requires contiguous ordered sequences, a matching latest pointer, and unique non-null delivery IDs.
+- `isStoredResultVersion(value)` requires a complete `AIAnalysisResult`, a matching result hash, and either a generated input summary with a matching hash or a protected result with both summary fields set to `null`.
+- Version-file reads also require `inputSummary.username` to match the owning user directory.
+- `isResultVersionIndex(value)` requires contiguous ordered sequences, a matching latest pointer, and unique non-null delivery IDs.
 - Result-version path helpers resolve the per-user `results/` root, `versions/` directory, `index.json`, version file, and write lock.
 - `getResultVersionFilePath(username, versionId)` rejects non-canonical version identifiers before path construction.
 - Result-version file reads distinguish missing, invalid, and validated data.
@@ -623,12 +645,20 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `withResultVersionLock(username, operation)` serializes synchronous writes for one user through a private `wx` lock.
 - Lock release validates the persisted UUID token; ownership changes preserve the replacement lock and surface a release error.
 - Existing valid or invalid locks fail immediately without waiting or automatic removal.
-- `saveResultVersion(username, result, source)` validates every indexed envelope before changing current data.
+- `saveResultVersion(username, result, source, inputSummary)` validates every indexed version and the version-bound input summary before changing current data.
 - `recoverResultVersionDelivery(username, pending)` repairs an indexed or unindexed write from durable pending identity without the original result/source arguments.
 - Existing current data without a saved version becomes `legacy`; externally changed current data becomes `untracked-current` before replacement.
 - Generated writes use immutable version file, bare `result.json`, then index order.
 - A repeated matching delivery ID returns its existing version; a missing current file is restored from that envelope.
 - One valid unindexed candidate resumes only when its previous latest/current identities match; ambiguous, conflicting, corrupt, or divergent states remain unchanged.
+
+**Read-only Result Query Contract** (`src/infra/storage/result-query.ts`, `result-history-query.ts`, and `result-query-shared.ts`):
+
+- `queryCurrentResult(username)` classifies missing, invalid, verified, legacy, diverged, untracked, unavailable, and busy current-result states.
+- `queryResultHistory(username)` validates the complete index and every indexed version, then returns summaries in reverse sequence order.
+- `queryResultVersion(username, versionId)` selects one canonical indexed version or the read-only legacy `v000001` projection and validates every available file relationship.
+- Query snapshots retain missing, invalid, unreadable, and valid file states. A changing snapshot is retried once and then reported as busy.
+- History and ordinary selected-version queries do not read `analysis-state.json`, `raw.json`, `analyzed.json`, or provider sessions. Query functions do not acquire write locks or modify files.
 
 **AI Session Contract** (`src/core/ai/sessions/`):
 
@@ -774,7 +804,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 ├── codex-sessions.json # Read-only legacy Codex migration source
 ├── results/
 │   ├── index.json # Ordered result version metadata
-│   ├── versions/ # Immutable vNNNNNN.json result envelopes
+│   ├── versions/ # Immutable vNNNNNN.json results with version-bound input summaries
 │   └── .write.lock # Per-user result version writer
 ├── sessions/
 │   ├── index.json # Provider activity and session summaries
@@ -804,8 +834,11 @@ Codex thread config disables web search and stable execution, browser, app, plug
 - `writeStoredResultVersion(username, version)` → Validated immutable version publication without replacement
 - `readResultVersionLock(username)` → Missing, invalid, or validated result version lock
 - `withResultVersionLock(username, operation)` → Synchronous per-user write serialization with token-checked release
-- `saveResultVersion(username, result, source)` → Idempotent result version save with current-result protection and candidate recovery
+- `saveResultVersion(username, result, source, inputSummary)` → Idempotent result version save with current-result protection and candidate recovery
 - `recoverResultVersionDelivery(username, pending)` → Pending-delivery recovery with result/current/index repair or an explicit missing state
+- `queryCurrentResult(username)` → Current result selection with relationship state or explicit missing, invalid, and busy states
+- `queryResultHistory(username)` → Reverse-ordered verified version summaries or explicit empty, corrupt, and busy states
+- `queryResultVersion(username, versionId)` → One validated indexed or legacy version selection, or explicit not-found, corrupt, and busy states
 - `getAISessionIndexPath(username)` → Per-user AI session index path
 - `getAISessionFilePath(username, provider, localSessionId)` → Validated provider-session file path
 - `readAISessionIndex(username)` → Missing, invalid, or validated AI session index

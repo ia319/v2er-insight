@@ -39,6 +39,7 @@ export interface PendingResultDeliveryState {
   providerKey: string;
   analysisFingerprint: string;
   payloadHash: string;
+  inputSummaryHash: string;
   basedOnPartial: boolean;
   deliveryMode: ResultDeliveryMode;
   resultVersionId: string | null;

@@ -3,9 +3,10 @@ import fs from 'fs';
 import { createAIAnalysisResultFixture } from '@/core/ai/__tests__/result-fixture';
 import { hashCanonicalJson } from '@/core/provenance/canonical-json';
 import type {
-  ResultVersionIndexV1,
+  ResultInputSummary,
+  ResultVersionIndex,
   ResultVersionMetadata,
-  StoredResultVersionV1,
+  StoredResultVersion,
 } from '@/core/result-version';
 
 const mocks = vi.hoisted(() => ({
@@ -65,15 +66,40 @@ function createMetadata(): ResultVersionMetadata {
   };
 }
 
-function createVersion(): StoredResultVersionV1 {
+function createInputSummary(username = 'alice'): ResultInputSummary {
+  return {
+    username,
+    analyzerConfig: { inactivityThresholdDays: 60, nodeDistributionTopN: 3 },
+    dataQuality: {
+      capturedAt: SAVED_AT,
+      topics: { status: 'complete', totalExpected: 0, fetchedCount: 0, failedCount: 0 },
+      replies: { status: 'complete', totalExpected: 0, fetchedCount: 0, failedCount: 0 },
+    },
+    userOverview: {
+      joinDate: '2020-01-01',
+      lastActiveTime: '2026-07-26',
+      topicReplyRatio: null,
+      totalTopics: 0,
+      totalReplies: 0,
+      isTopicsHidden: false,
+      dailyRanking: null,
+    },
+    activitySummary: { totalPeriods: 0, periods: [] },
+  };
+}
+
+function createVersion(username = 'alice'): StoredResultVersion {
+  const inputSummary = createInputSummary(username);
   return {
     schemaVersion: 1,
     metadata: createMetadata(),
+    inputSummary,
+    inputSummaryHash: hashCanonicalJson(inputSummary),
     result: createAIAnalysisResultFixture(),
   };
 }
 
-function createIndex(): ResultVersionIndexV1 {
+function createIndex(): ResultVersionIndex {
   const metadata = createMetadata();
   return {
     schemaVersion: 1,
@@ -110,6 +136,15 @@ describe('result version files', () => {
       status: 'valid',
       version,
     });
+  });
+
+  it('rejects an input summary owned by a different user directory', () => {
+    const version = createVersion('bob');
+    mocks.readJson.mockReturnValue({ status: 'success', data: version });
+
+    expect(readStoredResultVersion('alice', 'v000001')).toEqual({ status: 'invalid' });
+    expect(() => writeStoredResultVersion('alice', version)).toThrow(TypeError);
+    expect(mocks.writeExclusive).not.toHaveBeenCalled();
   });
 
   it('publishes validated index and version values through separate write modes', () => {

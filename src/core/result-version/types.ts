@@ -1,4 +1,5 @@
 import type { AIAnalysisResult } from '@/core/ai';
+import type { AnalyzerOutput } from '@/core/analyzer';
 
 export const RESULT_VERSION_INDEX_SCHEMA_VERSION = 1 as const;
 export const STORED_RESULT_VERSION_SCHEMA_VERSION = 1 as const;
@@ -31,7 +32,7 @@ export interface ResultVersionMetadata {
   appVersion: string | null;
 }
 
-export interface ResultVersionIndexV1 {
+export interface ResultVersionIndex {
   schemaVersion: typeof RESULT_VERSION_INDEX_SCHEMA_VERSION;
   nextSequence: number;
   latestVersionId: string | null;
@@ -39,9 +40,22 @@ export interface ResultVersionIndexV1 {
   updatedAt: string;
 }
 
-export interface StoredResultVersionV1 {
+export interface ResultInputSummary {
+  username: string;
+  analyzerConfig: {
+    inactivityThresholdDays: number;
+    nodeDistributionTopN: number;
+  };
+  dataQuality: AnalyzerOutput['dataQuality'];
+  userOverview: AnalyzerOutput['userOverview'];
+  activitySummary: AnalyzerOutput['summary'];
+}
+
+export interface StoredResultVersion {
   schemaVersion: typeof STORED_RESULT_VERSION_SCHEMA_VERSION;
   metadata: ResultVersionMetadata;
+  inputSummary: ResultInputSummary | null;
+  inputSummaryHash: string | null;
   result: AIAnalysisResult;
 }
 

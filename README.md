@@ -131,7 +131,7 @@ v2er ai <username> [选项]
 | `--codex-project <path>`      | 指定新 Codex thread 的 Project 路径 |
 | `--resend`                    | 强制重新发送完整分析数据            |
 
-AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。每次成功分析保存当前 `result.json` 和一个不可变结果版本；命令结果的 `meta.resultVersionId` 标识对应版本。
+AI 命令包含来源验证、相同分析结果复用和不完整抓取警告。每次成功分析保存当前 `result.json` 和一个不可变结果版本。结果版本文件同时保存该次输入中的账号、抓取覆盖和活跃期摘要；命令结果的 `meta.resultVersionId` 标识对应版本。
 
 AI 会话行为：
 
@@ -190,16 +190,28 @@ v2er ai <username> --provider <provider> --new-thread
 
 ### 5. 报告展示 (Show)
 
-以结构化的格式展示最终的分析报告，包含 OCEAN 五维性格雷达图（字符模拟）。
+读取当前结果或一个已保存的不可变版本。完整报告展示结果来源、生成模型、抓取覆盖、账号与活跃期事实，以及 AI 返回的全部画像维度。
 
 ```bash
-v2er show <username> [选项]
+v2er show <username>
+v2er show <username> --brief
+v2er show <username> --json
+v2er show <username> --history
+v2er show <username> --history --json
+v2er show <username> --version v000002
 ```
 
-| 选项      | 说明                           |
-| --------- | ------------------------------ |
-| `--brief` | 简略版输出（仅摘要及核心指标） |
-| `--json`  | 输出 AI 返回的原始 JSON 数据   |
+| 选项             | 说明                                           |
+| ---------------- | ---------------------------------------------- |
+| `--brief`        | 输出所选结果的摘要、关键账号事实和风险理由     |
+| `--json`         | 输出当前或指定版本的裸 `AIAnalysisResult` JSON |
+| `--history`      | 按新到旧列出经过完整性校验的结果版本           |
+| `--version <id>` | 展示指定的 `vNNNNNN` 版本                      |
+| `-v, --verbose`  | 显示诊断输出                                   |
+
+`--history --json` 输出版本摘要数组。`--json --brief`、`--history --brief` 和 `--history --version` 是无效组合。报告、表格和 JSON 写入 `stdout`；数据质量、结果文件状态和恢复建议写入 `stderr`。
+
+`show` 命令以只读方式访问结果与来源状态。默认模式校验 `result.json`，并在存在可关联版本时核对 `results/index.json`、对应结果版本文件和 `analysis-state.json` 中的当前结果关联；`--history` 和 `--version` 使用各版本自带的生成信息和输入摘要。查询不修改结果、会话或源数据文件。详细文件关系、完整性规则和恢复命令见 [结果历史与展示](docs/result-history.md)。
 
 ### 6. 配置管理 (Config)
 
@@ -323,7 +335,7 @@ Codex App Server 继承 v2er-insight 进程白名单中的 `HTTP_PROXY`、`HTTPS
   - **AI / Gemini**：`undici` `ProxyAgent` + `setGlobalDispatcher`（原生 `fetch()` 代理）
   - **AI / Codex**：App Server 子进程的受限代理环境
 - **AI / Codex**：发现兼容 Codex CLI，自动候选优先来自本机 App，独立短生命周期 App Server 使用已登录的 Codex home 创建或恢复 thread。
-- 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下；`results/versions/` 保存不可变结果版本，`results/index.json` 保存版本顺序和 metadata，`sessions/` 保存活动 provider 和会话状态。
+- 数据本地化：数据存储于 `~/.v2er-insight/data/{username}/` 下；`results/versions/` 保存不可变结果版本和版本输入摘要，`results/index.json` 保存版本顺序和 metadata，`sessions/` 保存活动 provider 和会话状态。
 - 环境要求：Node.js >= 20.18.1（undici 7.x 要求）。
 
 ---

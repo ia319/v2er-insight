@@ -6,6 +6,12 @@
 
 不要手工修改 `sessions/index.json` 或 provider 会话文件。索引摘要、活动指针和对应 provider 文件必须保持一致；写入由 provider session 文件和共享索引事务协调。
 
+## 响应格式
+
+AI analysis turn 要求完整的 `AIAnalysisResult` JSON。Gemini 在该次 `sendMessage()` 上设置请求级 JSON Schema，Codex 在该次 turn 上设置 `outputSchema`。返回值未通过严格结果校验时，结果文件和成功会话历史保持不变。
+
+普通聊天使用自然语言响应。Gemini 的聊天请求不设置 analysis JSON Schema，Codex 的聊天 turn 不设置 `outputSchema`。
+
 ## 普通聊天
 
 使用已有活动会话继续对话：

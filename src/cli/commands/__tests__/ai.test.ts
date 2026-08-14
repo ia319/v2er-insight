@@ -1,6 +1,10 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { AnalyzerOutput } from '@/core/analyzer';
-import type { AIAnalysisResult } from '@/core/ai';
+import {
+  AI_ANALYSIS_RESULT_JSON_SCHEMA,
+  AIResultParseError,
+  type AIAnalysisResult,
+} from '@/core/ai';
 import type { ThinkingLevel } from '@/config';
 import {
   computeAnalysisConfigHash,
@@ -10,7 +14,11 @@ import {
   hashCanonicalJson,
   type AnalysisState,
 } from '@/core/provenance';
-import type { ResultVersionMetadata, ResultVersionSource } from '@/core/result-version';
+import {
+  createResultInputSummary,
+  type ResultVersionMetadata,
+  type ResultVersionSource,
+} from '@/core/result-version';
 
 const mockedReadDataFile = vi.hoisted(() => vi.fn());
 const mockedCleanExpiredData = vi.hoisted(() => vi.fn());
@@ -41,7 +49,11 @@ const mockSendMessage = vi.hoisted(() => vi.fn());
 
 const MockGeminiProvider = vi.hoisted(() => {
   return vi.fn().mockImplementation(function () {
-    return { createSession: mockCreateSession, sendMessage: mockSendMessage };
+    return {
+      createSession: mockCreateSession,
+      sendMessage: mockSendMessage,
+      sendStructuredMessage: mockSendMessage,
+    };
   });
 });
 
@@ -85,6 +97,8 @@ vi.mock('@/core/ai', async (importOriginal) => {
     GeminiProvider: MockGeminiProvider,
     buildAnalysisRequest: mockedBuildAnalysisRequest,
     parseResponse: mockedParseResponse,
+    parseAIAnalysisResult: (rawText: string) =>
+      (mockedParseResponse(rawText) as { data: AIAnalysisResult }).data,
     resolveApiKey: mockedResolveApiKey,
     withRetry: mockedWithRetry,
   };
@@ -262,6 +276,7 @@ function createAnalysisState(analyzed: AnalyzerOutput): AnalysisState {
 
 interface MockInputContext {
   getState(): AnalysisState;
+  inputSummaryHash: string;
 }
 
 function mockInput(analyzed = createAnalyzedData(), result: unknown = null): MockInputContext {
@@ -278,7 +293,10 @@ function mockInput(analyzed = createAnalyzedData(), result: unknown = null): Moc
       return state;
     },
   );
-  return { getState: () => state };
+  return {
+    getState: () => state,
+    inputSummaryHash: hashCanonicalJson(createResultInputSummary('testuser', analyzed)),
+  };
 }
 
 function markDelivered(state: AnalysisState): void {
@@ -316,6 +334,7 @@ function markDelivered(state: AnalysisState): void {
 
 function setPendingGeminiDelivery(
   state: AnalysisState,
+  inputSummaryHash: string,
   resultVersionId: string | null = null,
 ): void {
   if (!state.analyzed) {
@@ -332,6 +351,7 @@ function setPendingGeminiDelivery(
     }),
     analysisFingerprint: state.analyzed.analysisFingerprint,
     payloadHash: state.analyzed.payloadHash,
+    inputSummaryHash,
     basedOnPartial: false,
     deliveryMode: 'change',
     resultVersionId,
@@ -340,6 +360,7 @@ function setPendingGeminiDelivery(
 
 function setPendingCodexDelivery(
   state: AnalysisState,
+  inputSummaryHash: string,
   resultVersionId: string | null = null,
 ): void {
   if (!state.analyzed) {
@@ -350,6 +371,7 @@ function setPendingCodexDelivery(
     providerKey: CODEX_PROVIDER_KEY,
     analysisFingerprint: state.analyzed.analysisFingerprint,
     payloadHash: state.analyzed.payloadHash,
+    inputSummaryHash,
     basedOnPartial: false,
     deliveryMode: 'change',
     resultVersionId,
@@ -513,7 +535,7 @@ describe('runAi', () => {
     const recoveredResult = createAiResult('Recovered result');
     const context = mockInput();
     const state = context.getState();
-    setPendingGeminiDelivery(state);
+    setPendingGeminiDelivery(state, context.inputSummaryHash);
     const pending = state.pendingResultDelivery;
     if (!pending) throw new Error('Expected pending Gemini delivery');
     const metadata = createSavedMetadata({
@@ -567,7 +589,7 @@ describe('runAi', () => {
     const recoveredResult = createAiResult('Recovered result');
     const context = mockInput();
     const state = context.getState();
-    setPendingGeminiDelivery(state);
+    setPendingGeminiDelivery(state, context.inputSummaryHash);
     const pending = state.pendingResultDelivery;
     if (!pending) throw new Error('Expected pending Gemini delivery');
     const metadata = createSavedMetadata({
@@ -612,7 +634,7 @@ describe('runAi', () => {
 
   it('should block Gemini while an accepted Codex delivery remains incomplete', async () => {
     const context = mockInput();
-    setPendingCodexDelivery(context.getState());
+    setPendingCodexDelivery(context.getState(), context.inputSummaryHash);
 
     const result = await runAi('testuser', {});
 
@@ -761,7 +783,12 @@ describe('runAi', () => {
       history: [],
     });
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
-    expect(mockSendMessage).toHaveBeenCalledWith(request.payload);
+    expect(mockSendMessage).toHaveBeenCalledWith(request.payload, {
+      systemInstruction: request.systemPrompt,
+      thinkingLevel: 'high',
+      timeout: 60_000,
+      responseJsonSchema: AI_ANALYSIS_RESULT_JSON_SCHEMA,
+    });
     const [createSessionOrder] = mockCreateSession.mock.invocationCallOrder;
     const [sendMessageOrder] = mockSendMessage.mock.invocationCallOrder;
     if (createSessionOrder === undefined || sendMessageOrder === undefined) {
@@ -798,6 +825,13 @@ describe('runAi', () => {
         warningCount: 0,
         appVersion: packageJson.version,
       }),
+      {
+        username: 'testuser',
+        analyzerConfig: { inactivityThresholdDays: 60, nodeDistributionTopN: 3 },
+        dataQuality: createAnalyzedData().dataQuality,
+        userOverview: createAnalyzedData().userOverview,
+        activitySummary: createAnalyzedData().summary,
+      },
     );
     expect(mockedUpdateAnalysisState).toHaveBeenCalledTimes(3);
     expect(mockedCompleteGeminiAnalysisSession).toHaveBeenCalledWith({
@@ -939,6 +973,7 @@ describe('runAi', () => {
       'testuser',
       { summary: 'result' },
       expect.any(Object),
+      expect.any(Object),
     );
     expect(result.meta).toMatchObject({ resultVersionId: 'v000001' });
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
@@ -1051,10 +1086,12 @@ describe('runAi', () => {
       'testuser',
       expect.any(Object),
       expect.objectContaining({ deliveryId: pendingId }),
+      expect.any(Object),
     );
   });
 
-  it('should not persist or clean data when response parsing fails', async () => {
+  it('should reject invalid Gemini output without advancing delivery state', async () => {
+    const context = mockInput();
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
@@ -1065,7 +1102,7 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('invalid response');
     mockedParseResponse.mockImplementation(() => {
-      throw new Error('Invalid response JSON');
+      throw new AIResultParseError('invalid_json', 'Invalid response JSON');
     });
 
     const result = await runAi('testuser', {});
@@ -1073,8 +1110,17 @@ describe('runAi', () => {
     expect(mockedParseResponse).toHaveBeenCalledOnce();
     expect(mockedSaveResultVersion).not.toHaveBeenCalled();
     expect(mockedUpdateAnalysisState).toHaveBeenCalledOnce();
+    expect(mockedCompleteGeminiAnalysisSession).not.toHaveBeenCalled();
     expect(mockedCleanExpiredData).not.toHaveBeenCalled();
-    expect(result.reasonCode).toBe('AI_PROVIDER_FAILED');
+    expect(context.getState().pendingResultDelivery).toMatchObject({
+      providerKey: expect.stringMatching(/^gemini:/),
+      resultVersionId: null,
+    });
+    expect(context.getState().providers).toBeUndefined();
+    expect(result.reasonCode).toBe('AI_GEMINI_OUTPUT_INVALID');
+    expect(result.recoverActions).toContainEqual(
+      expect.objectContaining({ content: 'v2er ai testuser --provider gemini' }),
+    );
   });
 
   it('should report failure when the single payload cannot be sent', async () => {
@@ -1098,7 +1144,7 @@ describe('runAi', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('AI 单次分析请求失败'));
   });
 
-  it('should log warnings from AI response', async () => {
+  it('should persist strict Gemini output without normalization warnings', async () => {
     mockedResolveApiKey.mockReturnValue('test-api-key');
     mockedBuildAnalysisRequest.mockReturnValue({
       systemPrompt: 'prompt',
@@ -1109,14 +1155,15 @@ describe('runAi', () => {
     mockCreateSession.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue('response');
     mockedParseResponse.mockReturnValue({
-      data: { summary: 'result' },
+      data: createAiResult('Strict result'),
       warnings: ['Missing field: social'],
     });
     mockedCleanExpiredData.mockReturnValue(noCleanupResult);
 
-    await runAi('testuser', {});
+    const result = await runAi('testuser', {});
 
-    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Missing field'));
+    expect(result).toMatchObject({ status: 'success', meta: { warningCount: 0 } });
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Missing field'));
   });
 
   it('should suppress success detail logs in pipeline mode', async () => {
@@ -1250,6 +1297,7 @@ describe('runAi', () => {
         externalThreadId: 'thread-1',
         threadName: 'testuser-insight',
       }),
+      expect.objectContaining({ username: 'testuser' }),
     );
     expect(complete).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1451,7 +1499,7 @@ describe('runAi', () => {
     const state = input.getState();
     const analyzedState = state.analyzed;
     if (!analyzedState) throw new Error('Expected analyzed provenance');
-    setPendingCodexDelivery(state, 'v000001');
+    setPendingCodexDelivery(state, input.inputSummaryHash, 'v000001');
     const metadata = createSavedMetadata(
       {
         deliveryId: DELIVERY_ID,
@@ -1506,7 +1554,7 @@ describe('runAi', () => {
     const state = input.getState();
     const analyzedState = state.analyzed;
     if (!analyzedState) throw new Error('Expected analyzed provenance');
-    setPendingCodexDelivery(state, 'v000001');
+    setPendingCodexDelivery(state, input.inputSummaryHash, 'v000001');
     const metadata = createSavedMetadata(
       {
         deliveryId: DELIVERY_ID,

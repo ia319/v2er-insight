@@ -4,9 +4,10 @@ import { createAIAnalysisResultFixture } from '@/core/ai/__tests__/result-fixtur
 import type { AIAnalysisResult } from '@/core/ai';
 import type { PendingResultDeliveryState } from '@/core/provenance';
 import type {
-  ResultVersionIndexV1,
+  ResultInputSummary,
+  ResultVersionIndex,
   ResultVersionSource,
-  StoredResultVersionV1,
+  StoredResultVersion,
 } from '@/core/result-version';
 
 const mocks = vi.hoisted(() => ({
@@ -45,7 +46,7 @@ import { hashCanonicalJson } from '@/core/provenance/canonical-json';
 import {
   recoverResultVersionDelivery,
   ResultVersionSaveError,
-  saveResultVersion,
+  saveResultVersion as saveResultVersionToStorage,
 } from '../save-result-version';
 
 const NOW = '2026-07-26T08:00:00.000Z';
@@ -57,12 +58,12 @@ const DELIVERY_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 let indexState:
   | { status: 'missing' }
   | { status: 'invalid' }
-  | { status: 'valid'; index: ResultVersionIndexV1 };
+  | { status: 'valid'; index: ResultVersionIndex };
 let currentState:
   | { status: 'missing' }
   | { status: 'invalid' }
   | { status: 'success'; data: unknown };
-let versionFiles: Map<string, StoredResultVersionV1>;
+let versionFiles: Map<string, StoredResultVersion>;
 
 function createSource(overrides: Partial<ResultVersionSource> = {}): ResultVersionSource {
   return {
@@ -93,6 +94,7 @@ function createPending(
     providerKey: `gemini:${HASH}`,
     analysisFingerprint: HASH,
     payloadHash: HASH,
+    inputSummaryHash: hashCanonicalJson(createInputSummary()),
     basedOnPartial: false,
     deliveryMode: 'change',
     resultVersionId: null,
@@ -104,7 +106,39 @@ function createChangedResult(summary: string): AIAnalysisResult {
   return { ...createAIAnalysisResultFixture(), summary };
 }
 
-function getIndex(): ResultVersionIndexV1 {
+function createInputSummary(overrides: Partial<ResultInputSummary> = {}): ResultInputSummary {
+  return {
+    username: 'alice',
+    analyzerConfig: { inactivityThresholdDays: 60, nodeDistributionTopN: 3 },
+    dataQuality: {
+      capturedAt: CREATED_AT,
+      topics: { status: 'complete', totalExpected: 1, fetchedCount: 1, failedCount: 0 },
+      replies: { status: 'complete', totalExpected: 1, fetchedCount: 1, failedCount: 0 },
+    },
+    userOverview: {
+      joinDate: '2020-01-01',
+      lastActiveTime: '2026-07-26',
+      topicReplyRatio: 1,
+      totalTopics: 1,
+      totalReplies: 1,
+      isTopicsHidden: false,
+      dailyRanking: null,
+    },
+    activitySummary: { totalPeriods: 0, periods: [] },
+    ...overrides,
+  };
+}
+
+function saveResultVersion(
+  username: string,
+  result: AIAnalysisResult,
+  source: ResultVersionSource,
+  inputSummary: ResultInputSummary = createInputSummary({ username }),
+) {
+  return saveResultVersionToStorage(username, result, source, inputSummary);
+}
+
+function getIndex(): ResultVersionIndex {
   if (indexState.status !== 'valid') {
     throw new Error('Expected a persisted result version index');
   }
@@ -150,7 +184,7 @@ describe('saveResultVersion', () => {
       const version = versionFiles.get(versionId);
       return version ? { status: 'valid', version } : { status: 'missing' };
     });
-    mocks.writeStored.mockImplementation((_username: string, version: StoredResultVersionV1) => {
+    mocks.writeStored.mockImplementation((_username: string, version: StoredResultVersion) => {
       if (versionFiles.has(version.metadata.versionId)) {
         throw Object.assign(new Error('exists'), { code: 'EEXIST' });
       }
@@ -160,7 +194,7 @@ describe('saveResultVersion', () => {
       expect(type).toBe('result');
       currentState = { status: 'success', data };
     });
-    mocks.writeIndex.mockImplementation((_username: string, index: ResultVersionIndexV1) => {
+    mocks.writeIndex.mockImplementation((_username: string, index: ResultVersionIndex) => {
       indexState = { status: 'valid', index };
     });
     vi.mocked(fs.statSync).mockReturnValue({
@@ -179,7 +213,12 @@ describe('saveResultVersion', () => {
 
     expect(metadata.versionId).toBe('v000001');
     expect(metadata.resultHash).toBe(hashCanonicalJson(result));
-    expect(versionFiles.get('v000001')?.result).toEqual(result);
+    const stored = versionFiles.get('v000001');
+    if (!stored) throw new Error('Expected the generated result version');
+    expect(stored.result).toEqual(result);
+    expect(stored.schemaVersion).toBe(1);
+    expect(stored.inputSummary).toEqual(createInputSummary());
+    expect(stored.inputSummaryHash).toBe(hashCanonicalJson(stored.inputSummary));
     expect(currentState).toEqual({ status: 'success', data: result });
     expect(getIndex()).toMatchObject({
       nextSequence: 2,
@@ -211,6 +250,11 @@ describe('saveResultVersion', () => {
       provider: 'unknown',
       createdAt: CREATED_AT,
       resultHash: hashCanonicalJson(legacy),
+    });
+    expect(versionFiles.get('v000001')).toMatchObject({
+      schemaVersion: 1,
+      inputSummary: null,
+      inputSummaryHash: null,
     });
     expect(currentState).toEqual({ status: 'success', data: next });
   });
@@ -272,7 +316,7 @@ describe('saveResultVersion', () => {
     expect(mocks.writeIndex).not.toHaveBeenCalled();
   });
 
-  it('recovers a committed delivery without the original result or source input', () => {
+  it('recovers a committed delivery from its durable pending identity', () => {
     const result = createAIAnalysisResultFixture();
     saveResultVersion('alice', result, createSource());
     currentState = { status: 'missing' };
@@ -306,6 +350,23 @@ describe('saveResultVersion', () => {
     expect(versionFiles.size).toBe(1);
     expect(mocks.writeCurrent).not.toHaveBeenCalled();
     expect(mocks.writeIndex).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an unindexed candidate with a different input summary', () => {
+    const result = createAIAnalysisResultFixture();
+    mocks.writeIndex.mockImplementationOnce(() => {
+      throw new Error('index write failed');
+    });
+    expect(() => saveResultVersion('alice', result, createSource())).toThrow('index write failed');
+    clearWriteCalls();
+
+    expectSaveError(
+      () =>
+        recoverResultVersionDelivery('alice', createPending({ inputSummaryHash: 'b'.repeat(64) })),
+      'RESULT_DELIVERY_CONFLICT',
+    );
+    expect(mocks.writeCurrent).not.toHaveBeenCalled();
+    expect(mocks.writeIndex).not.toHaveBeenCalled();
   });
 
   it('returns missing when a pending delivery has no saved file', () => {
@@ -465,5 +526,17 @@ describe('saveResultVersion', () => {
       () => saveResultVersion('alice', createAIAnalysisResultFixture(), createSource()),
       'RESULT_VERSION_CORRUPT',
     );
+  });
+
+  it('rejects an input summary owned by a different user before locking', () => {
+    expect(() =>
+      saveResultVersion(
+        'alice',
+        createAIAnalysisResultFixture(),
+        createSource(),
+        createInputSummary({ username: 'bob' }),
+      ),
+    ).toThrow(TypeError);
+    expect(mocks.withLock).not.toHaveBeenCalled();
   });
 });

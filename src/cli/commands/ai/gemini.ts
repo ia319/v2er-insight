@@ -1,7 +1,8 @@
 import {
+  AI_ANALYSIS_RESULT_JSON_SCHEMA,
   GeminiProvider,
   isAIAnalysisResult,
-  parseResponse,
+  parseAIAnalysisResult,
   resolveApiKey,
   withRetry,
   type AIAnalysisResult,
@@ -38,6 +39,7 @@ export interface ExecuteGeminiAnalysisOptions {
   request: AnalysisRequest;
   analysisState: AnalysisState;
   provenance: ValidAnalyzedProvenance;
+  inputSummaryHash: string;
   savedResult: unknown;
   model?: string;
   thinkingLevel?: string;
@@ -137,6 +139,7 @@ export async function executeGeminiAnalysis(
       providerKey,
       analysisFingerprint: options.provenance.analysisFingerprint,
       payloadHash: options.provenance.payloadHash,
+      inputSummaryHash: options.inputSummaryHash,
       basedOnPartial: options.provenance.basedOnPartial,
       deliveryMode: options.resend ? 'resend' : 'change',
     };
@@ -168,16 +171,22 @@ export async function executeGeminiAnalysis(
     });
     logger.section('发送完整分析数据至 AI...');
     const rawResponse = await withRetry(
-      () => provider.sendMessage(options.request.payload),
+      () =>
+        provider.sendStructuredMessage(options.request.payload, {
+          systemInstruction: options.request.systemPrompt,
+          thinkingLevel,
+          timeout: options.config.timeout,
+          responseJsonSchema: AI_ANALYSIS_RESULT_JSON_SCHEMA,
+        }),
       retryOptions,
     );
-    const parsed = parseResponse(rawResponse);
+    const result = parseAIAnalysisResult(rawResponse);
     return {
       status: 'result',
       model,
       providerKey,
-      result: parsed.data,
-      warnings: parsed.warnings,
+      result,
+      warnings: [],
       thinkingLevel,
       localSessionId: preparedSession.session.localSessionId,
       delivery,
@@ -187,7 +196,7 @@ export async function executeGeminiAnalysis(
           prepared: preparedSession,
           metadata,
           requestPayload: options.request.payload,
-          result: parsed.data,
+          result,
           thinkingLevel,
         });
       },

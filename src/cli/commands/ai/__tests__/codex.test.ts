@@ -280,6 +280,7 @@ describe('inspectCodexResultDeliverySession', () => {
     providerKey: `codex:${HASH}`,
     analysisFingerprint: HASH,
     payloadHash: HASH,
+    inputSummaryHash: HASH,
     basedOnPartial: false,
     deliveryMode: 'change' as const,
     resultVersionId: 'v000001',

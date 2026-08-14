@@ -221,7 +221,7 @@ Codex provider 使用以下运行边界：
 
 Pending delivery identity 在外部请求前持久化，App Server 接受后关联 turn ID。解析完成后，同一 delivery ID 进入 `analysis-state.json`；结果版本保存后，pending state 与 `currentResult` 同时关联该 version ID。Codex turn 完成后，provider 文件和会话索引关联该结果版本；随后 provider 发送态更新且 pending state 清除。时间戳采用 UTC ISO 格式，`promptHash`、`analysisFingerprint` 和 `payloadHash` 采用 SHA-256 小写十六进制。
 
-完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史。解析后的画像结果保存于 `results/versions/vNNNNNN.json` 不可变 envelope、`results/index.json` 和当前 `result.json`；版本 metadata 保存 model、reasoning effort、local session ID、thread ID、thread name 和分析来源哈希。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
+完整 `AnalyzerOutput` 保存于 v2er 的 `analyzed.json`，发送后同时存在于 Codex thread 历史。`results/versions/vNNNNNN.json` 保存解析后的画像结果和从本次 `AnalyzerOutput` 投影的输入摘要，`result.json` 保存当前的裸画像结果；`results/index.json` 和版本 metadata 保存版本顺序、model、reasoning effort、local session ID、thread ID、thread name 和分析来源哈希。输入摘要不包含帖子或回复正文。原始 thread 回复归属于 Codex home。凭据由 Codex home 或系统凭据存储管理。
 
 会话索引和 provider 文件读取结果分为 missing、invalid 和 valid；索引摘要必须与对应 provider 文件一致。Invalid 文件保持原内容；有效更新先写 provider 文件，再发布索引。每个文件使用 UTF-8 无 BOM、同目录临时文件和原子替换。目标文件的创建模式为 `0o600`；Windows 的实际访问范围由现有 ACL 决定。新旧会话存储位于自动数据保留策略的范围之外。确认后的 `session clear` 可以删除 `sessions/` 中的会话文件；旧迁移来源保持不变。
 

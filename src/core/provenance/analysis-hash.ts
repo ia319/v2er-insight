@@ -1,6 +1,6 @@
 import type { AnalyzerOutput } from '@/core/analyzer';
 import type { AnalyzerConfig } from '@/config';
-import { DEFAULT_CONFIG } from '@/config';
+import { resolveSemanticAnalyzerConfig } from '@/config';
 import { hashCanonicalJson } from './canonical-json';
 
 export interface AnalysisFingerprintInput {
@@ -11,11 +11,7 @@ export interface AnalysisFingerprintInput {
 
 /** Hashes Analyzer settings that define statistical meaning. */
 export function computeAnalysisConfigHash(config?: AnalyzerConfig): string {
-  return hashCanonicalJson({
-    inactivityThreshold: config?.inactivityThreshold ?? DEFAULT_CONFIG.analyzer.inactivityThreshold,
-    nodeDistributionTopN:
-      config?.nodeDistributionTopN ?? DEFAULT_CONFIG.analyzer.nodeDistributionTopN,
-  });
+  return hashCanonicalJson(resolveSemanticAnalyzerConfig(config));
 }
 
 /** Combines source semantics, Analyzer schema, and semantic configuration. */
