@@ -492,7 +492,7 @@ The `show` subcommand accepts `--brief`, `--json`, `--history`, `--version <id>`
 | Path                            | Type    | Meaning                                                                   |
 | ------------------------------- | ------- | ------------------------------------------------------------------------- |
 | `proxy`                         | string  | Fetcher, Gemini, and Codex App Server proxy URL                           |
-| `ai.provider`                   | enum    | Active provider: `gemini` / `codex`; default `gemini`                     |
+| `ai.provider`                   | enum    | Active provider: `gemini` / `codex`; default `codex`                      |
 | `ai.gemini.apiKey`              | string  | Gemini API credential; masked in config output                            |
 | `ai.gemini.model`               | string  | Gemini model name; default `gemini-3.1-pro-preview`                       |
 | `ai.gemini.thinkingLevel`       | enum    | `minimal` / `low` / `medium` / `high`; default `high`                     |
@@ -680,7 +680,7 @@ Codex thread config disables web search and stable execution, browser, app, plug
 
 **Defaults** (from `config/defaults.ts`):
 
-- Provider: `gemini`
+- Provider: `codex`
 - Gemini model: `gemini-3.1-pro-preview` (via resolved `ai.gemini.model`)
 - Gemini ThinkingLevel: `high` (via resolved `ai.gemini.thinkingLevel`)
 - Source data retention: `data.keepRaw = true`; explicit `false` enables `data.rawRetention`

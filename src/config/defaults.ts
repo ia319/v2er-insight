@@ -26,7 +26,7 @@ export type ResolvedConfig = Required<{
 /** 全局默认配置 */
 export const DEFAULT_CONFIG = {
   ai: {
-    provider: 'gemini',
+    provider: 'codex',
     model: 'gemini-3.1-pro-preview',
     thinkingLevel: 'high' as const,
     timeout: 60_000,

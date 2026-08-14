@@ -23,17 +23,17 @@ pnpm add -g v2er-insight
 
 2. AI provider
 
-Gemini API Key：
+Codex 是默认 provider，使用本机 ChatGPT/Codex App 的登录会话：
 
 ```bash
-v2er config set ai.gemini.apiKey <your_gemini_api_key>
+v2er session check --provider codex
 ```
 
-Codex 使用本机 ChatGPT/Codex App 的登录会话：
+切换到 Gemini 时，选择 provider 并配置 API Key：
 
 ```bash
-v2er config set ai.provider codex
-v2er session check --provider codex
+v2er config set ai.provider gemini
+v2er config set ai.gemini.apiKey <your_gemini_api_key>
 ```
 
 独立 Codex App Server 使用真实 `CODEX_HOME` 中的凭据存储。账户检查使用 `account/read(refreshToken: false)`；实际模型请求期间的 Token 自动刷新可能更新登录缓存。v2er 的账户响应投影限于账户类型和鉴权可用状态，用于 runtime 选择与诊断输出。
@@ -142,7 +142,7 @@ AI 会话行为：
 
 存储、恢复和 Gemini 上下文成本见 [AI 会话](docs/ai-conversations.md)。
 
-默认 provider 为 `gemini`。
+默认 provider 为 `codex`。
 
 Gemini 默认值：
 

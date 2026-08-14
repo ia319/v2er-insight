@@ -105,7 +105,7 @@ describe('config/storage', () => {
 
       const config = getConfig();
 
-      expect(config.ai?.provider).toBe('gemini');
+      expect(config.ai?.provider).toBe('codex');
       expect(config.ai?.model).toBe('gemini-3.1-pro-preview');
       expect(config.ai?.thinkingLevel).toBe('high');
       expect(config.ai?.codex).toMatchObject({
@@ -134,7 +134,7 @@ describe('config/storage', () => {
       expect(config.ai?.model).toBe('custom-model');
       expect(config.proxy).toBe('http://my-proxy');
       // 默认值保留
-      expect(config.ai?.provider).toBe('gemini');
+      expect(config.ai?.provider).toBe('codex');
       expect(config.ai?.timeout).toBe(60_000);
       expect(config.fetch?.timeout).toBe(30_000);
     });
