@@ -216,7 +216,7 @@ v2er show <username> --version v000002
 ### 6. 配置管理 (Config)
 
 - **group**: 配置分组名，可选 `ai`、`fetch`、`analyzer`、`data`、`log`、`proxy`
-- **path**: 点分路径，如 `ai.model`、`log.level`、`data.keepRaw`
+- **path**: 点分路径，如 `ai.gemini.model`、`log.level`、`data.keepRaw`
 - **value**: 配置值，自动进行类型转换（字符串/数字/布尔）和枚举校验
 
 ```bash
@@ -225,11 +225,11 @@ v2er config show                            # 查看全部配置（apiKey 自动
 v2er config show ai                         # 查看 ai 分组
 
 # 设置
-v2er config set ai.model gemini-2.5-flash   # 切换模型
-v2er config set ai.thinkingLevel medium     # 设置思考等级
+v2er config set ai.gemini.model gemini-3.1-pro-preview # 切换 Gemini 模型
+v2er config set ai.gemini.thinkingLevel medium         # 设置 Gemini 思考等级
 v2er config set log.level debug             # 开启调试日志
 v2er config set data.keepRaw true           # 保留原始数据
-v2er config set ai.timeout 120000           # AI 请求超时 120s
+v2er config set ai.gemini.timeout 120000    # Gemini 请求超时 120s
 v2er config set ai.maxRetries 5             # AI 最大重试次数
 v2er config set ai.baseDelay 2000           # AI 重试基础延迟 2s
 v2er config set ai.maxDelay 20000           # AI 重试最大延迟 20s
