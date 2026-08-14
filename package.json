@@ -1,7 +1,7 @@
 {
   "name": "v2er-insight",
   "version": "1.2.0",
-  "description": "",
+  "description": "V2EX 用户画像深度分析工具。通过自动化抓取数据、统计解析及 AI 语言模型建模，构建多维度的用户行为与心理画像。",
   "main": "./dist/cli/index.js",
   "bin": {
     "v2er": "./dist/cli/index.js"
