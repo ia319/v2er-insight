@@ -1,8 +1,8 @@
-# V2ER Insight
+<h1 align="center">V2ER Insight</h1>
 
-V2EX 用户画像深度分析工具。通过自动化抓取数据、统计解析及 AI 语言模型建模，构建多维度的用户行为与心理画像。
-
-目前画像结果一般。受限于模型能力、Analyze 结果、提示词，后两个需要更多的迭代。
+<p align="center">
+  V2EX 用户画像分析工具，通过公开数据抓取、统计分析和 AI 建模生成多维度报告。
+</p>
 
 ## 核心流程 (Pipe Flow)
 
@@ -43,15 +43,9 @@ v2er config set ai.provider gemini
 v2er config set ai.gemini.apiKey <your_gemini_api_key>
 ```
 
-独立 Codex App Server 使用真实 `CODEX_HOME` 中的凭据存储。账户检查使用 `account/read(refreshToken: false)`；实际模型请求期间的 Token 自动刷新可能更新登录缓存。v2er 的账户响应投影限于账户类型和鉴权可用状态，用于 runtime 选择与诊断输出。
+Codex 使用所选 CLI 对应的 `CODEX_HOME` 登录状态和 thread 历史。Windows 自动发现只启动通过 OpenAI 签名校验的 App CLI；使用其他兼容 CLI 时，配置 `ai.codex.executable`。
 
-自动发现仅启动带有效 OpenAI Authenticode 签名和匹配发布者的 Windows 原生 CLI。PATH 中的 Codex CLI 只进入诊断；普通独立 CLI 通过 `ai.codex.executable` 显式配置。独立 CLI 与 App 使用同一 `CODEX_HOME` 时共享登录状态和 thread 历史，不同 Codex home 对应独立的账户与历史边界。候选选择校验版本、App Server 初始化、账户、模型和 reasoning effort；thread 方法在实际创建、恢复和发送阶段校验。
-
-Codex 版本探测和 App Server 使用受限子进程环境。环境继承范围限于 Codex runtime、用户与系统目录、临时目录、区域设置、代理和证书路径；API Key、access token、`NODE_OPTIONS`、`ComSpec` 和其他业务变量位于继承范围之外。显式 `.cmd` shim 使用经过文件检查的系统命令处理器。代理值可能包含代理凭据。
-
-Codex thread 固定使用只读 sandbox、`approvalPolicy: never` 和 `networkAccess: false`，关闭 Web 搜索、shell、apps/connectors、hooks、子代理和 plugin 能力。临时 thread 读取所选 Codex home 的实际 MCP 工具名称，持久 thread 按名称关闭对应服务；持久 thread 的 MCP 工具清单为空后进入消息发送。详细边界见 [Codex App Server 接入规范](docs/codex-app-server-integration.md#9-权限与工具边界)。
-
-Codex 默认 Project 为 `~/.v2er-insight/data`。该目录注册为 App 本地 Project 后，创建的任务显示在项目树中；thread 创建独立于该注册状态。
+Codex thread 使用只读 sandbox，并关闭 Web、shell、apps、plugins 和 MCP 工具。默认 Project 为 `~/.v2er-insight/data`。完整的账户、进程环境和工具隔离边界见 [Codex App Server 接入规范](docs/codex-app-server-integration.md)。
 
 3. 代理（可选）
 
@@ -91,7 +85,7 @@ v2er <username>
 
 ---
 
-### 分步执行
+以下命令可以分别执行各阶段：
 
 ### 1. 数据抓取 (Fetch)
 
@@ -174,6 +168,8 @@ Codex 默认值：
 | `ai.codex.startupTimeout`  | `10_000` 毫秒          | CLI 探测、App Server 启动和普通 RPC 期限 |
 | `ai.codex.turnTimeout`     | `600_000` 毫秒         | 单个 turn 的完成期限                     |
 | `ai.codex.shutdownGrace`   | `2_000` 毫秒           | 独立 App Server 子进程的关闭宽限         |
+
+将 `~/.v2er-insight/data` 注册为 Codex App 本地 Project 后，v2er 创建的任务显示在对应项目树中。Project 注册状态不影响 thread 创建。
 
 ### 4. 持续聊天 (Chat)
 
@@ -284,7 +280,7 @@ v2er session check [username] --provider codex
 - Gemini：展示思考等级和 API Key 可用状态。
 - Codex：通过初始化、`account/read(refreshToken: false)`、`model/list` 和可选的 `thread/read` 检查运行环境。输出包括 CLI 候选及其信任依据、账户状态、模型目录、Project 路径、执行锁、本地会话和 thread 状态。
 
-Codex 凭据存储由独立 App Server 访问。
+Codex App Server 使用所选 `CODEX_HOME` 中的凭据存储。模型请求可能刷新该登录缓存。
 
 #### 永久清理
 
@@ -374,7 +370,7 @@ pnpm run ci             # 完整 CI（类型 + lint + 格式 + 测试）
 
 ---
 
-### 安全与隐私
+## 安全与隐私
 
 - 文件权限：在 Linux/Mac 系统上，程序创建的配置文件权限为 `0600`（仅当前用户读写）。
 - 隐私保护：建议避免在配置文件中直接存储包含明文凭据的代理 URL。
