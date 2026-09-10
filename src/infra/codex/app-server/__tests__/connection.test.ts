@@ -296,6 +296,89 @@ describe('CodexAppServerConnection', () => {
     await connection.close();
   });
 
+  it.each(['start', 'resume'] as const)(
+    'should retain legacy isolation when an older CLI rejects agents.enabled during %s',
+    async (operation) => {
+      const respond = createIsolatedThreadResponder();
+      const { connection, requests } = createHarness((request, output) => {
+        const params = isRecord(request.params) ? request.params : {};
+        const config = isRecord(params.config) ? params.config : {};
+        if (request.method === 'thread/start' && params.ephemeral && 'agents' in config) {
+          output.write(
+            `${JSON.stringify({
+              id: request.id,
+              error: {
+                code: -32600,
+                message:
+                  'failed to load configuration: invalid type: boolean `false`, expected struct AgentRoleToml\nin `agents`\n',
+              },
+            })}\n`,
+          );
+          return;
+        }
+        respond(request, output);
+      });
+
+      const options = { model: 'gpt-current', cwd: 'D:\\data' };
+      await expect(
+        operation === 'start'
+          ? connection.startThread(options)
+          : connection.resumeThread({ ...options, threadId: 'thread-1' }),
+      ).resolves.toMatchObject({ thread: { id: 'thread-1' } });
+      const threadRequests = requests.filter((request) =>
+        ['thread/start', 'thread/resume'].includes(String(request.method)),
+      );
+      expect(threadRequests).toHaveLength(3);
+      expect(threadRequests[0]?.params).toMatchObject({
+        ephemeral: true,
+        config: { agents: { enabled: false } },
+      });
+      expect(threadRequests[1]?.params).toMatchObject({ ephemeral: true });
+      for (const request of threadRequests.slice(1)) {
+        expect(request.params).toMatchObject({
+          approvalPolicy: 'never',
+          sandbox: 'read-only',
+          config: { web_search: 'disabled', features: { multi_agent: false, shell_tool: false } },
+        });
+        expect(request.params).not.toHaveProperty('config.agents');
+      }
+      expect(threadRequests[2]?.params).toMatchObject({
+        config: { mcp_servers: { 'direct-server': { enabled: false } } },
+      });
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(false);
+      expect(BASE_THREAD_CONFIG.agents.enabled).toBe(false);
+      await connection.close();
+    },
+  );
+
+  it.each([
+    { code: -32600, message: 'failed to load configuration: invalid sandbox' },
+    {
+      code: -32603,
+      message: 'invalid type: boolean `false`, expected struct AgentRoleToml\nin `agents`',
+    },
+    {
+      code: -32600,
+      message: 'invalid type: boolean `false`, expected struct AgentRoleToml\nin `other`',
+    },
+  ])('should preserve an unrelated probe error: $message', async (error) => {
+    const respond = createIsolatedThreadResponder();
+    const { connection, requests } = createHarness((request, output) => {
+      if (request.method === 'thread/start') {
+        output.write(`${JSON.stringify({ id: request.id, error })}\n`);
+        return;
+      }
+      respond(request, output);
+    });
+
+    await expect(
+      connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' }),
+    ).rejects.toMatchObject(error);
+    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(requests.some((request) => request.method === 'turn/start')).toBe(false);
+    await connection.close();
+  });
+
   it('should delete persisted threads through the App Server', async () => {
     const { connection, requests } = createHarness(createIsolatedThreadResponder());
 

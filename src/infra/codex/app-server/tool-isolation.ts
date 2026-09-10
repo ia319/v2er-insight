@@ -31,17 +31,25 @@ export const BASE_THREAD_CONFIG = {
   },
 } satisfies JsonValue;
 
+export type CodexThreadConfig = Omit<typeof BASE_THREAD_CONFIG, 'agents'> & {
+  agents?: { enabled: boolean };
+};
+
 /**
  * Builds a thread-local config that disables every MCP server exposing tools in the probe.
  * @param servers - Effective MCP inventory from an ephemeral probe thread.
+ * @param config - Base isolation settings accepted by the probe runtime.
  * @returns A complete thread configuration with discovered servers disabled.
  */
-export function buildToolIsolatedThreadConfig(servers: readonly CodexMcpServerStatus[]): JsonValue {
+export function buildToolIsolatedThreadConfig(
+  servers: readonly CodexMcpServerStatus[],
+  config: CodexThreadConfig,
+): JsonValue {
   const activeServers = servers.filter((server) => server.toolNames.length > 0);
-  if (activeServers.length === 0) return BASE_THREAD_CONFIG;
+  if (activeServers.length === 0) return config;
 
   return {
-    ...BASE_THREAD_CONFIG,
+    ...config,
     mcp_servers: Object.fromEntries(
       activeServers.map((server) => [server.name, { enabled: false }]),
     ),
