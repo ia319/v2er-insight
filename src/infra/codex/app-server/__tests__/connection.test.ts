@@ -222,7 +222,11 @@ describe('CodexAppServerConnection', () => {
       params: {
         model: 'gpt-current',
         cwd: 'D:\\data',
-        config: BASE_THREAD_CONFIG,
+        config: {
+          ...BASE_THREAD_CONFIG,
+          agents: { enabled: false },
+          features: { ...BASE_THREAD_CONFIG.features, multi_agent: false },
+        },
         approvalPolicy: 'never',
         sandbox: 'read-only',
         serviceName: 'v2er-insight-tool-probe',
@@ -237,6 +241,8 @@ describe('CodexAppServerConnection', () => {
         cwd: 'D:\\data',
         config: {
           ...BASE_THREAD_CONFIG,
+          agents: { enabled: false },
+          features: { ...BASE_THREAD_CONFIG.features, multi_agent: false },
           mcp_servers: { 'direct-server': { enabled: false } },
         },
         approvalPolicy: 'never',
@@ -269,6 +275,8 @@ describe('CodexAppServerConnection', () => {
         cwd: 'D:\\data',
         config: {
           ...BASE_THREAD_CONFIG,
+          agents: { enabled: false },
+          features: { ...BASE_THREAD_CONFIG.features, multi_agent: false },
           mcp_servers: { 'direct-server': { enabled: false } },
         },
         approvalPolicy: 'never',
@@ -411,7 +419,22 @@ describe('CodexAppServerConnection', () => {
     await connection.close();
   });
 
-  it('should interrupt and reject an unexpected action received before the start response', async () => {
+  it.each([
+    {
+      type: 'commandExecution',
+      id: 'command-1',
+      command: 'whoami',
+      cwd: 'D:\\data',
+      status: 'inProgress',
+    },
+    {
+      type: 'subAgentActivity',
+      id: 'subagent-1',
+      agentPath: '/root/evidence_audit',
+      agentThreadId: 'child-thread-1',
+      kind: 'started',
+    },
+  ])('should interrupt $type received before the start response', async (item) => {
     const { connection, output, requests } = createHarness();
     const acceptedTurnIds: string[] = [];
     const running = connection.runTurn(
@@ -431,8 +454,8 @@ describe('CodexAppServerConnection', () => {
       name: 'CodexUnexpectedTurnActionError',
       threadId: 'thread-1',
       turnId: 'turn-1',
-      itemId: 'command-1',
-      itemType: 'commandExecution',
+      itemId: item.id,
+      itemType: item.type,
     });
     output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
     await vi.waitFor(() => {
@@ -445,13 +468,7 @@ describe('CodexAppServerConnection', () => {
           threadId: 'thread-1',
           turnId: 'turn-1',
           startedAtMs: 1,
-          item: {
-            type: 'commandExecution',
-            id: 'command-1',
-            command: 'whoami',
-            cwd: 'D:\\data',
-            status: 'inProgress',
-          },
+          item,
         },
       })}\n${JSON.stringify({
         id: 2,

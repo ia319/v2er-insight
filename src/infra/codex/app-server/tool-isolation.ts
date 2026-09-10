@@ -5,6 +5,8 @@ export const CODEX_TOOL_PROBE_SERVICE_NAME = 'v2er-insight-tool-probe';
 
 export const BASE_THREAD_CONFIG = {
   web_search: 'disabled',
+  // Multi-agent v2 uses this switch independently of the legacy feature flag.
+  agents: { enabled: false },
   features: {
     apps: false,
     auth_elicitation: false,

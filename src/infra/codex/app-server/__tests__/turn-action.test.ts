@@ -17,6 +17,8 @@ describe('Codex turn action policy', () => {
   it('should reject execution and unknown item types', () => {
     expect(isUnexpectedTurnAction('commandExecution')).toBe(true);
     expect(isUnexpectedTurnAction('mcpToolCall')).toBe(true);
+    expect(isUnexpectedTurnAction('collabAgentToolCall')).toBe(true);
+    expect(isUnexpectedTurnAction('subAgentActivity')).toBe(true);
     expect(isUnexpectedTurnAction('futureExecutionItem')).toBe(true);
   });
 });
