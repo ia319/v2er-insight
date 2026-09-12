@@ -222,7 +222,11 @@ describe('CodexAppServerConnection', () => {
       params: {
         model: 'gpt-current',
         cwd: 'D:\\data',
-        config: BASE_THREAD_CONFIG,
+        config: {
+          ...BASE_THREAD_CONFIG,
+          agents: { enabled: false },
+          features: { ...BASE_THREAD_CONFIG.features, multi_agent: false },
+        },
         approvalPolicy: 'never',
         sandbox: 'read-only',
         serviceName: 'v2er-insight-tool-probe',
@@ -237,6 +241,8 @@ describe('CodexAppServerConnection', () => {
         cwd: 'D:\\data',
         config: {
           ...BASE_THREAD_CONFIG,
+          agents: { enabled: false },
+          features: { ...BASE_THREAD_CONFIG.features, multi_agent: false },
           mcp_servers: { 'direct-server': { enabled: false } },
         },
         approvalPolicy: 'never',
@@ -269,6 +275,8 @@ describe('CodexAppServerConnection', () => {
         cwd: 'D:\\data',
         config: {
           ...BASE_THREAD_CONFIG,
+          agents: { enabled: false },
+          features: { ...BASE_THREAD_CONFIG.features, multi_agent: false },
           mcp_servers: { 'direct-server': { enabled: false } },
         },
         approvalPolicy: 'never',
@@ -285,6 +293,89 @@ describe('CodexAppServerConnection', () => {
       method: 'thread/read',
       params: { threadId: 'thread-1', includeTurns: true },
     });
+    await connection.close();
+  });
+
+  it.each(['start', 'resume'] as const)(
+    'should retain legacy isolation when an older CLI rejects agents.enabled during %s',
+    async (operation) => {
+      const respond = createIsolatedThreadResponder();
+      const { connection, requests } = createHarness((request, output) => {
+        const params = isRecord(request.params) ? request.params : {};
+        const config = isRecord(params.config) ? params.config : {};
+        if (request.method === 'thread/start' && params.ephemeral && 'agents' in config) {
+          output.write(
+            `${JSON.stringify({
+              id: request.id,
+              error: {
+                code: -32600,
+                message:
+                  'failed to load configuration: invalid type: boolean `false`, expected struct AgentRoleToml\nin `agents`\n',
+              },
+            })}\n`,
+          );
+          return;
+        }
+        respond(request, output);
+      });
+
+      const options = { model: 'gpt-current', cwd: 'D:\\data' };
+      await expect(
+        operation === 'start'
+          ? connection.startThread(options)
+          : connection.resumeThread({ ...options, threadId: 'thread-1' }),
+      ).resolves.toMatchObject({ thread: { id: 'thread-1' } });
+      const threadRequests = requests.filter((request) =>
+        ['thread/start', 'thread/resume'].includes(String(request.method)),
+      );
+      expect(threadRequests).toHaveLength(3);
+      expect(threadRequests[0]?.params).toMatchObject({
+        ephemeral: true,
+        config: { agents: { enabled: false } },
+      });
+      expect(threadRequests[1]?.params).toMatchObject({ ephemeral: true });
+      for (const request of threadRequests.slice(1)) {
+        expect(request.params).toMatchObject({
+          approvalPolicy: 'never',
+          sandbox: 'read-only',
+          config: { web_search: 'disabled', features: { multi_agent: false, shell_tool: false } },
+        });
+        expect(request.params).not.toHaveProperty('config.agents');
+      }
+      expect(threadRequests[2]?.params).toMatchObject({
+        config: { mcp_servers: { 'direct-server': { enabled: false } } },
+      });
+      expect(requests.some((request) => request.method === 'turn/start')).toBe(false);
+      expect(BASE_THREAD_CONFIG.agents.enabled).toBe(false);
+      await connection.close();
+    },
+  );
+
+  it.each([
+    { code: -32600, message: 'failed to load configuration: invalid sandbox' },
+    {
+      code: -32603,
+      message: 'invalid type: boolean `false`, expected struct AgentRoleToml\nin `agents`',
+    },
+    {
+      code: -32600,
+      message: 'invalid type: boolean `false`, expected struct AgentRoleToml\nin `other`',
+    },
+  ])('should preserve an unrelated probe error: $message', async (error) => {
+    const respond = createIsolatedThreadResponder();
+    const { connection, requests } = createHarness((request, output) => {
+      if (request.method === 'thread/start') {
+        output.write(`${JSON.stringify({ id: request.id, error })}\n`);
+        return;
+      }
+      respond(request, output);
+    });
+
+    await expect(
+      connection.startThread({ model: 'gpt-current', cwd: 'D:\\data' }),
+    ).rejects.toMatchObject(error);
+    expect(requests.filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(requests.some((request) => request.method === 'turn/start')).toBe(false);
     await connection.close();
   });
 
@@ -411,7 +502,22 @@ describe('CodexAppServerConnection', () => {
     await connection.close();
   });
 
-  it('should interrupt and reject an unexpected action received before the start response', async () => {
+  it.each([
+    {
+      type: 'commandExecution',
+      id: 'command-1',
+      command: 'whoami',
+      cwd: 'D:\\data',
+      status: 'inProgress',
+    },
+    {
+      type: 'subAgentActivity',
+      id: 'subagent-1',
+      agentPath: '/root/evidence_audit',
+      agentThreadId: 'child-thread-1',
+      kind: 'started',
+    },
+  ])('should interrupt $type received before the start response', async (item) => {
     const { connection, output, requests } = createHarness();
     const acceptedTurnIds: string[] = [];
     const running = connection.runTurn(
@@ -431,8 +537,8 @@ describe('CodexAppServerConnection', () => {
       name: 'CodexUnexpectedTurnActionError',
       threadId: 'thread-1',
       turnId: 'turn-1',
-      itemId: 'command-1',
-      itemType: 'commandExecution',
+      itemId: item.id,
+      itemType: item.type,
     });
     output.write(`${JSON.stringify({ id: 1, result: initializeResult })}\n`);
     await vi.waitFor(() => {
@@ -445,13 +551,7 @@ describe('CodexAppServerConnection', () => {
           threadId: 'thread-1',
           turnId: 'turn-1',
           startedAtMs: 1,
-          item: {
-            type: 'commandExecution',
-            id: 'command-1',
-            command: 'whoami',
-            cwd: 'D:\\data',
-            status: 'inProgress',
-          },
+          item,
         },
       })}\n${JSON.stringify({
         id: 2,

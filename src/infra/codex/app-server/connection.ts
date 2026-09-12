@@ -1,6 +1,7 @@
 import packageJson from '../../../../package.json';
 import {
   CodexAppServerProtocolError,
+  CodexAppServerRpcError,
   CodexToolIsolationError,
   CodexUnexpectedTurnActionError,
 } from './errors';
@@ -35,6 +36,7 @@ import {
   buildToolIsolatedThreadConfig,
   CODEX_TOOL_PROBE_SERVICE_NAME,
   listAvailableMcpTools,
+  type CodexThreadConfig,
 } from './tool-isolation';
 import { isUnexpectedTurnAction } from './turn-action';
 import type { CodexThreadInfo, CodexThreadSessionInfo, CodexTurnInfo } from './thread-types';
@@ -405,12 +407,37 @@ export class CodexAppServerConnection {
   private async createToolIsolatedThreadConfig(
     options: CodexThreadStartOptions,
   ): Promise<JsonValue> {
-    const probe = await this.process.client.request(
+    let config: CodexThreadConfig = BASE_THREAD_CONFIG;
+    let probe: CodexThreadSessionInfo;
+    try {
+      probe = await this.startToolProbe(options, config);
+    } catch (error) {
+      // Older CLIs interpret agents.enabled as a custom role and reject the boolean.
+      if (
+        !(error instanceof CodexAppServerRpcError) ||
+        error.code !== -32600 ||
+        !error.message.includes('invalid type: boolean `false`, expected struct AgentRoleToml') ||
+        !error.message.includes('in `agents`')
+      ) {
+        throw error;
+      }
+      config = { ...BASE_THREAD_CONFIG };
+      delete config.agents;
+      probe = await this.startToolProbe(options, config);
+    }
+    return buildToolIsolatedThreadConfig(await this.listMcpServers(probe.thread.id), config);
+  }
+
+  private startToolProbe(
+    options: CodexThreadStartOptions,
+    config: CodexThreadConfig,
+  ): Promise<CodexThreadSessionInfo> {
+    return this.process.client.request(
       'thread/start',
       {
         model: options.model,
         cwd: options.cwd,
-        config: BASE_THREAD_CONFIG,
+        config,
         approvalPolicy: 'never',
         sandbox: 'read-only',
         serviceName: CODEX_TOOL_PROBE_SERVICE_NAME,
@@ -418,7 +445,6 @@ export class CodexAppServerConnection {
       },
       decodeThreadStartResponse,
     );
-    return buildToolIsolatedThreadConfig(await this.listMcpServers(probe.thread.id));
   }
 
   private async assertNoMcpTools(threadId: string): Promise<void> {

@@ -176,6 +176,7 @@ Codex provider 使用以下运行边界：
 - `sandbox: read-only`。
 - `approvalPolicy: never`。
 - `web_search: disabled`。
+- `agents.enabled: false`、`features.multi_agent: false`。
 - 稳定 feature 中的执行、浏览器、App、plugin、hook、协作、skill 安装和工具发现能力关闭。
 - 默认 `cwd` 为 storage `getDataRootDir()`；显式覆盖使用规范化绝对路径。
 - 每个分析和普通聊天 turn 显式复用同一权限和 `cwd`。
@@ -184,7 +185,11 @@ Codex provider 使用以下运行边界：
 
 `networkAccess: false` 约束 sandbox 内本地工具的网络访问。模型传输和 App Server 管理的集成使用各自的 runtime 网络边界。
 
+`features.multi_agent: false` 关闭多代理协作功能；`agents.enabled: false` 关闭多代理工具。两项均通过 thread config 在 thread 创建和恢复时传入。
+
 临时 ephemeral thread 使用相同模型、Project 和基础权限配置，模型 turn 数量为零。`mcpServerStatus/list(detail: toolsAndAuthOnly)` 提供所选 Codex home 解析后的服务名与工具名。持久 thread config 按动态服务名写入 `mcp_servers.<name>.enabled: false`。
+
+ephemeral thread 创建遇到 `agents.enabled` 类型不兼容错误（`-32600`，`AgentRoleToml`）时，移除基础配置中的该项并重试一次，其余配置保持不变。持久 thread 创建与恢复复用探测通过的基础配置。其他探测错误直接抛出。
 
 持久 thread 创建或恢复后再次读取 MCP 清单。MCP 工具数量为零时进入提示轮、分析 turn 或普通聊天 turn；非空清单和无法验证的响应归入协议错误。清单读取最多包含 100 页，重复游标归入协议错误。
 
