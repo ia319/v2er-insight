@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
+import { parseRepliesPage } from '@/core/v2ex/parsers';
 import { normalizeReplyTime } from '../reply-time';
 
 const capturedAt = new Date('2026-07-12T03:04:05.000Z');
@@ -15,6 +18,50 @@ describe('normalizeReplyTime', () => {
       timePrecision,
     });
   });
+
+  it.each([
+    ['2 小时 15 分钟前', '2026-07-12T00:49:05.000Z'],
+    [' 2小时15分钟前 ', '2026-07-12T00:49:05.000Z'],
+    ['1 小时 0 分钟前', '2026-07-12T02:04:05.000Z'],
+    ['0 小时 0 分钟前', '2026-07-12T03:04:05.000Z'],
+  ])('normalizes compound time %s with minute precision', (displayTime, occurredAt) => {
+    expect(normalizeReplyTime(displayTime, capturedAt)).toEqual({
+      occurredAt,
+      timePrecision: 'minute',
+    });
+  });
+
+  it('normalizes every compound time from the full replies fixture', () => {
+    const html = readFileSync(
+      join(__dirname, '../../v2ex/parsers/__tests__/fixtures/replies-page-current.html'),
+      'utf8',
+    );
+    const { replies } = parseRepliesPage(html);
+    const normalized = replies.map((reply) => normalizeReplyTime(reply.replyTime, capturedAt));
+
+    expect(normalized).toEqual(
+      [
+        '2026-07-12T01:57:05.000Z',
+        '2026-07-12T00:57:05.000Z',
+        '2026-07-11T23:57:05.000Z',
+        '2026-07-11T22:57:05.000Z',
+        '2026-07-11T21:57:05.000Z',
+        '2026-07-11T20:57:05.000Z',
+        '2026-07-11T19:57:05.000Z',
+        '2026-07-11T18:57:05.000Z',
+      ].map((occurredAt) => ({ occurredAt, timePrecision: 'minute' })),
+    );
+  });
+
+  it.each(['1 小时 60 分钟前', '9007199254740991 小时 1 分钟前'])(
+    'rejects an invalid compound time %s',
+    (displayTime) => {
+      expect(normalizeReplyTime(displayTime, capturedAt)).toEqual({
+        occurredAt: null,
+        timePrecision: 'unknown',
+      });
+    },
+  );
 
   it('normalizes full Chinese dates in the V2EX timezone', () => {
     expect(normalizeReplyTime('2026 年 7 月 1 日', capturedAt)).toEqual({
