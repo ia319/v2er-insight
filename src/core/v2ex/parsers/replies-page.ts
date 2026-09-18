@@ -11,7 +11,8 @@ import { parsePagination } from './utils';
 import { REPLIES_PAGE_SELECTORS } from './selectors';
 
 const {
-  totalRepliesContainer: TOTAL_CONTAINER,
+  totalRepliesValue: TOTAL_VALUE,
+  legacyTotalRepliesContainer: LEGACY_TOTAL_CONTAINER,
   replyItem: REPLY_ITEM,
   replyContent: REPLY_CONTENT,
   replyTime: REPLY_TIME,
@@ -30,12 +31,22 @@ export function parseRepliesPage(html: string): RepliesPageParseResult {
   const replies: V2exReply[] = [];
   let invalidReplyCount = 0;
 
-  // 获取用户回复总数
+  // Ambiguous or malformed totals remain unknown rather than becoming zero.
   let totalReplies: number | null = null;
-  const headerText = $(TOTAL_CONTAINER).text();
-  const totalMatch = headerText.match(/回复总数\s+(\d+)/);
-  if (totalMatch?.[1]) {
-    totalReplies = parseInt(totalMatch[1], 10);
+  const totalValue = $(TOTAL_VALUE);
+  let totalText = totalValue.length === 1 ? totalValue.text().trim() : '';
+  if (totalValue.length === 0) {
+    const legacyContainer = $(LEGACY_TOTAL_CONTAINER);
+    const numbers = legacyContainer.length === 1 ? legacyContainer.text().match(/\d+/g) : null;
+    if (numbers?.length === 1) {
+      totalText = numbers[0] ?? '';
+    }
+  }
+  if (/^\d+$/.test(totalText)) {
+    const total = Number(totalText);
+    if (Number.isSafeInteger(total)) {
+      totalReplies = total;
+    }
   }
 
   // 分页信息

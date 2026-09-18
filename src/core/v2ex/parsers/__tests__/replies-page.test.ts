@@ -14,6 +14,55 @@ describe('parseRepliesPage', () => {
     result = parseRepliesPage(html);
   });
 
+  it('reads the total from the full replies page independently of its label', () => {
+    const html = loadFixture(fixturesDir, 'replies-page-current.html').replace(
+      '回复总数',
+      'Total replies',
+    );
+    const parsed = parseRepliesPage(html);
+
+    expect(parsed.totalReplies).toBe(8);
+    expect(parsed.replies).toHaveLength(8);
+    expect(parsed.invalidReplyCount).toBe(0);
+    expect(parsed.replies[0]?.replyTime).toBe('1 小时 7 分钟前');
+  });
+
+  it('distinguishes a declared zero from an unknown total', () => {
+    const html = loadFixture(fixturesDir, 'replies-page-current.html').replace(
+      '<strong class="gray">8</strong>',
+      '<strong class="gray">0</strong>',
+    );
+
+    expect(parseRepliesPage(html).totalReplies).toBe(0);
+  });
+
+  it('ignores count-like elements outside the list header', () => {
+    const html = loadFixture(fixturesDir, 'replies-page-current.html').replace(
+      '<div id="Main">',
+      '<div id="Main"><div class="fr"><span class="snow">回复总数</span><strong class="gray">999</strong></div>',
+    );
+
+    expect(parseRepliesPage(html).totalReplies).toBe(8);
+  });
+
+  it('does not merge or choose between multiple declared totals', () => {
+    const html = loadFixture(fixturesDir, 'replies-page-current.html').replace(
+      '<strong class="gray">8</strong>',
+      '<strong class="gray">8</strong><span class="snow">回复总数</span><strong class="gray">9</strong>',
+    );
+
+    expect(parseRepliesPage(html).totalReplies).toBeNull();
+  });
+
+  it.each(['', '8 replies', '9007199254740992'])('rejects an invalid total %j', (value) => {
+    const html = loadFixture(fixturesDir, 'replies-page-current.html').replace(
+      '<strong class="gray">8</strong>',
+      `<strong class="gray">${value}</strong>`,
+    );
+
+    expect(parseRepliesPage(html).totalReplies).toBeNull();
+  });
+
   it('should parse replies list with pagination', () => {
     expect(result.totalReplies).toBe(1234);
     expect(result.invalidReplyCount).toBe(0);
