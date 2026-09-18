@@ -12,8 +12,8 @@ export const TOPIC_DETAIL_SELECTORS = {
   createdAt: '.header small.gray span[title]',
   /** 帖子内容 */
   content: '.topic_content',
-  /** 头部灰色文本（包含点击次数） */
-  headerGray: '.header small.gray',
-  /** 回复信息（包含回复数和最后回复时间） */
-  replyInfo: 'span.gray',
+  /** Scope view metadata to the topic header rather than other page headers. */
+  headerGray: '#Main > .box > .header > small.gray',
+  /** The summary separates its count and absolute date with a direct child. */
+  replyInfo: '#Main > .box > .cell > span.gray:has(> strong.snow)',
 } as const;
