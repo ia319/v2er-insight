@@ -7,7 +7,7 @@ import * as cheerio from 'cheerio';
 import type { UserProfileParseResult } from '../types/parse-result';
 import { USER_PROFILE_SELECTORS } from './selectors';
 
-const { dailyRanking: DAU_SELECTOR, grayText: GRAY_SELECTOR } = USER_PROFILE_SELECTORS;
+const { dailyRanking: DAU_SELECTOR, registration: REGISTRATION } = USER_PROFILE_SELECTORS;
 
 /**
  * 解析用户主页
@@ -21,18 +21,13 @@ export function parseUserProfile(html: string): UserProfileParseResult {
   const dauLink = $(DAU_SELECTOR);
   const dailyRanking = dauLink.length > 0 ? parseInt(dauLink.text().trim(), 10) : null;
 
-  // 加入时间
-  let joinDate = '';
-  $(GRAY_SELECTOR).each((_, el) => {
-    const text = $(el).text();
-    if (text.includes('加入于')) {
-      // 匹配日期格式：YYYY-MM-DD HH:MM:SS +HH:MM
-      const match = text.match(/加入于\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\+\d{2}:\d{2})/);
-      if (match?.[1]) {
-        joinDate = match[1].trim();
-      }
-    }
-  });
+  // The surrounding label varies by language; only an unambiguous profile date is retained.
+  const registration = $(REGISTRATION);
+  const dates =
+    registration.length === 1
+      ? registration.text().match(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{2}:\d{2}/g)
+      : null;
+  const joinDate = dates?.length === 1 ? (dates[0] ?? '') : '';
 
   return {
     dailyRanking: isNaN(dailyRanking as number) ? null : dailyRanking,

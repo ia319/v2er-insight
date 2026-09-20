@@ -4,8 +4,10 @@
  */
 
 export const REPLIES_PAGE_SELECTORS = {
-  /** 回复总数容器 */
-  totalRepliesContainer: '.header small.gray',
+  /** The list header keeps the total separate from its translated label. */
+  totalRepliesValue: '#Main > .box > .header > .fr > span.snow + strong.gray',
+  /** Older pages place the label and total together in a small element. */
+  legacyTotalRepliesContainer: '#Main > .box > .header > small.gray',
   /** 回复项容器 */
   replyItem: '.dock_area',
   /** 回复内容 */

@@ -21,6 +21,25 @@ function parseRelativeValue(value: string): number | null {
 }
 
 function normalizeRelativeTime(displayTime: string, capturedAt: Date): NormalizedReplyTime | null {
+  const compoundTime = displayTime.match(/^(\d+)\s*小时\s*(\d+)\s*分钟前$/);
+  if (compoundTime?.[1] && compoundTime[2]) {
+    const hours = parseRelativeValue(compoundTime[1]);
+    const minutes = parseRelativeValue(compoundTime[2]);
+    if (hours === null || minutes === null || minutes >= 60) {
+      return null;
+    }
+
+    const occurredAt = new Date(capturedAt.getTime() - (hours * 60 + minutes) * 60 * 1000);
+    if (Number.isNaN(occurredAt.getTime())) {
+      return null;
+    }
+
+    return {
+      occurredAt: occurredAt.toISOString(),
+      timePrecision: 'minute',
+    };
+  }
+
   const patterns: Array<{
     regex: RegExp;
     milliseconds: number;

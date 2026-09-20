@@ -38,32 +38,42 @@ export function parseTopicDetail(html: string): TopicDetailParseResult {
   // 主题内容
   const content = $(CONTENT).text().trim();
 
-  // 点击次数
+  // Author names and relative timestamps contain unrelated digits in child elements.
   let clickCount = 0;
-  const headerGray = $(HEADER_GRAY).text();
-  const clickMatch = headerGray.match(/(\d+)\s*次点击/);
-  if (clickMatch?.[1]) {
-    clickCount = parseInt(clickMatch[1], 10);
+  const headerGray = $(HEADER_GRAY);
+  if (headerGray.length === 1) {
+    const numbers = headerGray
+      .contents()
+      .filter((_, node) => node.type === 'text')
+      .text()
+      .match(/\d+/g);
+    if (numbers?.length === 1) {
+      clickCount = Number(numbers[0]);
+    }
   }
 
   // 回复总数和最后回复时间
   let replyCount = 0;
   let lastReplyTime: string | null = null;
 
-  $(REPLY_INFO).each((_, el) => {
-    const text = $(el).text();
-    if (text.includes('条回复')) {
-      const parts = text.split('•');
-      const countMatch = parts[0]?.match(/(\d+)/);
-      if (countMatch?.[1]) {
-        replyCount = parseInt(countMatch[1], 10);
-      }
-      if (parts.length > 1 && parts[1]) {
-        lastReplyTime = parts[1].trim();
-      }
-      return false; // 找到后提前退出循环
+  const replyInfo = $(REPLY_INFO);
+  const separator = replyInfo.children('strong.snow');
+  if (replyInfo.length === 1 && separator.length === 1) {
+    // Read each side independently so the date cannot be mistaken for a count.
+    const countText = separator.get(0)?.prev;
+    const dateText = separator.get(0)?.next;
+    const countMatch = countText?.type === 'text' ? countText.data.match(/^\s*(\d+)\s+\S/) : null;
+    if (countMatch?.[1]) {
+      replyCount = Number(countMatch[1]);
     }
-  });
+    const dateMatch =
+      dateText?.type === 'text'
+        ? dateText.data.match(/^\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[+-]\d{2}:\d{2})\s*$/)
+        : null;
+    if (dateMatch?.[1]) {
+      lastReplyTime = dateMatch[1];
+    }
+  }
 
   return {
     title,
