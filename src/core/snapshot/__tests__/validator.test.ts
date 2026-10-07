@@ -76,6 +76,47 @@ describe('isRawSnapshotV2', () => {
     ).toBe(false);
   });
 
+  it('accepts a complete public reply list below the reported total', () => {
+    const snapshot = createSnapshot();
+
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        replies: { ...snapshot.replies, totalExpected: 3 },
+      }),
+    ).toBe(true);
+  });
+
+  it.each([null, 0])('rejects complete replies with an invalid total of %s', (totalExpected) => {
+    const snapshot = createSnapshot();
+
+    expect(
+      isRawSnapshotV2({
+        ...snapshot,
+        replies: { ...snapshot.replies, totalExpected },
+      }),
+    ).toBe(false);
+  });
+
+  it.each(['complete', 'partial'] as const)(
+    'rejects unaccounted topic counts in a %s collection',
+    (status) => {
+      const snapshot = createSnapshot();
+
+      expect(
+        isRawSnapshotV2({
+          ...snapshot,
+          topics: {
+            ...snapshot.topics,
+            status,
+            totalExpected: 3,
+            failedCount: status === 'partial' ? 1 : 0,
+          },
+        }),
+      ).toBe(false);
+    },
+  );
+
   it('rejects invalid capturedAt values', () => {
     const snapshot = createSnapshot();
 

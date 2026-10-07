@@ -238,6 +238,38 @@ describe('runFetch', () => {
     });
   });
 
+  it('should complete without warnings when all public replies are below the reported total', async () => {
+    mockedGetAllUserReplies.mockResolvedValue({
+      data: [reply],
+      totalReplies: 3,
+      invalidReplyCount: 0,
+      totalPages: 2,
+      fetchedPages: 2,
+      failedPages: 0,
+    });
+
+    const result = await runFetch('alice', {});
+
+    expect(result.status).toBe('success');
+    expect(mockedWriteDataFile).toHaveBeenCalledWith(
+      'alice',
+      'raw',
+      expect.objectContaining({
+        replies: expect.objectContaining({
+          status: 'complete',
+          totalExpected: 3,
+          fetchedCount: 1,
+          failedCount: 0,
+        }),
+      }),
+    );
+    expect(mockedUpdateAnalysisState.mock.results[0]?.value).toMatchObject({
+      raw: { captureStatus: 'complete' },
+    });
+    expect(mockLogger.detail).toHaveBeenCalledWith('Replies: 1/3');
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
   it('should return partial when a requested reply total is unknown', async () => {
     mockedGetAllUserReplies.mockResolvedValue({
       data: [reply],

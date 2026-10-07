@@ -279,6 +279,25 @@ describe('buildRawSnapshot', () => {
     );
   });
 
+  it.each([0, 1])('accepts %i visible replies below the reported total', (visibleCount) => {
+    const snapshot = buildSnapshot(
+      createTopicsResult(),
+      createRepliesResult({
+        data: Array.from({ length: visibleCount }, () => createReply()),
+        totalReplies: 3,
+      }),
+    );
+
+    expect(snapshot.replies).toMatchObject({
+      status: 'complete',
+      totalExpected: 3,
+      fetchedCount: visibleCount,
+      failedCount: 0,
+      failedPageCount: 0,
+    });
+    expect(isRawSnapshotV2(snapshot)).toBe(true);
+  });
+
   it('marks replies partial when the declared total is unknown', () => {
     const snapshot = buildSnapshot(
       createTopicsResult(),
@@ -315,16 +334,20 @@ describe('buildRawSnapshot', () => {
     expect(isRawSnapshotV2(snapshot)).toBe(true);
   });
 
-  it('preserves reply page failures independently from missing item counts', () => {
-    const snapshot = buildSnapshot(createTopicsResult(), createRepliesResult({ failedPages: 1 }));
+  it.each([1, 3])('preserves reply page failures with a reported total of %i', (totalReplies) => {
+    const snapshot = buildSnapshot(
+      createTopicsResult(),
+      createRepliesResult({ failedPages: 1, totalReplies }),
+    );
 
     expect(snapshot.replies).toMatchObject({
       status: 'partial',
-      totalExpected: 1,
+      totalExpected: totalReplies,
       fetchedCount: 1,
       failedCount: 0,
       failedPageCount: 1,
     });
+    expect(isRawSnapshotV2(snapshot)).toBe(true);
   });
 
   it('deduplicates conflicting topics and preserves replies with shared topic metadata', () => {
@@ -419,12 +442,13 @@ describe('buildRawSnapshot', () => {
     ]);
   });
 
-  it('reports missing topic heat without an identity failure', () => {
+  it.each([1, 3])('reports missing topic heat with a reply total of %i', (totalReplies) => {
     const snapshot = buildSnapshot(
       createTopicsResult(),
       createRepliesResult({
         data: [createReply({ topicReplyCount: null })],
         invalidReplyCount: 0,
+        totalReplies,
       }),
     );
 
@@ -434,5 +458,6 @@ describe('buildRawSnapshot', () => {
       failedCount: 1,
       identityFailureCount: 0,
     });
+    expect(isRawSnapshotV2(snapshot)).toBe(true);
   });
 });

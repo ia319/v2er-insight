@@ -91,8 +91,7 @@ function isSnapshotCollection<T>(
     !value.items.every(isItem) ||
     value.fetchedCount !== value.items.length ||
     value.failedCount < value.identityFailureCount ||
-    value.duplicateConflictCount > value.fetchedCount ||
-    (value.totalExpected !== null && value.fetchedCount + value.failedCount < value.totalExpected)
+    value.duplicateConflictCount > value.fetchedCount
   ) {
     return false;
   }
@@ -110,7 +109,8 @@ function isSnapshotCollection<T>(
 
   if (value.status === 'complete') {
     return (
-      value.totalExpected === value.fetchedCount &&
+      value.totalExpected !== null &&
+      value.fetchedCount <= value.totalExpected &&
       value.failedCount === 0 &&
       value.failedPageCount === 0 &&
       value.identityFailureCount === 0 &&
@@ -128,10 +128,12 @@ function isSnapshotCollection<T>(
 }
 
 function isTopicsCollection(value: unknown): value is RawSnapshotV2['topics'] {
+  // Topic totals describe the fetched list; reply totals can also include unlisted records.
   return (
     isRecord(value) &&
     typeof value.hidden === 'boolean' &&
-    isSnapshotCollection(value, isTopicSnapshot)
+    isSnapshotCollection(value, isTopicSnapshot) &&
+    (value.totalExpected === null || value.fetchedCount + value.failedCount >= value.totalExpected)
   );
 }
 
