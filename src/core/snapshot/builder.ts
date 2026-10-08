@@ -242,9 +242,10 @@ function buildRepliesCollection(
     (reply) => reply.topicId === null || reply.topicReplyCount === null,
   ).length;
   const identityFailureCount = result.data.filter((reply) => reply.topicId === null).length;
-  const countDifference =
-    result.totalReplies === null ? 0 : Math.abs(result.totalReplies - items.length);
-  const failedCount = Math.max(countDifference, result.invalidReplyCount, detectedMetadataFailures);
+  // V2EX totals can include replies absent from the public list, so a shortfall alone is not a fetch failure.
+  const excessCount =
+    result.totalReplies === null ? 0 : Math.max(0, items.length - result.totalReplies);
+  const failedCount = Math.max(excessCount, result.invalidReplyCount, detectedMetadataFailures);
   const isPartial = result.totalReplies === null || result.failedPages > 0 || failedCount > 0;
 
   return {

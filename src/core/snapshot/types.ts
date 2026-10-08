@@ -7,6 +7,7 @@ export type SnapshotCollectionStatus = 'complete' | 'partial' | 'not_requested';
 /** Collection data and the diagnostics needed to interpret missing records safely. */
 export interface SnapshotCollection<T> {
   status: SnapshotCollectionStatus;
+  /** Reported total; replies may include records absent from public pages. */
   totalExpected: number | null;
   fetchedCount: number;
   failedCount: number;
